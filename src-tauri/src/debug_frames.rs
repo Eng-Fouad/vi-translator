@@ -41,8 +41,15 @@ impl SaverState {
 
 /// "2026-11-15_07-41-03" in local time.
 fn timestamp() -> String {
-    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
-    format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
+    #[cfg(windows)]
+    {
+        let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+        format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
+    }
+    #[cfg(not(windows))]
+    {
+        chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string()
+    }
 }
 
 /// PNG with fast compression: a 4K frame takes a fraction of the time of the default settings.

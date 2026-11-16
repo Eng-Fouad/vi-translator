@@ -1,12 +1,23 @@
-//! English text recognition with the OCR engine built into Windows, plus detection of words drawn
-//! in a colour (game highlights) instead of white.
+//! English text recognition, plus detection of words drawn in a colour (game highlights) instead
+//! of white. The OCR engine itself is the platform's: Windows OCR (ocr_windows.rs), Apple Vision on
+//! macOS (ocr_vision.rs), Tesseract on Linux (ocr_tesseract.rs).
 
-use anyhow::{Context as _, Result, anyhow};
-use windows::Globalization::Language;
-use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};
-use windows::Media::Ocr::OcrEngine;
-use windows::Storage::Streams::DataWriter;
-use windows::core::HSTRING;
+use anyhow::Result;
+
+#[cfg_attr(windows, path = "ocr_windows.rs")]
+#[cfg_attr(target_os = "macos", path = "ocr_vision.rs")]
+#[cfg_attr(all(not(windows), not(target_os = "macos")), path = "ocr_tesseract.rs")]
+mod engine;
+
+/// A word as the engine reports it, in the (prepared) image's pixels.
+pub struct RawWord {
+    pub line: u32,
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
 
 /// An RGBA image crop.
 pub struct Crop {
@@ -49,22 +60,17 @@ pub struct Word {
 }
 
 pub struct Ocr {
-    engine: OcrEngine,
+    engine: engine::Engine,
 }
 
 impl Ocr {
-    /// Must be called on a thread that has WinRT initialised (see `init_thread`).
+    /// (on Windows, on a thread that has WinRT initialised: see `init_thread`)
     pub fn new() -> Result<Self> {
-        let lang = Language::CreateLanguage(&HSTRING::from("en-US"))?;
-        let engine = OcrEngine::TryCreateFromLanguage(&lang)
-            .context("Windows English OCR is not installed (Settings > Time & language > Language > English)")?;
-        Ok(Self { engine })
+        Ok(Self { engine: engine::Engine::new()? })
     }
 
     pub fn init_thread() {
-        unsafe {
-            let _ = windows::Win32::System::WinRT::RoInitialize(windows::Win32::System::WinRT::RO_INIT_MULTITHREADED);
-        }
+        engine::Engine::init_thread();
     }
 
     /// Prepare for OCR: take each pixel's brightest channel (so coloured words are as bright as white
@@ -73,7 +79,7 @@ impl Ocr {
     fn preprocess(crop: &Crop, mode: Prep) -> (Vec<u8>, u32, u32, f64) {
         let scale = if crop.h < 60 { 2 } else { 1 };
         let (w, h) = (crop.w * scale, crop.h * scale);
-        let max_dim = OcrEngine::MaxImageDimension().unwrap_or(2600);
+        let max_dim = engine::Engine::max_dim();
         let mut out = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h {
             for x in 0..w {
@@ -117,28 +123,16 @@ impl Ocr {
 
     pub fn recognize_with(&self, crop: &Crop, mode: Prep) -> Result<Vec<Word>> {
         let (bgra, w, h, back) = Self::preprocess(crop, mode);
-        let writer = DataWriter::new()?;
-        writer.WriteBytes(&bgra)?;
-        let buffer = writer.DetachBuffer()?;
-        let bitmap = SoftwareBitmap::CreateCopyFromBuffer(&buffer, BitmapPixelFormat::Bgra8, w as i32, h as i32)?;
-        let result = self.engine.RecognizeAsync(&bitmap)?.join().map_err(|e| anyhow!("OCR failed: {e}"))?;
-        let mut words = Vec::new();
-        for (line_no, line) in result.Lines()?.into_iter().enumerate() {
-            for word in line.Words()? {
-                let r = word.BoundingRect()?;
-                words.push(Word {
-                    line: line_no as u32,
-                    text: word.Text()?.to_string(),
-                    rect: (
-                        (r.X as f64 * back) as u32,
-                        (r.Y as f64 * back) as u32,
-                        (r.Width as f64 * back).ceil() as u32 + 1,
-                        (r.Height as f64 * back).ceil() as u32 + 1,
-                    ),
-                });
-            }
-        }
-        Ok(words)
+        Ok(self
+            .engine
+            .read(&bgra, w, h)?
+            .into_iter()
+            .map(|r| Word {
+                line: r.line,
+                text: r.text,
+                rect: ((r.x * back) as u32, (r.y * back) as u32, (r.w * back).ceil() as u32 + 1, (r.h * back).ceil() as u32 + 1),
+            })
+            .collect())
     }
 }
 

@@ -8,11 +8,6 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{
-    GWL_EXSTYLE, GetWindowLongPtrW, HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetWindowLongPtrW,
-    SetWindowPos, ShowWindow, WS_EX_NOACTIVATE,
-};
 
 use crate::capture::{self, Shared};
 use crate::config::{Area, Config};
@@ -105,14 +100,7 @@ fn ensure_window(app: &AppHandle, label: &str, area_id: &str) -> Option<tauri::W
         .build()
         .ok()?;
     let _ = win.set_ignore_cursor_events(true); // clicks go straight through to the game
-    if let Ok(h) = win.hwnd() {
-        let hwnd = HWND(h.0 as *mut _);
-        unsafe {
-            // Never take focus from the game, even when shown or clicked.
-            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE.0 as isize);
-        }
-    }
+    win_ops::never_focus(&win);
     Some(win)
 }
 
@@ -166,16 +154,12 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
                 continue;
             }
             let Some(win) = ensure_window(&app, label, id) else { continue };
-            let Ok(h) = win.hwnd() else { continue };
-            let hwnd = HWND(h.0 as *mut _);
             let is_shown = shown.get(label).copied().unwrap_or(false);
             match (rect, client) {
                 (Some((x, y, w, hh)), Some((cx, cy, cw, ch))) => {
                     let r = (cx + x, cy + y, *w, *hh);
                     if last_rect.get(label) != Some(&r) || !is_shown {
-                        unsafe {
-                            let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), r.0, r.1, r.2, r.3, SWP_NOACTIVATE);
-                        }
+                        win_ops::place(&win, r);
                         last_rect.insert(label.clone(), r);
                     }
                     let geom = Geom { placement: placement.clone(), client_h: ch, client_w: cw, win_x: *x, win_y: *y };
@@ -184,21 +168,90 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
                         last_geom.insert(label.clone(), geom);
                     }
                     if !is_shown {
-                        unsafe {
-                            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                        }
+                        win_ops::show(&win);
                         shown.insert(label.clone(), true);
                     }
                 }
                 _ => {
                     if is_shown {
-                        unsafe {
-                            let _ = ShowWindow(hwnd, SW_HIDE);
-                        }
+                        win_ops::hide(&win);
                         shown.insert(label.clone(), false);
                     }
                 }
             }
         }
+    }
+}
+
+/// Placing, showing and hiding overlay windows without ever taking focus from the game.
+#[cfg(windows)]
+mod win_ops {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, GetWindowLongPtrW, HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetWindowLongPtrW,
+        SetWindowPos, ShowWindow, WS_EX_NOACTIVATE,
+    };
+
+    fn hwnd(win: &tauri::WebviewWindow) -> Option<HWND> {
+        win.hwnd().ok().map(|h| HWND(h.0 as *mut _))
+    }
+
+    /// Never take focus from the game, even when shown or clicked.
+    pub fn never_focus(win: &tauri::WebviewWindow) {
+        if let Some(h) = hwnd(win) {
+            unsafe {
+                let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+                SetWindowLongPtrW(h, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE.0 as isize);
+            }
+        }
+    }
+
+    pub fn place(win: &tauri::WebviewWindow, r: (i32, i32, i32, i32)) {
+        if let Some(h) = hwnd(win) {
+            unsafe {
+                let _ = SetWindowPos(h, Some(HWND_TOPMOST), r.0, r.1, r.2, r.3, SWP_NOACTIVATE);
+            }
+        }
+    }
+
+    pub fn show(win: &tauri::WebviewWindow) {
+        if let Some(h) = hwnd(win) {
+            unsafe {
+                let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
+            }
+        }
+    }
+
+    pub fn hide(win: &tauri::WebviewWindow) {
+        if let Some(h) = hwnd(win) {
+            unsafe {
+                let _ = ShowWindow(h, SW_HIDE);
+            }
+        }
+    }
+}
+
+/// Linux and macOS: Tauri's own window calls (the window is created unfocused, always on top and
+/// click-through).
+#[cfg(not(windows))]
+mod win_ops {
+    use tauri::{PhysicalPosition, PhysicalSize};
+
+    pub fn never_focus(win: &tauri::WebviewWindow) {
+        let _ = win.set_focusable(false);
+    }
+
+    pub fn place(win: &tauri::WebviewWindow, r: (i32, i32, i32, i32)) {
+        let _ = win.set_position(PhysicalPosition::new(r.0, r.1));
+        let _ = win.set_size(PhysicalSize::new(r.2.max(1) as u32, r.3.max(1) as u32));
+        let _ = win.set_always_on_top(true);
+    }
+
+    pub fn show(win: &tauri::WebviewWindow) {
+        let _ = win.show();
+    }
+
+    pub fn hide(win: &tauri::WebviewWindow) {
+        let _ = win.hide();
     }
 }

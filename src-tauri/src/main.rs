@@ -3,10 +3,14 @@
 mod capture;
 mod config;
 mod debug_frames;
+// capture cards: Media Foundation on Windows, nokhwa (V4L2 / AVFoundation) elsewhere
+#[cfg_attr(not(windows), path = "device_nokhwa.rs")]
 mod device;
 mod obs;
 mod obs_page;
 mod memory;
+// installed fonts: DirectWrite on Windows, fontdb elsewhere
+#[cfg_attr(not(windows), path = "fonts_fontdb.rs")]
 mod fonts;
 mod ocr;
 mod overlay;
@@ -60,11 +64,11 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()>
 /// names ("GTA 6 Translator", "Arabic Subs") to the new folders, once. The newest old folder that
 /// exists wins; nothing is moved if the new folder exists.
 fn move_old_folders() {
-    let appdata = PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".into()));
+    let appdata = app_data_root();
     let mut pairs = Vec::new();
     for (id, folder) in OLD_NAMES {
         pairs.push((appdata.join(id), data_dir()));
-        for dir in [known_folder(&windows::Win32::UI::Shell::FOLDERID_Documents), pictures_dir()].into_iter().flatten() {
+        for dir in [documents_dir(), pictures_dir()].into_iter().flatten() {
             pairs.push((dir.join(folder), dir.join(FOLDER)));
         }
     }
@@ -80,8 +84,16 @@ fn move_old_folders() {
     }
 }
 
+/// Where apps keep their settings: %APPDATA% on Windows, ~/Library/Application Support on macOS,
+/// ~/.local/share on Linux.
+fn app_data_root() -> PathBuf {
+    #[cfg(windows)]
+    return PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".into()));
+    #[cfg(not(windows))]
+    return dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+}
 fn data_dir() -> PathBuf {
-    PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".into())).join(IDENTIFIER)
+    app_data_root().join(IDENTIFIER)
 }
 fn config_path() -> PathBuf {
     data_dir().join("config.json")
@@ -95,17 +107,29 @@ fn frames_dir() -> PathBuf {
 
 /// The user's Pictures folder (follows OneDrive / moved folders).
 fn pictures_dir() -> Option<PathBuf> {
-    known_folder(&windows::Win32::UI::Shell::FOLDERID_Pictures)
+    #[cfg(windows)]
+    return known_folder(&windows::Win32::UI::Shell::FOLDERID_Pictures);
+    #[cfg(not(windows))]
+    return dirs::picture_dir();
+}
+
+/// The user's Documents folder.
+fn documents_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    return known_folder(&windows::Win32::UI::Shell::FOLDERID_Documents);
+    #[cfg(not(windows))]
+    return dirs::document_dir();
 }
 
 /// Translation memory and lines log: Documents\VI Translator\translation-db (not AppData, which
 /// Windows may redirect into a private copy).
 fn db_dir() -> PathBuf {
-    known_folder(&windows::Win32::UI::Shell::FOLDERID_Documents)
+    documents_dir()
         .map(|p| p.join(FOLDER).join("translation-db"))
         .unwrap_or_else(|| data_dir().join("translation-db"))
 }
 
+#[cfg(windows)]
 fn known_folder(id: &windows::core::GUID) -> Option<PathBuf> {
     use windows::Win32::System::Com::CoTaskMemFree;
     use windows::Win32::UI::Shell::{KF_FLAG_DEFAULT, SHGetKnownFolderPath};
@@ -1332,7 +1356,7 @@ fn main() {
     // `--screen-copy "Window title" out.png`: copy that window's area of the screen (overlays included).
     if let Some(i) = args.iter().position(|a| a == "--screen-copy") {
         let (Some(title), Some(out)) = (args.get(i + 1), args.get(i + 2)) else { std::process::exit(2) };
-        let hwnd = windows_capture::window::Window::from_name(title).map(|w| w.as_raw_hwnd() as isize).unwrap_or(0);
+        let hwnd = capture::find_window(title).unwrap_or(0);
         let r = capture::client_rect(hwnd).and_then(|(x, y, w, h)| capture::grab_screen_region(x, y, w, h).map(|px| (w, h, px)));
         match r {
             Some((w, h, px)) => {
