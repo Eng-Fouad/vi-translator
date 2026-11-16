@@ -979,6 +979,7 @@ function applyTheme() {
   document.fonts.ready.then(drawLayer); // re-measure once the bundled fonts have loaded
   renderObs();
   updateLan();
+  invoke("app_version").then((v) => { $("app-version").textContent = "v" + v; document.title = "VI Translator " + v; }).catch(() => {});
   invoke("update_status").then(showUpdate).catch(() => {});
   await loadWindows();
 })();

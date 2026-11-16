@@ -276,6 +276,12 @@ fn list_langs() -> Vec<langs::Lang> {
     langs::LANGS.to_vec()
 }
 
+/// This build's version (from the release tag).
+#[tauri::command]
+fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 /// A newer version of the app, if one was found.
 #[tauri::command]
 fn update_status(state: tauri::State<AppState>) -> Option<updater::Update> {
@@ -1538,8 +1544,11 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![update_status, install_update, lan_info, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
         .setup(move |app| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));
+            }
             let handle = app.handle().clone();
             let latest = Arc::new(Mutex::new(HashMap::new()));
             let (tx, rx) = mpsc::channel();
