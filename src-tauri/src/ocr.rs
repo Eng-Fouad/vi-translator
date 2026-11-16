@@ -105,7 +105,7 @@ impl Ocr {
             let (g, b) = quality(w);
             g - 2 * b
         };
-        if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+        if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
             let txt = |w: &[Word]| w.iter().map(|x| x.text.as_str()).collect::<Vec<_>>().join(" ");
             eprintln!("[ocr] pass1 {:?} (score {}) | pass2 {:?} (score {})", txt(&first), score(&first), txt(&second), score(&second));
         }
@@ -558,7 +558,7 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
             if count < 6 {
                 continue;
             }
-            if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+            if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
                 eprintln!("[icons] line bg {bg} thr {thr} mh {mh:.0}: blob x {s}-{e} y {ty}-{by} ({w}x{h})");
             }
             if (h as f64) < 0.55 * mh || (h as f64) > 2.5 * mh || !square(w, h) {
@@ -569,7 +569,7 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
                 continue;
             }
             let fill = count as f64 / (w * h) as f64;
-            if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+            if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
                 eprintln!("[icons] line bg {bg} thr {thr} mh {mh:.0}: candidate x {s}-{e} y {ty}-{by} ({w}x{h}) fill {fill:.2}");
             }
             // icons are solid shapes (≥ ~0.45, e.g. R2's white box with dark letters); stray letter strokes ~0.3
@@ -581,7 +581,7 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
             let (iy0, iy1) = (ty + h / 5, by - h / 5);
             let inner = ((ix1 - ix0 + 1) * (iy1 - iy0 + 1)).max(1) as f64;
             let dark = (iy0..=iy1).flat_map(|y| (ix0..=ix1).map(move |x| (x, y))).filter(|&(x, y)| lum(x, y) < 110).count();
-            if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+            if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
                 eprintln!("[icons]    dark symbol share {:.2}", dark as f64 / inner);
             }
             // (inside GTA's solid black box a bright solid shape can only be an icon — e.g. the touchpad,
@@ -598,7 +598,7 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
             let left_gap = line_words.iter().filter(|w| w.1 <= s).map(|w| s - w.1).min().unwrap_or(u32::MAX);
             let right_gap = line_words.iter().filter(|w| w.0 >= e).map(|w| w.0 - e).min().unwrap_or(u32::MAX);
             let overlaps_word = line_words.iter().any(|w| w.0 < e && w.1 > s);
-            if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+            if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
                 eprintln!("[icons]    gaps left {left_gap} right {right_gap} (need {min_gap}), overlaps word {overlaps_word}");
             }
             if overlaps_word || left_gap < min_gap || right_gap < min_gap {

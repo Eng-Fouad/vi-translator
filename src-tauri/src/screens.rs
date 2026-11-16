@@ -129,9 +129,6 @@ fn px(f: &FrameData, x: u32, y: u32) -> (u8, u8, u8) {
     (f.rgba[i], f.rgba[i + 1], f.rgba[i + 2])
 }
 
-/// GTA V's "MISSION FAILED" red on the black screen (measured on captured frames).
-const TITLE_RED: &str = "#df333b";
-
 /// Is the frame (almost) black? The Mission Failed page ends on a black screen.
 pub fn is_dark(f: &FrameData) -> bool {
     let (mut sum, mut n) = (0u64, 0u64);
@@ -249,10 +246,10 @@ fn letters(s: &str) -> String {
 
 pub fn detect_gta5_mission_failed(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
     let found = find_red_title(f);
-    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+    if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[screens] red check: {found:?}");
     }
-    let ((tx0, ty0, tx1, ty1), _measured_colour) = found?;
+    let ((tx0, ty0, tx1, ty1), (cr, cg, cb)) = found?;
     let title = frac(f, tx0, ty0, tx1 - tx0 + 1, ty1 - ty0 + 1);
 
     // Confirm with OCR: GTA's title font reads loosely, so accept "mission" or "fail" anywhere.
@@ -262,7 +259,7 @@ pub fn detect_gta5_mission_failed(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayo
     let tc = shrink_to_height(&tc, 90);
     let tw = ocr.recognize(&tc).ok()?;
     let ttext = letters(&tw.iter().map(|w| w.text.as_str()).collect::<String>());
-    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+    if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[screens] red title {title:?}, OCR read {ttext:?}");
     }
     // The Pricedown title reads as junk at 1080p ("misoneiled", "gussian FaiLedj"); together with the
@@ -326,9 +323,9 @@ pub fn detect_gta5_mission_failed(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayo
     Some(ScreenLayout {
         id: "gta5_mission_failed".into(),
         title,
-        // GTA's title red as it appears on the black screen (#df333b). While the title fades in over
-        // the game it looks pinker; we always use the final colour so the Arabic doesn't change colour.
-        title_color: TITLE_RED.into(),
+        // the title's red as it is in this picture (it differs between sources: ~#931312 through a
+        // capture card, brighter in Remote Play); re-measured on every read, so it follows the game
+        title_color: hex((cr, cg, cb)),
         title_ar: "فشلت المهمة".into(),
         reason,
         reason_line_h,
@@ -504,6 +501,22 @@ pub fn reason_rule(en: &str) -> Option<String> {
         ("Patricia", "باتريشيا", true), ("M.", "م.", false), ("T.", "ت.", false), ("B.", "ب.", false),
     ];
     let t = en.trim().trim_end_matches('.').trim();
+    // "X was/were left behind." — the player left them: "تُرك X خلفك."
+    if let Some(who) = t.strip_suffix(" were left behind").or_else(|| t.strip_suffix(" was left behind")) {
+        // (OCR sometimes drops the first letter: "he crew")
+        let who = who.trim();
+        let who = if who.starts_with("he ") { format!("T{who}") } else { who.to_string() };
+        const GROUPS: [(&str, &str, bool); 6] = [
+            ("The crew", "الطاقم", false), ("Your crew", "طاقمك", false), ("The team", "الفريق", false),
+            ("Your buddy", "صديقك", false), ("Your partner", "شريكك", false), ("The hostages", "الرهائن", false),
+        ];
+        let (_, ar, female) = GROUPS
+            .iter()
+            .chain(NAMES.iter())
+            .find(|(n, _, _)| n.trim_end_matches('.').eq_ignore_ascii_case(who.trim_end_matches('.')))?;
+        let verb = if *female { "تُركت" } else { "تُرك" };
+        return Some(format!("{verb} {} خلفك.", ar.trim_end_matches('.')));
+    }
     let name = t.strip_suffix(" died").or_else(|| t.strip_suffix(" was killed"))?.trim();
     let (_, ar, female) = NAMES.iter().find(|(n, _, _)| n.trim_end_matches('.') == name.trim_end_matches('.'))?;
     let verb = if *female { "ماتت" } else { "مات" };
@@ -578,7 +591,7 @@ pub fn detect_gta5_pause(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
     let (c, ox, oy) = crop(f, &row)?;
     let words = ocr.recognize_with(&c, ocr::Prep::Brightest).ok().unwrap_or_default();
     let words = if words.len() < 3 { ocr.recognize(&c).ok()? } else { words };
-    let debug = std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some();
+    let debug = std::env::var_os("VI_TRANSLATOR_DEBUG").is_some();
     let mut labels = Vec::new();
     for w in &words {
         let t: String = w.text.chars().filter(|c| c.is_alphabetic()).collect::<String>().to_uppercase();
@@ -681,7 +694,7 @@ fn read_player(f: &FrameData, ocr: &Ocr) -> Option<PlayerInfo> {
     let big = image::imageops::resize(&img, c.w * k, c.h * k, image::imageops::FilterType::CatmullRom);
     let big = Crop { w: c.w * k, h: c.h * k, rgba: big.into_raw() };
     let words = ocr.recognize_with(&big, ocr::Prep::Brightest).ok()?;
-    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+    if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[pause] player words {:?}", words.iter().map(|w| (w.text.as_str(), w.line)).collect::<Vec<_>>());
     }
     // OCR lines, top to bottom: (top, bottom, x0, x1, text)
@@ -1398,7 +1411,7 @@ pub fn detect_gta5_caption(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
         w.rect = (w.rect.0 / k, w.rect.1 / k, w.rect.2 / k, w.rect.3 / k);
     }
     let text = ocr::clean(&words);
-    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+    if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[screens] caption box {title:?}, OCR read {text:?}");
     }
     if text.chars().filter(|c| c.is_alphabetic()).count() < 4 {
@@ -1534,7 +1547,7 @@ pub fn detect_gta5_alert(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
             }
         }
     }
-    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+    if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[screens] alert title {title:?}, rules {rules:?}, message {reason_en:?}");
     }
     let buttons = find_buttons(f, ocr);
@@ -1555,4 +1568,25 @@ pub fn detect_gta5_alert(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
         content_sig: Vec::new(),
         buttons_sig: Vec::new(),
     })
+}
+
+#[cfg(test)]
+mod reason_tests {
+    use super::reason_rule;
+
+    #[test]
+    fn left_behind() {
+        assert_eq!(reason_rule("The crew were left behind.").as_deref(), Some("تُرك الطاقم خلفك."));
+        assert_eq!(reason_rule("he crew were left behind.").as_deref(), Some("تُرك الطاقم خلفك."), "OCR lost the T");
+        assert_eq!(reason_rule("Lamar was left behind.").as_deref(), Some("تُرك لامار خلفك."));
+        assert_eq!(reason_rule("Amanda was left behind.").as_deref(), Some("تُركت أماندا خلفك."));
+        assert_eq!(reason_rule("Your buddy was left behind.").as_deref(), Some("تُرك صديقك خلفك."));
+        assert_eq!(reason_rule("Someone unknown was left behind."), None, "unknown names go to the translator");
+    }
+
+    #[test]
+    fn died_still_works() {
+        assert_eq!(reason_rule("Michael died.").as_deref(), Some("مات مايكل."));
+        assert_eq!(reason_rule("Amanda died.").as_deref(), Some("ماتت أماندا."));
+    }
 }

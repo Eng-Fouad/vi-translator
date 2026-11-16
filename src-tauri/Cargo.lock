@@ -1498,29 +1498,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gta6-translator"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "base64 0.23.1",
- "flate2",
- "image",
- "ort",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tokenizers",
- "tungstenite",
- "uuid",
- "windows",
- "windows-capture",
-]
-
-[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5024,6 +5001,29 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vi-translator"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "base64 0.23.1",
+ "flate2",
+ "image",
+ "ort",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tokenizers",
+ "tungstenite",
+ "uuid",
+ "windows",
+ "windows-capture",
+]
 
 [[package]]
 name = "vswhom"

@@ -108,7 +108,7 @@ fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32)> {
         if let (true, Some((_, t))) = (pick, &best) {
             let _ = reader.SetCurrentMediaType(STREAM, None, t);
         }
-        if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+        if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
             let cur = reader.GetCurrentMediaType(STREAM)?;
             let (w, h) = size_of(&cur);
             eprintln!("[device] pick {pick}: {w}x{h} @ {:.1} fps, subtype {:?}", fps_of(&cur), cur.GetGUID(&MF_MT_SUBTYPE));

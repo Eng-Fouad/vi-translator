@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GTA 6 Translator",
+  "productName": "VI Translator",
   "version": "0.1.0",
-  "identifier": "com.gta6translator.app",
+  "identifier": "com.vitranslator.app",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GTA 6 Translator",
+        "title": "VI Translator",
         "width": 1400,
         "height": 880,
         "minWidth": 1000,

@@ -358,7 +358,7 @@ mod tests {
     use super::*;
 
     fn tmp() -> PathBuf {
-        std::env::temp_dir().join(format!("gta6-translator-mem-{}", std::process::id()))
+        std::env::temp_dir().join(format!("vi-translator-mem-{}", std::process::id()))
     }
     fn text(segs: &Segments) -> String {
         segs.iter().map(|(t, c)| match c.as_deref() {
@@ -426,7 +426,7 @@ mod perf {
 
     #[test]
     fn lookup_stays_fast_with_thousands_of_lines() {
-        let path = std::env::temp_dir().join(format!("gta6-translator-mem-perf-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("vi-translator-mem-perf-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         let mut m = Memory::load(path.clone(), "ar");
         for i in 0..5000 {

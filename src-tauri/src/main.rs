@@ -29,17 +29,16 @@ use crate::config::Config;
 use crate::ocr::{Crop, Ocr};
 use crate::translate::{Segments, Translator};
 
-pub const APP_TITLE: &str = "GTA 6 Translator";
+pub const APP_TITLE: &str = "VI Translator";
 /// Translation-job id for the reason line of a profile screen.
 pub const SCREEN_REASON: &str = "__screen_reason";
 /// Translation jobs for pause-menu text (results go to Shared::menu_cache).
 pub const MENU_TEXT: &str = "__menu";
-const IDENTIFIER: &str = "com.gta6translator.app";
-/// Where earlier versions (named "Arabic Subs") kept their files: moved over on first start.
-const OLD_IDENTIFIER: &str = "com.arabicsubs.app";
+const IDENTIFIER: &str = "com.vitranslator.app";
 /// The folder name in Documents and Pictures.
-const FOLDER: &str = "GTA 6 Translator";
-const OLD_FOLDER: &str = "Arabic Subs";
+const FOLDER: &str = "VI Translator";
+/// Where earlier versions kept their files (newest first): moved over on first start.
+const OLD_NAMES: [(&str, &str); 2] = [("com.gta6translator.app", "GTA 6 Translator"), ("com.arabicsubs.app", "Arabic Subs")];
 
 fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
@@ -56,14 +55,16 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()>
 }
 
 /// Move the settings, downloaded model, translation memory and recordings of the app's earlier
-/// name ("Arabic Subs") to the new folders, once. Nothing is moved if the new folder exists.
+/// names ("GTA 6 Translator", "Arabic Subs") to the new folders, once. The newest old folder that
+/// exists wins; nothing is moved if the new folder exists.
 fn move_old_folders() {
-    let mut pairs = vec![(
-        PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".into())).join(OLD_IDENTIFIER),
-        data_dir(),
-    )];
-    for dir in [known_folder(&windows::Win32::UI::Shell::FOLDERID_Documents), pictures_dir()].into_iter().flatten() {
-        pairs.push((dir.join(OLD_FOLDER), dir.join(FOLDER)));
+    let appdata = PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".into()));
+    let mut pairs = Vec::new();
+    for (id, folder) in OLD_NAMES {
+        pairs.push((appdata.join(id), data_dir()));
+        for dir in [known_folder(&windows::Win32::UI::Shell::FOLDERID_Documents), pictures_dir()].into_iter().flatten() {
+            pairs.push((dir.join(folder), dir.join(FOLDER)));
+        }
     }
     for (old, new) in pairs {
         if old.is_dir() && !new.exists() {
@@ -85,7 +86,7 @@ fn config_path() -> PathBuf {
 }
 /// Debugging: where "Save frames" recordings go (one sub-folder per recording).
 fn frames_dir() -> PathBuf {
-    // Pictures\GTA 6 Translator\debug-frames: easy to find, and (unlike AppData) never redirected by Windows
+    // Pictures\VI Translator\debug-frames: easy to find, and (unlike AppData) never redirected by Windows
     // into a private copy when the app is started from a packaged app.
     pictures_dir().map(|p| p.join(FOLDER).join("debug-frames")).unwrap_or_else(|| data_dir().join("debug-frames"))
 }
@@ -95,7 +96,7 @@ fn pictures_dir() -> Option<PathBuf> {
     known_folder(&windows::Win32::UI::Shell::FOLDERID_Pictures)
 }
 
-/// Translation memory and lines log: Documents\GTA 6 Translator\translation-db (not AppData, which
+/// Translation memory and lines log: Documents\VI Translator\translation-db (not AppData, which
 /// Windows may redirect into a private copy).
 fn db_dir() -> PathBuf {
     known_folder(&windows::Win32::UI::Shell::FOLDERID_Documents)
@@ -1233,7 +1234,7 @@ fn translate_loop(
 
 // ------------------------------------------------------------------------------------- test mode
 
-/// `gta6-translator --test-image shot.png [--area help]`: OCR + translate one screenshot and print the result.
+/// `vi-translator --test-image shot.png [--area help]`: OCR + translate one screenshot and print the result.
 fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     let cfg = Config::load(&config_path());
     let mut area = cfg.areas.iter().find(|a| a.id == area_id).cloned().ok_or_else(|| anyhow::anyhow!("no area {area_id}"))?;
@@ -1252,7 +1253,7 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     let ocr = Ocr::new()?;
     let t = Instant::now();
     let words = ocr.recognize(&crop)?;
-    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+    if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[ocr] words: {:?}", words.iter().map(|w| (&w.text, w.rect)).collect::<Vec<_>>());
     }
     let en = ocr::clean(&words);
@@ -1261,8 +1262,8 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     let t2 = Instant::now();
     let (en_icons, icons, block) = ocr::text_with_icons(&crop, &words);
     println!("Text block (crop px): {block:?}");
-    // with GTA6_TRANSLATOR_ICON_DIR set, write the cut-out icons there (to check how they look)
-    if let Some(dir) = std::env::var_os("GTA6_TRANSLATOR_ICON_DIR") {
+    // with VI_TRANSLATOR_ICON_DIR set, write the cut-out icons there (to check how they look)
+    if let Some(dir) = std::env::var_os("VI_TRANSLATOR_ICON_DIR") {
         use base64::Engine as _;
         for (n, url) in icons.iter().enumerate() {
             let (rel, png) = url.split_once('|').unwrap_or(("?", url.as_str()));
@@ -1431,8 +1432,8 @@ fn main() {
             for m in l.menu.iter_mut() {
                 m.ar = screens::menu_word(&m.en).map(|a| if m.en.trim().starts_with('<') { format!("< {a} >") } else { a.to_string() }).unwrap_or_default();
             }
-            // icon images shortened for reading (GTA6_TRANSLATOR_FULL=1 keeps them, e.g. to render the page)
-            if std::env::var_os("GTA6_TRANSLATOR_FULL").is_none() {
+            // icon images shortened for reading (VI_TRANSLATOR_FULL=1 keeps them, e.g. to render the page)
+            if std::env::var_os("VI_TRANSLATOR_FULL").is_none() {
                 for b in &mut l.buttons {
                     if let Some(i) = &b.icon {
                         b.icon = Some(format!("<png {} bytes>", i.len()));
@@ -1540,7 +1541,7 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running GTA 6 Translator");
+        .expect("error while running VI Translator");
 
 }
 

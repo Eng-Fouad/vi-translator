@@ -161,7 +161,7 @@ mod tests {
         let (w, h) = (3840u32, 2053u32);
         let rgba: Vec<u8> = (0..w * h * 4).map(|i| (i % 251) as u8).collect();
         let f = FrameData { w, h, rgba, seq: 1 };
-        let dir = std::env::temp_dir().join("gta6-translator-frame-test");
+        let dir = std::env::temp_dir().join("vi-translator-frame-test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("frame.png");
         let t = Instant::now();

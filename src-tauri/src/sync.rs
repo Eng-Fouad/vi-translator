@@ -1,4 +1,4 @@
-//! Background sync with the GTA 6 Translator server:
+//! Background sync with the VI Translator server:
 //! - shares the English lines the player saw (setting "Help improve translations", on by
 //!   default): in batches about every 10 minutes, never one line at a time;
 //! - downloads translations and layout updates (read areas, fonts, menu words) in the background.
@@ -75,7 +75,7 @@ fn game(c: &Config) -> Option<String> {
 pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, paths: Paths) {
 
     let http = reqwest::blocking::Client::builder()
-        .user_agent(concat!("gta6-translator/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("vi-translator/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(30))
         .build()
         .expect("http client");
@@ -260,7 +260,7 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
 fn key() -> [u8; 32] {
     // (debug builds can test against a local server's key)
     if cfg!(debug_assertions) {
-        if let Some(k) = std::env::var("GTA6_TRANSLATOR_DATA_KEY").ok().and_then(|s| b64(&s)).filter(|k| k.len() == 32) {
+        if let Some(k) = std::env::var("VI_TRANSLATOR_DATA_KEY").ok().and_then(|s| b64(&s)).filter(|k| k.len() == 32) {
             return k.try_into().unwrap();
         }
     }

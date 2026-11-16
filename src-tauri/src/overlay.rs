@@ -91,7 +91,7 @@ fn ensure_window(app: &AppHandle, label: &str, area_id: &str) -> Option<tauri::W
         return Some(w);
     }
     let win = WebviewWindowBuilder::new(app, label, WebviewUrl::App("overlay.html".into()))
-        .title("GTA 6 Translator overlay")
+        .title("VI Translator overlay")
         .initialization_script(format!("window.__AREA__ = {};", serde_json::to_string(area_id).ok()?))
         .transparent(true)
         .decorations(false)

@@ -31,7 +31,7 @@ fn ort_env() -> Result<&'static ort::environment::Environment> {
     if let Some(e) = ENV.get() {
         return Ok(e);
     }
-    let env = ort::init().with_name("gta6-translator").build()?;
+    let env = ort::init().with_name("vi-translator").build()?;
     Ok(ENV.get_or_init(|| env))
 }
 
@@ -174,7 +174,7 @@ pub struct Translator {
 impl Translator {
     pub fn new(model_dir: PathBuf) -> Self {
         let http = reqwest::blocking::Client::builder()
-            .user_agent("gta6-translator/0.1")
+            .user_agent("vi-translator/0.1")
             .timeout(Duration::from_secs(20))
             .build()
             .expect("http client");

@@ -619,7 +619,7 @@ function renderMemory() {
     <div class="row"><button class="btn" id="size-reset">${t("Re-measure text sizes")}</button></div>
     <div class="hint">${t("Text sizes are measured on the first {n} lines of each kind, then fixed.", { n: 5 })}</div>
     <label class="check" style="color:var(--text);font-weight:600;margin-top:10px"><input type="checkbox" id="share-on" ${cfg.share_lines !== false ? "checked" : ""}/> ${t("Help improve translations")}</label>
-    <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the GTA 6 Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
+    <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
     <label class="check" style="color:var(--text)"><input type="checkbox" id="layout-auto" ${cfg.auto_layout !== false ? "checked" : ""}/> ${t("Automatic layout updates")}</label>
     <div class="hint">${t("Keeps the game profile's read areas and fonts up to date.")}</div>`;
   $("size-reset").addEventListener("click", () => invoke("reset_text_sizes"));
@@ -667,7 +667,7 @@ function renderDebug() {
   const form = $("debug-form");
   form.innerHTML = `
     <label class="check" style="color:var(--text);font-weight:600"><input type="checkbox" id="dbg-save" ${cfg.debug_save_frames ? "checked" : ""}/> ${t("Save frames to disk")}</label>
-    <div class="muted small" style="margin:-6px 0 0">${AS.esc(t("Saves full-size PNG files of the captured window into a new folder (in Pictures\\GTA 6 Translator\\debug-frames) each time you turn it on. Turning it off opens the folder. 4K frames are a few MB each."))}</div>
+    <div class="muted small" style="margin:-6px 0 0">${AS.esc(t("Saves full-size PNG files of the captured window into a new folder (in Pictures\\VI Translator\\debug-frames) each time you turn it on. Turning it off opens the folder. 4K frames are a few MB each."))}</div>
     <div class="field"><label>${t("Save a frame every")}</label><div class="inline">
       <input type="range" id="dbg-int" min="100" max="5000" step="100" value="${cfg.debug_frame_interval_ms}" />
       <span class="val" id="dbg-int-v">${t("{s} s", { s: (cfg.debug_frame_interval_ms / 1000).toFixed(1) })}</span></div></div>
