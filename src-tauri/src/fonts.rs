@@ -15,29 +15,6 @@ pub struct FontInfo {
     pub covers: Vec<&'static str>,
 }
 
-/// Letters each language needs (a font with all of them can write it).
-const NEEDS: [(&str, &[u32]); 20] = [
-    ("ar", &[0x0639, 0x0644]),          // ع ل
-    ("ur", &[0x0639, 0x06D2, 0x0679]),  // ع ے ٹ
-    ("fa", &[0x0639, 0x067E, 0x06AF]),  // ع پ گ
-    ("hi", &[0x0915, 0x093F]),          // क ि
-    ("mr", &[0x0915, 0x0933]),          // क ळ
-    ("bn", &[0x0995, 0x09BF]),          // ক ি
-    ("ta", &[0x0B95, 0x0BBF]),          // க ி
-    ("te", &[0x0C15, 0x0C3F]),          // క ి
-    ("th", &[0x0E01, 0x0E33]),          // ก ำ
-    ("el", &[0x03B1, 0x03A9]),          // α Ω
-    ("uk", &[0x0436, 0x0456, 0x0457]),  // ж і ї
-    ("vi", &[0x01A1, 0x1EA1, 0x1EBF]),  // ơ ạ ế
-    ("tr", &[0x011F, 0x0131, 0x015F]),  // ğ ı ş
-    ("cs", &[0x0159, 0x016F, 0x010D]),  // ř ů č
-    ("ro", &[0x0219, 0x021B, 0x0103]),  // ș ț ă
-    ("id", &[0x0061, 0x0067]),
-    ("ms", &[0x0061, 0x0067]),
-    ("nl", &[0x0061, 0x00EB]),          // ë
-    ("fil", &[0x0061, 0x00F1]),         // ñ
-    ("sw", &[0x0061, 0x0067]),
-];
 
 fn english_name(names: &IDWriteLocalizedStrings) -> Option<String> {
     unsafe {
@@ -72,7 +49,7 @@ pub fn list_fonts() -> Vec<FontInfo> {
             }
             let Ok(font) = family.GetFirstMatchingFont(DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL) else { continue };
             let has = |c: u32| font.HasCharacter(c).map(|b| b.as_bool()).unwrap_or(false);
-            let covers = NEEDS.iter().filter(|(_, cs)| cs.iter().all(|&c| has(c))).map(|(code, _)| *code).collect();
+            let covers = crate::langs::NEEDS.iter().filter(|(_, cs)| cs.iter().all(|&c| has(c))).map(|(code, _)| *code).collect();
             out.push(FontInfo { name, covers });
         }
     }

@@ -99,7 +99,9 @@ fn ensure_window(app: &AppHandle, label: &str, area_id: &str) -> Option<tauri::W
         .inner_size(400.0, 200.0)
         .build()
         .ok()?;
-    let _ = win.set_ignore_cursor_events(true); // clicks go straight through to the game
+    // clicks go straight through to the game (elsewhere it's set once shown: GTK can't before)
+    #[cfg(windows)]
+    let _ = win.set_ignore_cursor_events(true);
     win_ops::never_focus(&win);
     Some(win)
 }
@@ -231,8 +233,7 @@ mod win_ops {
     }
 }
 
-/// Linux and macOS: Tauri's own window calls (the window is created unfocused, always on top and
-/// click-through).
+/// Linux and macOS: Tauri's own window calls (unfocusable, always on top, click-through once shown).
 #[cfg(not(windows))]
 mod win_ops {
     use tauri::{PhysicalPosition, PhysicalSize};
@@ -249,6 +250,7 @@ mod win_ops {
 
     pub fn show(win: &tauri::WebviewWindow) {
         let _ = win.show();
+        let _ = win.set_ignore_cursor_events(true);
     }
 
     pub fn hide(win: &tauri::WebviewWindow) {

@@ -20,8 +20,32 @@ ed25519-dalek = "2"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 uuid = { version = "1", features = ["v4"] }
 tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
+
+# Windows: OCR, window capture, capture cards and fonts through the system's own APIs
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Media_Ocr", "Graphics_Imaging", "Globalization", "Storage_Streams", "Foundation", "Foundation_Collections", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_WinRT", "Win32_Graphics_DirectWrite", "Win32_System_SystemInformation", "Win32_UI_Shell", "Win32_System_Com"] }
 windows-capture = "2.0.1"
+
+# Linux and macOS: window capture, capture cards, fonts, folders, local time
+[target.'cfg(not(windows))'.dependencies]
+xcap = "0.9"
+nokhwa = { version = "0.10", features = ["input-native"] }
+fontdb = "0.24"
+ttf-parser = "0.25"
+dirs = "7"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# Linux OCR: Tesseract (needs libtesseract and libleptonica; English data)
+[target.'cfg(target_os = "linux")'.dependencies]
+tesseract = "0.15"
+
+# macOS OCR: Apple Vision
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSDictionary", "NSString", "NSError", "NSValue", "NSGeometry"] }
+objc2-vision = { version = "0.3", features = ["VNRequest", "VNRecognizeTextRequest", "VNRequestHandler", "VNObservation", "VNTypes", "objc2-core-graphics", "objc2-core-foundation"] }
+objc2-core-graphics = { version = "0.3", features = ["CGImage", "CGColorSpace", "CGDataProvider"] }
+objc2-core-foundation = { version = "0.3", features = ["CFData", "CFCGTypes"] }
 
 [build-dependencies]
 tauri-build = "2"
