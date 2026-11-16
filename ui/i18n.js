@@ -1,0 +1,84 @@
+// The app's own interface language (separate from the language games are translated into).
+// Each phrase is looked up by its English text; a phrase missing from a dictionary stays English.
+// To add an interface language: add it to UI_LANGS, write ui/i18n/<code>.js and load it in index.html.
+window.I18N = (() => {
+  const UI_LANGS = [
+    { code: "en", name: "English", rtl: false },
+    { code: "ar", name: "العربية", rtl: true },
+    { code: "hi", name: "हिन्दी", rtl: false },
+    { code: "bn", name: "বাংলা", rtl: false },
+    { code: "ur", name: "اردو", rtl: true },
+    { code: "id", name: "Bahasa Indonesia", rtl: false },
+    { code: "tr", name: "Türkçe", rtl: false },
+    { code: "vi", name: "Tiếng Việt", rtl: false },
+    { code: "fa", name: "فارسی", rtl: true },
+    { code: "th", name: "ไทย", rtl: false },
+    { code: "ta", name: "தமிழ்", rtl: false },
+    { code: "te", name: "తెలుగు", rtl: false },
+    { code: "mr", name: "मराठी", rtl: false },
+    { code: "uk", name: "Українська", rtl: false },
+    { code: "nl", name: "Nederlands", rtl: false },
+    { code: "fil", name: "Filipino", rtl: false },
+    { code: "ms", name: "Bahasa Melayu", rtl: false },
+    { code: "sw", name: "Kiswahili", rtl: false },
+    { code: "ro", name: "Română", rtl: false },
+    { code: "el", name: "Ελληνικά", rtl: false },
+    { code: "cs", name: "Čeština", rtl: false },
+    { code: "fr", name: "Français", rtl: false },
+    { code: "it", name: "Italiano", rtl: false },
+    { code: "de", name: "Deutsch", rtl: false },
+    { code: "ru", name: "Русский", rtl: false },
+    { code: "ja", name: "日本語", rtl: false },
+    { code: "pl", name: "Polski", rtl: false },
+    { code: "ko", name: "한국어", rtl: false },
+    { code: "zh-Hans", name: "简体中文", rtl: false },
+    { code: "zh-Hant", name: "繁體中文", rtl: false },
+    { code: "es-MX", name: "Español (México)", rtl: false },
+    { code: "es-ES", name: "Español (España)", rtl: false },
+    { code: "pt-BR", name: "Português (Brasil)", rtl: false },
+  ];
+
+
+  const DICTS = {};
+  /** Register a dictionary (ui/i18n/<code>.js files call this). */
+  const add = (code, dict) => { DICTS[code] = dict; };
+  let lang = "en";
+
+  /** Translate an English phrase; {name} placeholders are filled from `vars`. */
+  function t(en, vars) {
+    let s = (DICTS[lang] && DICTS[lang][en]) || en;
+    if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
+    return s;
+  }
+
+  /** Switch the interface language: direction of the whole window, and the static text in the page. */
+  function setLang(code) {
+    lang = UI_LANGS.some((l) => l.code === code) ? code : "en";
+    const rtl = UI_LANGS.find((l) => l.code === lang).rtl;
+    document.documentElement.lang = lang;
+    document.documentElement.dir = rtl ? "rtl" : "ltr";
+    apply(document);
+  }
+
+  /**
+   * Static text in the page: elements marked data-i18n (text) or data-i18n-html (with markup), and
+   * data-i18n-title (tooltip). The English is kept on first use, so switching back and forth works.
+   */
+  function apply(root) {
+    root.querySelectorAll("[data-i18n]").forEach((el) => {
+      el.dataset.en ??= el.textContent.trim();
+      el.textContent = t(el.dataset.en);
+    });
+    root.querySelectorAll("[data-i18n-html]").forEach((el) => {
+      el.dataset.en ??= el.innerHTML.trim();
+      el.innerHTML = t(el.dataset.en);
+    });
+    root.querySelectorAll("[data-i18n-title]").forEach((el) => {
+      el.dataset.enTitle ??= el.title;
+      el.title = t(el.dataset.enTitle);
+    });
+  }
+
+  return { UI_LANGS, add, t, setLang, apply, get lang() { return lang; } };
+})();
+window.t = window.I18N.t;

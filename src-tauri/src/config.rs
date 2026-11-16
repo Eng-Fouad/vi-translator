@@ -119,6 +119,8 @@ pub struct Config {
     pub engine: String,
     /// Language to translate into (see `langs::LANGS`): "ar", "hi", "tr" …
     pub target_lang: String,
+    /// Language of the app's own interface: "en" or "ar" (right to left).
+    pub ui_lang: String,
     pub deepl_key: String,
     pub azure_key: String,
     pub azure_region: String,
@@ -215,6 +217,7 @@ impl Default for Config {
             memory_enabled: false,
             memory_tint: true,
             target_lang: "ar".into(),
+            ui_lang: "en".into(),
             share_lines: true,
             install_id: String::new(),
             server_url: String::new(),

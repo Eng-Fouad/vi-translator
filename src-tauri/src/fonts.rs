@@ -1,4 +1,4 @@
-//! Installed font families (DirectWrite), with a flag for fonts that contain Arabic letters.
+//! Installed font families (DirectWrite), with the translation languages each one can write.
 
 use serde::Serialize;
 use windows::Win32::Graphics::DirectWrite::{
@@ -10,9 +10,34 @@ use windows::core::{BOOL, w};
 #[derive(Serialize)]
 pub struct FontInfo {
     pub name: String,
-    /// The font has Arabic letters (otherwise Windows substitutes another font for them).
-    pub arabic: bool,
+    /// Target languages (codes from `langs`) whose letters the font has; for others, Windows
+    /// substitutes another font.
+    pub covers: Vec<&'static str>,
 }
+
+/// Letters each language needs (a font with all of them can write it).
+const NEEDS: [(&str, &[u32]); 20] = [
+    ("ar", &[0x0639, 0x0644]),          // ع ل
+    ("ur", &[0x0639, 0x06D2, 0x0679]),  // ع ے ٹ
+    ("fa", &[0x0639, 0x067E, 0x06AF]),  // ع پ گ
+    ("hi", &[0x0915, 0x093F]),          // क ि
+    ("mr", &[0x0915, 0x0933]),          // क ळ
+    ("bn", &[0x0995, 0x09BF]),          // ক ি
+    ("ta", &[0x0B95, 0x0BBF]),          // க ி
+    ("te", &[0x0C15, 0x0C3F]),          // క ి
+    ("th", &[0x0E01, 0x0E33]),          // ก ำ
+    ("el", &[0x03B1, 0x03A9]),          // α Ω
+    ("uk", &[0x0436, 0x0456, 0x0457]),  // ж і ї
+    ("vi", &[0x01A1, 0x1EA1, 0x1EBF]),  // ơ ạ ế
+    ("tr", &[0x011F, 0x0131, 0x015F]),  // ğ ı ş
+    ("cs", &[0x0159, 0x016F, 0x010D]),  // ř ů č
+    ("ro", &[0x0219, 0x021B, 0x0103]),  // ș ț ă
+    ("id", &[0x0061, 0x0067]),
+    ("ms", &[0x0061, 0x0067]),
+    ("nl", &[0x0061, 0x00EB]),          // ë
+    ("fil", &[0x0061, 0x00F1]),         // ñ
+    ("sw", &[0x0061, 0x0067]),
+];
 
 fn english_name(names: &IDWriteLocalizedStrings) -> Option<String> {
     unsafe {
@@ -29,7 +54,7 @@ fn english_name(names: &IDWriteLocalizedStrings) -> Option<String> {
     }
 }
 
-/// All installed font families, Arabic-capable first, each group sorted by name.
+/// All installed font families, sorted by name (the app lists the ones for its language first).
 pub fn list_fonts() -> Vec<FontInfo> {
     let mut out = Vec::new();
     unsafe {
@@ -45,15 +70,33 @@ pub fn list_fonts() -> Vec<FontInfo> {
             if name.starts_with('@') {
                 continue; // vertical-text variants
             }
-            let arabic = family
-                .GetFirstMatchingFont(DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL)
-                .and_then(|f| f.HasCharacter(0x0639)) // ع
-                .map(|b| b.as_bool())
-                .unwrap_or(false);
-            out.push(FontInfo { name, arabic });
+            let Ok(font) = family.GetFirstMatchingFont(DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL) else { continue };
+            let has = |c: u32| font.HasCharacter(c).map(|b| b.as_bool()).unwrap_or(false);
+            let covers = NEEDS.iter().filter(|(_, cs)| cs.iter().all(|&c| has(c))).map(|(code, _)| *code).collect();
+            out.push(FontInfo { name, covers });
         }
     }
-    out.sort_by(|a, b| b.arabic.cmp(&a.arabic).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    out.sort_by_key(|f| f.name.to_lowercase());
     out.dedup_by(|a, b| a.name == b.name);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    /// Windows' own fonts: each one is listed for the scripts it really has.
+    #[test]
+    fn fonts_know_their_scripts() {
+        let fonts = super::list_fonts();
+        let covers = |name: &str| fonts.iter().find(|f| f.name == name).map(|f| f.covers.clone()).unwrap_or_default();
+        let nirmala = covers("Nirmala UI");
+        for code in ["hi", "mr", "bn", "ta", "te"] {
+            assert!(nirmala.contains(&code), "Nirmala UI should write {code}: {nirmala:?}");
+        }
+        assert!(covers("Leelawadee UI").contains(&"th"));
+        let segoe = covers("Segoe UI");
+        for code in ["ar", "el", "uk", "vi", "tr", "cs", "ro"] {
+            assert!(segoe.contains(&code), "Segoe UI should write {code}: {segoe:?}");
+        }
+        assert!(!segoe.contains(&"th") && !segoe.contains(&"hi"), "Segoe UI has no Thai or Devanagari: {segoe:?}");
+    }
 }

@@ -171,6 +171,8 @@ struct TranslationEvent {
     text_box: Option<[f64; 4]>,
     /// came from the translation memory (shown tinted while testing)
     cached: bool,
+    /// when the English line appeared on screen (Unix ms; 0 = unknown)
+    at: u64,
 }
 
 // ------------------------------------------------------------------------------------- size lock
@@ -528,7 +530,7 @@ fn present_loop(app: AppHandle, rx: mpsc::Receiver<PMsg>, shared: Arc<Shared>) {
                     shared.shown.lock().unwrap().remove(&area);
                     let _ = app.emit(
                         "translation",
-                        TranslationEvent { area, en: String::new(), segments: Vec::new(), stats: String::new(), error: None, line_h: 0.0, text_box: None, cached: false },
+                        TranslationEvent { area, en: String::new(), segments: Vec::new(), stats: String::new(), error: None, line_h: 0.0, text_box: None, cached: false, at: 0 },
                     );
                 }
             }
@@ -681,6 +683,9 @@ fn ocr_loop(
                         if found.is_none() && c.profile_opts.pause_menu {
                             found = screens::detect_gta5_pause(&frame, &ocr);
                         }
+                        if found.is_none() && c.profile_opts.mission_failed && screens::alert_present(&frame) {
+                            found = screens::detect_gta5_alert(&frame, &ocr);
+                        }
                         if found.is_none() && c.profile_opts.captions && screens::find_caption(&frame).is_some() {
                             found = screens::detect_gta5_caption(&frame, &ocr);
                         }
@@ -748,6 +753,25 @@ fn ocr_loop(
                     }
                     // Centre caption: gone the moment its white text is (checked on every frame, pixels
                     // only); a different caption in its place is read again.
+                    // Alert page ("Please reconnect controller"): gone the moment its yellow title is;
+                    // the message is read again once a second (it can change), the title stays put.
+                    Some(old) if old.id == screens::ALERT_ID => {
+                        if !screens::alert_present(&frame) {
+                            hide_screen(&app, &shared, &mut screen);
+                        } else if screen_checked.elapsed() >= Duration::from_secs(1) {
+                            screen_checked = Instant::now();
+                            if let Some(mut l) = screens::detect_gta5_alert(&frame, &ocr) {
+                                l.title = old.title.clone();
+                                if l.reason_en.is_empty() || l.reason_en == old.reason_en {
+                                    (l.reason, l.reason_line_h, l.reason_en) = (old.reason.clone(), old.reason_line_h, old.reason_en.clone());
+                                }
+                                if l.buttons.len() == old.buttons.len() {
+                                    (l.buttons, l.buttons_row) = (old.buttons.clone(), old.buttons_row.clone());
+                                }
+                                found = Some(l);
+                            }
+                        }
+                    }
                     Some(old) if old.id == screens::CAPTION_ID => match screens::find_caption(&frame) {
                         Some(b) if screens::caption_same(&frame, b, old) => {}
                         Some(_) => match screens::detect_gta5_caption(&frame, &ocr) {
@@ -903,11 +927,20 @@ fn ocr_loop(
                 // (measured only on a new page / new reason: refreshes reuse the frozen geometry)
                 let new_reason = screen.as_ref().is_none_or(|s| s.reason_en != layout.reason_en);
                 if new_reason && layout.id != screens::PAUSE_ID {
-                    let kind = if layout.id == screens::CAPTION_ID { "__screen_caption" } else { SCREEN_REASON };
+                    let kind = match layout.id.as_str() {
+                        screens::CAPTION_ID => "__screen_caption",
+                        screens::ALERT_ID => "__screen_alert",
+                        _ => SCREEN_REASON,
+                    };
                     layout.reason_line_h = sizes.lock().unwrap().size(kind, layout.reason_line_h);
                 }
                 // ...and so is the title (kept centred where the game's title is)
-                let th = if screen.is_none() && layout.id != screens::PAUSE_ID && layout.id != screens::CAPTION_ID { sizes.lock().unwrap().size("__screen_title", layout.title.h) } else { 0.0 };
+                let th = if screen.is_none() && layout.id != screens::PAUSE_ID && layout.id != screens::CAPTION_ID {
+                    let kind = if layout.id == screens::ALERT_ID { "__screen_alert_title" } else { "__screen_title" };
+                    sizes.lock().unwrap().size(kind, layout.title.h)
+                } else {
+                    0.0
+                };
                 if th > 0.0 {
                     layout.title.y += (layout.title.h - th) / 2.0;
                     layout.title.h = th;
@@ -948,6 +981,7 @@ fn ocr_loop(
                                         line_h: 0.0,
                                         text_box: None,
                                         cached: false,
+                                        at: unix_ms(Instant::now()),
                                     });
                                 }
                                 None => {
@@ -973,7 +1007,7 @@ fn ocr_loop(
             if screen.is_some() {
                 // The pause menu is checked on every new frame (its checks are tiny), so its Arabic
                 // goes the moment the English does: pace by the capture rate, not the read interval.
-                let pause = screen.as_ref().is_some_and(|s| s.id == screens::PAUSE_ID || s.id == screens::CAPTION_ID);
+                let pause = screen.as_ref().is_some_and(|s| [screens::PAUSE_ID, screens::CAPTION_ID, screens::ALERT_ID].contains(&s.id.as_str()));
                 let pace = if pause { (1000 / c.capture_fps.clamp(1, 30) as u64).min(c.interval_ms) } else { c.interval_ms };
                 let spent = t0.elapsed();
                 std::thread::sleep(Duration::from_millis(pace.max(30)).saturating_sub(spent));
@@ -1172,6 +1206,7 @@ fn translate_loop(
                 line_h: job.line_h,
                 text_box: job.text_box,
                 cached: hit,
+                at: unix_ms(en_start),
             },
             Err(e) => TranslationEvent {
                 area: job.area,
@@ -1182,6 +1217,7 @@ fn translate_loop(
                 line_h: job.line_h,
                 text_box: job.text_box,
                 cached: false,
+                at: unix_ms(en_start),
             },
         };
         if ev.area == SCREEN_REASON && ev.error.is_none() {
@@ -1384,6 +1420,7 @@ fn main() {
             println!("centre caption: {:?}", screens::find_caption(&frame));
             let found = screens::detect_gta5_mission_failed(&frame, &ocr)
                 .or_else(|| screens::detect_gta5_pause(&frame, &ocr))
+                .or_else(|| screens::detect_gta5_alert(&frame, &ocr))
                 .or_else(|| screens::detect_gta5_caption(&frame, &ocr));
             println!("detect: {} ms", t.elapsed().as_millis());
             let Some(mut l) = found else {
@@ -1545,7 +1582,8 @@ fn localize_screen(l: &mut screens::ScreenLayout, cache: &HashMap<String, String
         hit
     };
     if !l.title_ar.is_empty() {
-        l.title_ar = get("Mission Failed", &mut missing).unwrap_or_default();
+        let title = if l.id == screens::ALERT_ID { "Alert" } else { "Mission Failed" };
+        l.title_ar = get(title, &mut missing).unwrap_or_default();
     }
     for lb in l.labels.iter_mut() {
         lb.ar = get(&lb.en, &mut missing).unwrap_or_else(|| lb.en.clone());

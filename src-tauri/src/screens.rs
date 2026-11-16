@@ -1427,3 +1427,132 @@ pub fn detect_gta5_caption(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
         buttons_sig: Vec::new(),
     })
 }
+
+/// Id of GTA V's alert page (yellow "alert" title on black: "Please reconnect controller").
+pub const ALERT_ID: &str = "gta5_alert";
+
+fn is_alert_yellow((r, g, b): (u8, u8, u8)) -> bool {
+    let (r, g, b) = (r as i32, g as i32, b as i32);
+    r > 180 && g > 150 && b < 140 && r - b > 80
+}
+
+/// The yellow "alert" title in the middle of a dark screen: its pixel box and median colour.
+/// Pixels only, cheap enough for every frame.
+fn find_alert_title(f: &FrameData) -> Option<((u32, u32, u32, u32), (u8, u8, u8))> {
+    if !is_dark(f) {
+        return None;
+    }
+    let (w, h) = (f.w, f.h);
+    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
+    let (mut rs, mut gs, mut bs) = (Vec::new(), Vec::new(), Vec::new());
+    for y in ((h / 5)..(h * 3 / 4)).step_by(2) {
+        for x in ((w / 5)..(w * 4 / 5)).step_by(2) {
+            let p = px(f, x, y);
+            if is_alert_yellow(p) {
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+                rs.push(p.0);
+                gs.push(p.1);
+                bs.push(p.2);
+            }
+        }
+    }
+    if rs.len() < 150 {
+        return None;
+    }
+    let (bw, bh) = ((x1 - x0) as f64 / w as f64, (y1 - y0) as f64 / h as f64);
+    let cx = (x0 + x1) as f64 / 2.0 / w as f64;
+    if !(0.06..=0.45).contains(&bw) || !(0.03..=0.14).contains(&bh) || (cx - 0.5).abs() > 0.04 {
+        return None;
+    }
+    let med = |v: &mut Vec<u8>| {
+        v.sort_unstable();
+        v[v.len() / 2]
+    };
+    Some(((x0, y0, x1, y1), (med(&mut rs), med(&mut gs), med(&mut bs))))
+}
+
+/// Cheap per-frame check: is the alert page still up?
+pub fn alert_present(f: &FrameData) -> bool {
+    find_alert_title(f).is_some()
+}
+
+/// GTA V's alert page: the yellow title, the message under it (between two white rules) and the
+/// buttons, if any. The message is the page's `reason`; its box reaches down to the lower rule,
+/// so the translation is drawn below the frame, not over the line.
+pub fn detect_gta5_alert(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
+    let ((tx0, ty0, tx1, ty1), (r, g, b)) = find_alert_title(f)?;
+    let title = frac(f, tx0, ty0, tx1 - tx0 + 1, ty1 - ty0 + 1);
+    // white horizontal rules under the title (the message sits between them)
+    let (w, h) = (f.w, f.h);
+    let rule = |y: u32| {
+        let (mut run, mut best) = (0u32, 0u32);
+        for x in (w / 5)..(w * 4 / 5) {
+            let (r, g, b) = px(f, x, y);
+            if r.min(g).min(b) > 190 { run += 1; best = best.max(run); } else { run = 0; }
+        }
+        best > w / 6
+    };
+    let mut rules = Vec::new();
+    let mut y = ty1 + 2;
+    while y < (ty1 + h / 6).min(h - 1) && rules.len() < 2 {
+        if rule(y) {
+            rules.push(y);
+            y += h / 100; // past this line's thickness
+        } else {
+            y += 1;
+        }
+    }
+    let (my0, my1) = match rules[..] {
+        [a, b] => (a + 2, b.saturating_sub(2)),
+        [a] => (a + 2, (a + h / 12).min(h - 1)),
+        _ => (ty1 + 2, (ty1 + h / 10).min(h - 1)),
+    };
+    let mut reason = None;
+    let mut reason_en = String::new();
+    let mut reason_line_h = 0.0;
+    let area = frac(f, w / 5, my0, w * 3 / 5, my1.saturating_sub(my0).max(1));
+    if let Some((c, ox, oy)) = crop(f, &area) {
+        let k = if f.h < 1600 { 2 } else { 1 };
+        let img = image::RgbaImage::from_raw(c.w, c.h, c.rgba).expect("crop size");
+        let big = image::imageops::resize(&img, c.w * k, c.h * k, image::imageops::FilterType::CatmullRom);
+        if let Ok(mut words) = ocr.recognize(&Crop { w: c.w * k, h: c.h * k, rgba: big.into_raw() }) {
+            for wd in words.iter_mut() {
+                wd.rect = (wd.rect.0 / k, wd.rect.1 / k, wd.rect.2 / k, wd.rect.3 / k);
+            }
+            let text = ocr::clean(&words);
+            if text.chars().filter(|c| c.is_alphabetic()).count() >= 3 {
+                let x0 = words.iter().map(|w| w.rect.0).min().unwrap_or(0);
+                let y0 = words.iter().map(|w| w.rect.1).min().unwrap_or(0);
+                let x1 = words.iter().map(|w| w.rect.0 + w.rect.2).max().unwrap_or(0);
+                let mut hs: Vec<u32> = words.iter().map(|w| w.rect.3).collect();
+                hs.sort_unstable();
+                reason_line_h = hs[(hs.len() * 3 / 4).min(hs.len() - 1)] as f64 / f.h as f64;
+                // (down to the lower rule, or just under the text when there is none)
+                let bottom = if rules.len() == 2 { rules[1] + 3 } else { oy + words.iter().map(|w| w.rect.1 + w.rect.3).max().unwrap_or(0) };
+                reason = Some(frac(f, ox + x0, oy + y0, x1 - x0, bottom.saturating_sub(oy + y0)));
+                reason_en = text;
+            }
+        }
+    }
+    if std::env::var_os("GTA6_TRANSLATOR_DEBUG").is_some() {
+        eprintln!("[screens] alert title {title:?}, rules {rules:?}, message {reason_en:?}");
+    }
+    let buttons = find_buttons(f, ocr);
+    let buttons_row = row_of(&buttons);
+    Some(ScreenLayout {
+        id: ALERT_ID.into(),
+        title,
+        title_color: format!("#{r:02x}{g:02x}{b:02x}"),
+        title_ar: "تنبيه".into(),
+        reason,
+        reason_line_h,
+        reason_en,
+        buttons,
+        buttons_row,
+        labels: Vec::new(),
+        player: None,
+        menu: Vec::new(),
+        content_sig: Vec::new(),
+        buttons_sig: Vec::new(),
+    })
+}
