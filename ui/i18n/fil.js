@@ -221,5 +221,10 @@ I18N.add("fil", {
   "Fonts for {language}": "Mga font na sumusuporta sa {language}",
   "Other fonts ({language} falls back to a default font)": "Iba pang font (gagamit ang {language} ng default na font)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} naka-install na font ang sumusuporta sa {language} (nakalista muna). Puwede ring gumamit ng sariling font ang bawat bahaging babasahin.",
-  "Drag to resize the live translations": "I-drag para baguhin ang laki ng mga live na salin"
+  "Drag to resize the live translations": "I-drag para baguhin ang laki ng mga live na salin",
+  "Live translations on other devices": "Live na salin sa ibang device",
+  "Share on my home network": "I-share sa home network ko",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Buksan ang address na ito sa phone, tablet o computer na nasa parehong Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Naka-off. I-on para mabasa ang mga live na salin sa ibang device sa home network mo.",
+  "Starting… If Windows asks, allow the app on private networks.": "Sinisimulan… Kung magtanong ang Windows, payagan ang app sa mga private network."
 });

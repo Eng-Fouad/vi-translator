@@ -221,5 +221,10 @@ I18N.add("sw", {
   "Fonts for {language}": "Fonti zinazoweza kuandika {language}",
   "Other fonts ({language} falls back to a default font)": "Fonti nyingine ({language} itatumia fonti chaguo-msingi)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "Fonti {n} zilizosakinishwa zinaweza kuandika {language} (zimeorodheshwa kwanza). Kila eneo la kusoma linaweza pia kutumia fonti yake.",
-  "Drag to resize the live translations": "Buruta ili kubadilisha ukubwa wa tafsiri za moja kwa moja"
+  "Drag to resize the live translations": "Buruta ili kubadilisha ukubwa wa tafsiri za moja kwa moja",
+  "Live translations on other devices": "Tafsiri za moja kwa moja kwenye vifaa vingine",
+  "Share on my home network": "Shiriki kwenye mtandao wa nyumbani",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Fungua anwani hii kwenye simu, kompyuta kibao au kompyuta iliyo kwenye Wi-Fi hiyo hiyo:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Imezimwa. Iwashe ili kusoma tafsiri za moja kwa moja kwenye kifaa kingine cha mtandao wako wa nyumbani.",
+  "Starting… If Windows asks, allow the app on private networks.": "Inaanza… Windows ikiuliza, ruhusu programu kwenye mitandao ya faragha."
 });

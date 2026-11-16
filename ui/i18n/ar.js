@@ -221,5 +221,10 @@ I18N.add("ar", {
   "Fonts for {language}": "خطوط تدعم {language}",
   "Other fonts ({language} falls back to a default font)": "خطوط أخرى (تُعرض {language} بخط افتراضي)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} من الخطوط المثبتة تدعم {language} (مدرجة أولاً). يمكن لكل منطقة قراءة استخدام خطها الخاص.",
-  "Drag to resize the live translations": "اسحب لتغيير حجم الترجمات المباشرة"
+  "Drag to resize the live translations": "اسحب لتغيير حجم الترجمات المباشرة",
+  "Live translations on other devices": "الترجمات المباشرة على أجهزة أخرى",
+  "Share on my home network": "المشاركة على شبكتي المنزلية",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "افتح هذا العنوان على هاتف أو جهاز لوحي أو حاسوب على نفس شبكة Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "متوقفة. فعّلها لقراءة الترجمات المباشرة على جهاز آخر في شبكتك المنزلية.",
+  "Starting… If Windows asks, allow the app on private networks.": "جارٍ التشغيل… إذا سألك Windows، اسمح للتطبيق على الشبكات الخاصة."
 });

@@ -230,6 +230,24 @@ $("obs-url-copy").addEventListener("click", async () => {
   catch { $("obs-url").select(); document.execCommand("copy"); $("obs-url-copy").textContent = t("Copied ✓"); }
   setTimeout(() => ($("obs-url-copy").textContent = t("Copy")), 1500);
 });
+// Live translations page on the home network: switch, address and QR code.
+async function updateLan() {
+  const box = $("lan-info");
+  $("lan-on").checked = !!cfg.lan_page;
+  if (!cfg.lan_page) { box.textContent = t("Off. Turn it on to read the live translations on another device on your home network."); return; }
+  try {
+    const i = await invoke("lan_info");
+    if (!i.url) { box.textContent = t("Starting… If Windows asks, allow the app on private networks."); return; }
+    box.innerHTML = `<div>${AS.esc(t("Open this address on a phone, tablet or computer on the same Wi-Fi:"))}</div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:8px"><div style="background:#fff;border-radius:8px;line-height:0;width:132px">${i.qr || ""}</div>
+      <b dir="ltr" style="user-select:text;font-size:15px">${AS.esc(i.url)}</b></div>`;
+    const svg = box.querySelector("svg");
+    if (svg) Object.assign(svg.style, { width: "132px", height: "132px" });
+  } catch (e) { box.textContent = String(e); }
+}
+$("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
+setInterval(() => { if (cfg && !$("tab-source").classList.contains("hidden")) updateLan(); }, 3000);
+
 // save pending edits (e.g. the OBS password just typed) before asking OBS for its sources
 $("refresh-windows").addEventListener("click", async () => {
   clearTimeout(saveTimer);
@@ -940,5 +958,6 @@ function applyTheme() {
   } catch {}
   document.fonts.ready.then(drawLayer); // re-measure once the bundled fonts have loaded
   renderObs();
+  updateLan();
   await loadWindows();
 })();

@@ -11,6 +11,7 @@ mod fonts;
 mod ocr;
 mod overlay;
 mod phrasebook;
+mod lan;
 mod langs;
 mod screens;
 mod sync;
@@ -246,6 +247,13 @@ struct FrameEvent {
 #[tauri::command]
 fn list_langs() -> Vec<langs::Lang> {
     langs::LANGS.to_vec()
+}
+
+/// The home-network page: on/off, its address and a QR code of it.
+#[tauri::command]
+fn lan_info(state: tauri::State<AppState>) -> lan::LanInfo {
+    let c = state.cfg.lock().unwrap().clone();
+    lan::info(&c, &state.shared)
 }
 
 #[tauri::command]
@@ -522,7 +530,8 @@ fn present_loop(app: AppHandle, rx: mpsc::Receiver<PMsg>, shared: Arc<Shared>) {
                             .map(|(t, c)| if c.as_deref().is_some_and(|c| c.starts_with("icon:")) { "🎮" } else { t.as_str() })
                             .collect();
                         shared.on_screen.lock().unwrap().insert(area.clone(), serde_json::json!({ "en": ev.en, "ar": ar.trim() }));
-                        shared.shown.lock().unwrap().insert(area, serde_json::to_value(&ev).unwrap_or_default());
+                        shared.shown.lock().unwrap().insert(area.clone(), serde_json::to_value(&ev).unwrap_or_default());
+                        lan::push(&shared, &area, &ev.en, &ev.segments, ev.at);
                         let _ = app.emit("translation", ev);
                     }
                 }
@@ -654,6 +663,8 @@ fn ocr_loop(
         if c.target_lang != last_lang {
             // another language: everything shown and cached is in the old one
             last_lang = c.target_lang.clone();
+            let l = langs::get(&c.target_lang);
+            *shared.live_lang.lock().unwrap() = serde_json::json!({ "code": l.code, "rtl": l.rtl });
             memory.lock().unwrap().set_lang(&c.target_lang);
             menu_asked.clear();
             menu_states.clear();
@@ -973,6 +984,7 @@ fn ocr_loop(
                                         memory.lock().unwrap().put(&layout.reason_en, &vec![(ar.clone(), None)], "phrasebook");
                                     }
                                     *shared.screen_reason.lock().unwrap() = serde_json::json!([[ar.clone(), null]]);
+                                    lan::push(&shared, SCREEN_REASON, &layout.reason_en, &[(ar.clone(), None)], unix_ms(Instant::now()));
                                     let _ = app.emit("translation", TranslationEvent {
                                         area: SCREEN_REASON.into(),
                                         en: layout.reason_en.clone(),
@@ -1223,6 +1235,7 @@ fn translate_loop(
         };
         if ev.area == SCREEN_REASON && ev.error.is_none() {
             *shared.screen_reason.lock().unwrap() = serde_json::to_value(&ev.segments).unwrap_or_default();
+            lan::push(&shared, SCREEN_REASON, &ev.en, &ev.segments, ev.at);
         }
         if ev.area == SCREEN_REASON || ev.error.is_some() {
             let _ = app.emit("translation", ev); // errors go straight to the log
@@ -1483,7 +1496,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone() })
-        .invoke_handler(tauri::generate_handler![list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .invoke_handler(tauri::generate_handler![lan_info, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
         .setup(move |app| {
             let handle = app.handle().clone();
             let latest = Arc::new(Mutex::new(HashMap::new()));
@@ -1498,6 +1511,10 @@ fn main() {
                 // the Arabic-only page for an OBS Browser Source
                 let (h, c, s) = (handle.clone(), cfg.clone(), shared.clone());
                 std::thread::spawn(move || obs_page::run(h, c, s));
+            }
+            {
+                let (h, c, s) = (app.handle().clone(), cfg.clone(), shared.clone());
+                std::thread::spawn(move || lan::run(h, c, s));
             }
 
             {

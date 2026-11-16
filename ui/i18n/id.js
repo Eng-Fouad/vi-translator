@@ -221,5 +221,10 @@ I18N.add("id", {
   "Fonts for {language}": "Font yang mendukung {language}",
   "Other fonts ({language} falls back to a default font)": "Font lain ({language} memakai font bawaan)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} font terpasang mendukung {language} (ditampilkan lebih dulu). Setiap area baca juga dapat memakai font sendiri.",
-  "Drag to resize the live translations": "Seret untuk mengubah ukuran terjemahan langsung"
+  "Drag to resize the live translations": "Seret untuk mengubah ukuran terjemahan langsung",
+  "Live translations on other devices": "Terjemahan langsung di perangkat lain",
+  "Share on my home network": "Bagikan di jaringan rumah saya",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Buka alamat ini di ponsel, tablet, atau komputer di Wi-Fi yang sama:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Mati. Nyalakan untuk membaca terjemahan langsung di perangkat lain di jaringan rumah Anda.",
+  "Starting… If Windows asks, allow the app on private networks.": "Memulai… Jika Windows bertanya, izinkan aplikasi di jaringan pribadi."
 });

@@ -221,5 +221,10 @@ I18N.add("tr", {
   "Fonts for {language}": "{language} destekleyen yazı tipleri",
   "Other fonts ({language} falls back to a default font)": "Diğer yazı tipleri ({language} için varsayılan yazı tipi kullanılır)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "Yüklü {n} yazı tipi {language} destekliyor (önce listelenir). Her okuma alanı kendi yazı tipini de kullanabilir.",
-  "Drag to resize the live translations": "Canlı çevirileri yeniden boyutlandırmak için sürükleyin"
+  "Drag to resize the live translations": "Canlı çevirileri yeniden boyutlandırmak için sürükleyin",
+  "Live translations on other devices": "Diğer cihazlarda canlı çeviriler",
+  "Share on my home network": "Ev ağımda paylaş",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Bu adresi aynı Wi-Fi'daki bir telefon, tablet veya bilgisayarda açın:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Kapalı. Ev ağınızdaki başka bir cihazda canlı çevirileri okumak için açın.",
+  "Starting… If Windows asks, allow the app on private networks.": "Başlatılıyor… Windows sorarsa uygulamaya özel ağlarda izin verin."
 });

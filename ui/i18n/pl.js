@@ -221,5 +221,10 @@ I18N.add("pl", {
   "Fonts for {language}": "Czcionki obsługujące język {language}",
   "Other fonts ({language} falls back to a default font)": "Inne czcionki (dla języka {language} zostanie użyta czcionka domyślna)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "Zainstalowane czcionki obsługujące język {language}: {n} (na początku listy). Każdy obszar odczytu może też mieć własną czcionkę.",
-  "Drag to resize the live translations": "Przeciągnij, aby zmienić rozmiar tłumaczeń na żywo"
+  "Drag to resize the live translations": "Przeciągnij, aby zmienić rozmiar tłumaczeń na żywo",
+  "Live translations on other devices": "Tłumaczenia na żywo na innych urządzeniach",
+  "Share on my home network": "Udostępniaj w mojej sieci domowej",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Otwórz ten adres na telefonie, tablecie lub komputerze w tej samej sieci Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Wyłączone. Włącz, aby czytać tłumaczenia na żywo na innym urządzeniu w sieci domowej.",
+  "Starting… If Windows asks, allow the app on private networks.": "Uruchamianie… Jeśli Windows zapyta, zezwól aplikacji w sieciach prywatnych."
 });

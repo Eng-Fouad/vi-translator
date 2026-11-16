@@ -221,5 +221,10 @@ I18N.add("es-MX", {
   "Fonts for {language}": "Fuentes para {language}",
   "Other fonts ({language} falls back to a default font)": "Otras fuentes (para {language} se usará una fuente predeterminada)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} fuentes instaladas admiten {language} (aparecen primero). Cada área de lectura también puede usar su propia fuente.",
-  "Drag to resize the live translations": "Arrastra para cambiar el tamaño de las traducciones en vivo"
+  "Drag to resize the live translations": "Arrastra para cambiar el tamaño de las traducciones en vivo",
+  "Live translations on other devices": "Traducciones en vivo en otros dispositivos",
+  "Share on my home network": "Compartir en mi red doméstica",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Abre esta dirección en un celular, tableta o computadora conectada a la misma red Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Desactivado. Actívalo para leer las traducciones en vivo en otro dispositivo de tu red doméstica.",
+  "Starting… If Windows asks, allow the app on private networks.": "Iniciando… Si Windows lo pide, permite la app en redes privadas."
 });

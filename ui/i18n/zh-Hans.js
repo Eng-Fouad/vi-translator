@@ -221,5 +221,10 @@ I18N.add("zh-Hans", {
   "Fonts for {language}": "支持{language}的字体",
   "Other fonts ({language} falls back to a default font)": "其他字体（{language}将使用默认字体）",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "已安装的字体中有 {n} 个支持{language}（排在前面）。每个读取区域也可以使用自己的字体。",
-  "Drag to resize the live translations": "拖动以调整实时译文区域的大小"
+  "Drag to resize the live translations": "拖动以调整实时译文区域的大小",
+  "Live translations on other devices": "在其他设备上查看实时译文",
+  "Share on my home network": "在我的家庭网络中共享",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "在同一 Wi-Fi 下的手机、平板或电脑上打开此地址：",
+  "Off. Turn it on to read the live translations on another device on your home network.": "已关闭。开启后可在家庭网络中的其他设备上阅读实时译文。",
+  "Starting… If Windows asks, allow the app on private networks.": "正在启动… 如果 Windows 询问，请允许该应用访问专用网络。"
 });

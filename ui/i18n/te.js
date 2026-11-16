@@ -221,5 +221,10 @@ I18N.add("te", {
   "Fonts for {language}": "{language} రాయగల ఫాంట్‌లు",
   "Other fonts ({language} falls back to a default font)": "ఇతర ఫాంట్‌లు ({language} కోసం డిఫాల్ట్ ఫాంట్ వాడబడుతుంది)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "ఇన్‌స్టాల్ చేసిన {n} ఫాంట్‌లు {language} రాయగలవు (ముందుగా చూపబడ్డాయి). ప్రతి రీడ్ ఏరియా తన సొంత ఫాంట్‌ను కూడా వాడవచ్చు.",
-  "Drag to resize the live translations": "లైవ్ అనువాదాల పరిమాణం మార్చడానికి లాగండి"
+  "Drag to resize the live translations": "లైవ్ అనువాదాల పరిమాణం మార్చడానికి లాగండి",
+  "Live translations on other devices": "ఇతర పరికరాలలో లైవ్ అనువాదాలు",
+  "Share on my home network": "నా హోమ్ నెట్‌వర్క్‌లో షేర్ చేయి",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "ఇదే వై-ఫైలోని ఫోన్, టాబ్లెట్ లేదా కంప్యూటర్‌లో ఈ చిరునామాను తెరవండి:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "ఆఫ్‌లో ఉంది. మీ హోమ్ నెట్‌వర్క్‌లోని మరో పరికరంలో లైవ్ అనువాదాలు చదవడానికి దీన్ని ఆన్ చేయండి.",
+  "Starting… If Windows asks, allow the app on private networks.": "ప్రారంభమవుతోంది… Windows అడిగితే, ప్రైవేట్ నెట్‌వర్క్‌లలో యాప్‌ను అనుమతించండి."
 });

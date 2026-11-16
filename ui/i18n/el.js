@@ -221,5 +221,10 @@ I18N.add("el", {
   "Fonts for {language}": "Γραμματοσειρές για {language}",
   "Other fonts ({language} falls back to a default font)": "Άλλες γραμματοσειρές (για {language} χρησιμοποιείται προεπιλεγμένη γραμματοσειρά)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} εγκατεστημένες γραμματοσειρές υποστηρίζουν {language} (εμφανίζονται πρώτες). Κάθε περιοχή ανάγνωσης μπορεί επίσης να έχει δική της γραμματοσειρά.",
-  "Drag to resize the live translations": "Σύρετε για να αλλάξετε το μέγεθος των ζωντανών μεταφράσεων"
+  "Drag to resize the live translations": "Σύρετε για να αλλάξετε το μέγεθος των ζωντανών μεταφράσεων",
+  "Live translations on other devices": "Ζωντανές μεταφράσεις σε άλλες συσκευές",
+  "Share on my home network": "Κοινή χρήση στο οικιακό μου δίκτυο",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Ανοίξτε αυτή τη διεύθυνση σε τηλέφωνο, tablet ή υπολογιστή στο ίδιο Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Ανενεργό. Ενεργοποιήστε το για να διαβάζετε τις ζωντανές μεταφράσεις σε άλλη συσκευή του οικιακού σας δικτύου.",
+  "Starting… If Windows asks, allow the app on private networks.": "Εκκίνηση… Αν ρωτήσουν τα Windows, επιτρέψτε την εφαρμογή στα ιδιωτικά δίκτυα."
 });

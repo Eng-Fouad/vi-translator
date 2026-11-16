@@ -221,5 +221,10 @@ I18N.add("es-ES", {
   "Fonts for {language}": "Fuentes para {language}",
   "Other fonts ({language} falls back to a default font)": "Otras fuentes (para {language} se usará una fuente por defecto)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} fuentes instaladas admiten {language} (aparecen primero). Cada zona de lectura también puede usar su propia fuente.",
-  "Drag to resize the live translations": "Arrastra para cambiar el tamaño de las traducciones en directo"
+  "Drag to resize the live translations": "Arrastra para cambiar el tamaño de las traducciones en directo",
+  "Live translations on other devices": "Traducciones en directo en otros dispositivos",
+  "Share on my home network": "Compartir en mi red doméstica",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Abre esta dirección en un móvil, tableta u ordenador conectado a la misma red Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Desactivado. Actívalo para leer las traducciones en directo en otro dispositivo de tu red doméstica.",
+  "Starting… If Windows asks, allow the app on private networks.": "Iniciando… Si Windows lo pide, permite la aplicación en redes privadas."
 });

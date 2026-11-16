@@ -221,5 +221,10 @@ I18N.add("th", {
   "Fonts for {language}": "ฟอนต์ที่รองรับ {language}",
   "Other fonts ({language} falls back to a default font)": "ฟอนต์อื่น ({language} จะใช้ฟอนต์เริ่มต้น)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "ฟอนต์ที่ติดตั้งไว้ {n} รายการรองรับ {language} (แสดงก่อน) แต่ละพื้นที่อ่านยังใช้ฟอนต์ของตัวเองได้",
-  "Drag to resize the live translations": "ลากเพื่อปรับขนาดคำแปลสด"
+  "Drag to resize the live translations": "ลากเพื่อปรับขนาดคำแปลสด",
+  "Live translations on other devices": "คำแปลสดบนอุปกรณ์อื่น",
+  "Share on my home network": "แชร์ในเครือข่ายภายในบ้าน",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "เปิดที่อยู่นี้บนโทรศัพท์ แท็บเล็ต หรือคอมพิวเตอร์ที่ใช้ Wi-Fi เดียวกัน:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "ปิดอยู่ เปิดเพื่ออ่านคำแปลสดบนอุปกรณ์อื่นในเครือข่ายภายในบ้าน",
+  "Starting… If Windows asks, allow the app on private networks.": "กำลังเริ่ม… หาก Windows ถาม ให้อนุญาตแอปบนเครือข่ายส่วนตัว"
 });

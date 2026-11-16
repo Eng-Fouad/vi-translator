@@ -15,7 +15,7 @@ use tauri::AppHandle;
 use crate::capture::Shared;
 use crate::config::Config;
 
-fn respond(mut s: TcpStream, status: &str, mime: &str, body: &[u8]) {
+pub(crate) fn respond(mut s: TcpStream, status: &str, mime: &str, body: &[u8]) {
     let head = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
         body.len()
@@ -121,7 +121,7 @@ Content-Length: {}
 }
 
 /// Files of the app's own UI (the page, common.js, fonts), from inside the executable.
-fn serve_asset(app: &AppHandle, s: TcpStream, path: &str) {
+pub(crate) fn serve_asset(app: &AppHandle, s: TcpStream, path: &str) {
     match app.asset_resolver().get(path.to_string()) {
         Some(a) => respond(s, "200 OK", a.mime_type(), a.bytes()),
         None => respond(s, "404 Not Found", "text/plain", b"not found"),

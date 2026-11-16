@@ -57,6 +57,13 @@ pub struct Shared {
     pub preview_clients: AtomicUsize,
     /// the app window is minimised or hidden: no preview frames
     pub preview_paused: std::sync::atomic::AtomicBool,
+    /// Recent translations for the home-network page (see lan.rs), newest last, and their ids.
+    pub live_log: Mutex<std::collections::VecDeque<serde_json::Value>>,
+    pub live_seq: AtomicU64,
+    /// the target language for that page: {"code": "ar", "rtl": true}
+    pub live_lang: Mutex<serde_json::Value>,
+    /// the home-network page is being served
+    pub lan_running: std::sync::atomic::AtomicBool,
     /// ms between full frames (for reading text) and between preview frames (0 = default)
     pub capture_ms: AtomicU64,
     pub preview_ms: AtomicU64,

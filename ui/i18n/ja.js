@@ -221,5 +221,10 @@ I18N.add("ja", {
   "Fonts for {language}": "{language} に対応したフォント",
   "Other fonts ({language} falls back to a default font)": "その他のフォント（{language} は既定のフォントで表示されます）",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "インストール済みの {n} 個のフォントが {language} に対応しています（先頭に表示）。読み取り範囲ごとに別のフォントも使用できます。",
-  "Drag to resize the live translations": "ドラッグしてライブ翻訳の大きさを変更"
+  "Drag to resize the live translations": "ドラッグしてライブ翻訳の大きさを変更",
+  "Live translations on other devices": "ほかのデバイスでライブ翻訳",
+  "Share on my home network": "ホームネットワークで共有",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "同じ Wi-Fi のスマホ、タブレット、パソコンでこのアドレスを開いてください:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "オフです。ホームネットワーク内のほかのデバイスでライブ翻訳を読むにはオンにしてください。",
+  "Starting… If Windows asks, allow the app on private networks.": "起動中… Windows から確認された場合は、プライベートネットワークでのアプリを許可してください。"
 });

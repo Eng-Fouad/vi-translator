@@ -221,5 +221,10 @@ I18N.add("nl", {
   "Fonts for {language}": "Lettertypen voor {language}",
   "Other fonts ({language} falls back to a default font)": "Andere lettertypen (voor {language} wordt een standaardlettertype gebruikt)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} geïnstalleerde lettertypen ondersteunen {language} (bovenaan). Elk leesgebied kan ook een eigen lettertype gebruiken.",
-  "Drag to resize the live translations": "Sleep om de live-vertalingen groter of kleiner te maken"
+  "Drag to resize the live translations": "Sleep om de live-vertalingen groter of kleiner te maken",
+  "Live translations on other devices": "Live-vertalingen op andere apparaten",
+  "Share on my home network": "Delen op mijn thuisnetwerk",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Open dit adres op een telefoon, tablet of computer op hetzelfde wifi-netwerk:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Uit. Zet het aan om de live-vertalingen op een ander apparaat in je thuisnetwerk te lezen.",
+  "Starting… If Windows asks, allow the app on private networks.": "Starten… Als Windows erom vraagt, sta de app toe op privénetwerken."
 });

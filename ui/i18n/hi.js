@@ -221,5 +221,10 @@ I18N.add("hi", {
   "Fonts for {language}": "{language} लिखने वाले फ़ॉन्ट",
   "Other fonts ({language} falls back to a default font)": "अन्य फ़ॉन्ट ({language} के लिए डिफ़ॉल्ट फ़ॉन्ट इस्तेमाल होगा)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} इंस्टॉल किए गए फ़ॉन्ट {language} लिख सकते हैं (पहले दिखाए गए)। हर पढ़ने वाला क्षेत्र अपना फ़ॉन्ट भी इस्तेमाल कर सकता है।",
-  "Drag to resize the live translations": "लाइव अनुवादों का आकार बदलने के लिए खींचें"
+  "Drag to resize the live translations": "लाइव अनुवादों का आकार बदलने के लिए खींचें",
+  "Live translations on other devices": "दूसरे डिवाइस पर लाइव अनुवाद",
+  "Share on my home network": "मेरे होम नेटवर्क पर शेयर करें",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "यह पता उसी वाई-फ़ाई पर फ़ोन, टैबलेट या कंप्यूटर में खोलें:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "बंद। अपने होम नेटवर्क के किसी दूसरे डिवाइस पर लाइव अनुवाद पढ़ने के लिए इसे चालू करें।",
+  "Starting… If Windows asks, allow the app on private networks.": "शुरू हो रहा है… अगर Windows पूछे, तो ऐप को निजी नेटवर्क पर अनुमति दें।"
 });

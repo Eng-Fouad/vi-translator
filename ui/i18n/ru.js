@@ -221,5 +221,10 @@ I18N.add("ru", {
   "Fonts for {language}": "Шрифты с поддержкой языка {language}",
   "Other fonts ({language} falls back to a default font)": "Другие шрифты (для языка {language} будет использован стандартный шрифт)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "Установленных шрифтов с поддержкой языка {language}: {n} (показаны первыми). Каждая область чтения может использовать свой шрифт.",
-  "Drag to resize the live translations": "Перетащите, чтобы изменить размер живых переводов"
+  "Drag to resize the live translations": "Перетащите, чтобы изменить размер живых переводов",
+  "Live translations on other devices": "Живые переводы на других устройствах",
+  "Share on my home network": "Делиться в домашней сети",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Откройте этот адрес на телефоне, планшете или компьютере в той же сети Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Выключено. Включите, чтобы читать живые переводы на другом устройстве в домашней сети.",
+  "Starting… If Windows asks, allow the app on private networks.": "Запуск… Если Windows спросит, разрешите приложение в частных сетях."
 });

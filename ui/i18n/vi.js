@@ -221,5 +221,10 @@ I18N.add("vi", {
   "Fonts for {language}": "Phông chữ hỗ trợ {language}",
   "Other fonts ({language} falls back to a default font)": "Phông chữ khác ({language} sẽ dùng phông mặc định)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} phông chữ đã cài hỗ trợ {language} (hiển thị trước). Mỗi vùng đọc cũng có thể dùng phông riêng.",
-  "Drag to resize the live translations": "Kéo để thay đổi kích thước bản dịch trực tiếp"
+  "Drag to resize the live translations": "Kéo để thay đổi kích thước bản dịch trực tiếp",
+  "Live translations on other devices": "Bản dịch trực tiếp trên thiết bị khác",
+  "Share on my home network": "Chia sẻ trong mạng gia đình",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Mở địa chỉ này trên điện thoại, máy tính bảng hoặc máy tính cùng Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Đang tắt. Bật để đọc bản dịch trực tiếp trên thiết bị khác trong mạng gia đình.",
+  "Starting… If Windows asks, allow the app on private networks.": "Đang khởi động… Nếu Windows hỏi, hãy cho phép ứng dụng trên mạng riêng."
 });

@@ -221,5 +221,10 @@ I18N.add("fa", {
   "Fonts for {language}": "قلم‌هایی که {language} را پشتیبانی می‌کنند",
   "Other fonts ({language} falls back to a default font)": "قلم‌های دیگر ({language} با قلم پیش‌فرض نمایش داده می‌شود)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} قلم نصب‌شده از {language} پشتیبانی می‌کنند (در ابتدا فهرست شده‌اند). هر ناحیه خواندن می‌تواند قلم خودش را داشته باشد.",
-  "Drag to resize the live translations": "برای تغییر اندازهٔ ترجمه‌های زنده بکشید"
+  "Drag to resize the live translations": "برای تغییر اندازهٔ ترجمه‌های زنده بکشید",
+  "Live translations on other devices": "ترجمه‌های زنده روی دستگاه‌های دیگر",
+  "Share on my home network": "اشتراک‌گذاری در شبکهٔ خانگی من",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "این نشانی را در گوشی، تبلت یا رایانه‌ای روی همین Wi-Fi باز کنید:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "خاموش است. برای خواندن ترجمه‌های زنده روی دستگاه دیگری در شبکهٔ خانگی، آن را روشن کنید.",
+  "Starting… If Windows asks, allow the app on private networks.": "در حال شروع… اگر Windows پرسید، به برنامه در شبکه‌های خصوصی اجازه دهید."
 });

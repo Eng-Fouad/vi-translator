@@ -221,5 +221,10 @@ I18N.add("ko", {
   "Fonts for {language}": "{language} 지원 글꼴",
   "Other fonts ({language} falls back to a default font)": "기타 글꼴({language}은(는) 기본 글꼴로 표시됩니다)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "설치된 글꼴 중 {n}개가 {language}을(를) 지원합니다(먼저 표시됨). 읽기 영역마다 다른 글꼴을 사용할 수도 있습니다.",
-  "Drag to resize the live translations": "드래그하여 실시간 번역 영역 크기 조정"
+  "Drag to resize the live translations": "드래그하여 실시간 번역 영역 크기 조정",
+  "Live translations on other devices": "다른 기기에서 실시간 번역",
+  "Share on my home network": "홈 네트워크에서 공유",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "같은 Wi-Fi에 연결된 휴대폰, 태블릿 또는 컴퓨터에서 이 주소를 여세요:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "꺼져 있습니다. 홈 네트워크의 다른 기기에서 실시간 번역을 보려면 켜세요.",
+  "Starting… If Windows asks, allow the app on private networks.": "시작하는 중… Windows에서 묻는 경우 개인 네트워크에서 앱을 허용하세요."
 });

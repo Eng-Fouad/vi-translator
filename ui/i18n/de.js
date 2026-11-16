@@ -221,5 +221,10 @@ I18N.add("de", {
   "Fonts for {language}": "Schriftarten für {language}",
   "Other fonts ({language} falls back to a default font)": "Andere Schriftarten (für {language} wird eine Standardschrift verwendet)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} installierte Schriftarten unterstützen {language} (zuerst aufgeführt). Jeder Lesebereich kann auch eine eigene Schriftart verwenden.",
-  "Drag to resize the live translations": "Ziehen, um die Live-Übersetzungen zu vergrößern oder zu verkleinern"
+  "Drag to resize the live translations": "Ziehen, um die Live-Übersetzungen zu vergrößern oder zu verkleinern",
+  "Live translations on other devices": "Live-Übersetzungen auf anderen Geräten",
+  "Share on my home network": "In meinem Heimnetz teilen",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Öffnen Sie diese Adresse auf einem Handy, Tablet oder Computer im selben WLAN:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Aus. Schalten Sie es ein, um die Live-Übersetzungen auf einem anderen Gerät im Heimnetz zu lesen.",
+  "Starting… If Windows asks, allow the app on private networks.": "Wird gestartet… Wenn Windows fragt, erlauben Sie die App in privaten Netzwerken."
 });

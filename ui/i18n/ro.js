@@ -221,5 +221,10 @@ I18N.add("ro", {
   "Fonts for {language}": "Fonturi care acceptă {language}",
   "Other fonts ({language} falls back to a default font)": "Alte fonturi (pentru {language} se folosește fontul implicit)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} fonturi instalate acceptă {language} (listate primele). Fiecare zonă de citire poate folosi și propriul font.",
-  "Drag to resize the live translations": "Trageți pentru a redimensiona traducerile în direct"
+  "Drag to resize the live translations": "Trageți pentru a redimensiona traducerile în direct",
+  "Live translations on other devices": "Traduceri în direct pe alte dispozitive",
+  "Share on my home network": "Partajează în rețeaua mea de acasă",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Deschideți această adresă pe un telefon, o tabletă sau un computer din aceeași rețea Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Dezactivat. Activați pentru a citi traducerile în direct pe alt dispozitiv din rețeaua de acasă.",
+  "Starting… If Windows asks, allow the app on private networks.": "Pornire… Dacă Windows întreabă, permiteți aplicația în rețelele private."
 });

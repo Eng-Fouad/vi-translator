@@ -221,5 +221,10 @@ I18N.add("ta", {
   "Fonts for {language}": "{language} எழுதக்கூடிய எழுத்துருக்கள்",
   "Other fonts ({language} falls back to a default font)": "பிற எழுத்துருக்கள் ({language} இயல்புநிலை எழுத்துருவில் காட்டப்படும்)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "நிறுவப்பட்ட {n} எழுத்துருக்கள் {language} எழுதக்கூடியவை (முதலில் காட்டப்பட்டுள்ளன). ஒவ்வொரு வாசிப்புப் பகுதியும் தனக்கென எழுத்துருவைப் பயன்படுத்தலாம்.",
-  "Drag to resize the live translations": "நேரடி மொழிபெயர்ப்புகளின் அளவை மாற்ற இழுக்கவும்"
+  "Drag to resize the live translations": "நேரடி மொழிபெயர்ப்புகளின் அளவை மாற்ற இழுக்கவும்",
+  "Live translations on other devices": "பிற சாதனங்களில் நேரடி மொழிபெயர்ப்புகள்",
+  "Share on my home network": "என் வீட்டு நெட்வொர்க்கில் பகிர்",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "இதே வைஃபையில் உள்ள போன், டேப்லெட் அல்லது கணினியில் இந்த முகவரியைத் திறக்கவும்:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "முடக்கப்பட்டுள்ளது. உங்கள் வீட்டு நெட்வொர்க்கில் உள்ள வேறு சாதனத்தில் நேரடி மொழிபெயர்ப்புகளைப் படிக்க இதை இயக்கவும்.",
+  "Starting… If Windows asks, allow the app on private networks.": "தொடங்குகிறது… Windows கேட்டால், தனிப்பட்ட நெட்வொர்க்குகளில் ஆப்பை அனுமதிக்கவும்."
 });

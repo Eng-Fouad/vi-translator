@@ -221,5 +221,10 @@ I18N.add("fr", {
   "Fonts for {language}": "Polices pour {language}",
   "Other fonts ({language} falls back to a default font)": "Autres polices (une police par défaut sera utilisée pour {language})",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "{n} polices installées prennent en charge {language} (affichées en premier). Chaque zone de lecture peut aussi utiliser sa propre police.",
-  "Drag to resize the live translations": "Faites glisser pour redimensionner les traductions en direct"
+  "Drag to resize the live translations": "Faites glisser pour redimensionner les traductions en direct",
+  "Live translations on other devices": "Traductions en direct sur d'autres appareils",
+  "Share on my home network": "Partager sur mon réseau domestique",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Ouvrez cette adresse sur un téléphone, une tablette ou un ordinateur du même Wi-Fi :",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Désactivé. Activez-le pour lire les traductions en direct sur un autre appareil de votre réseau domestique.",
+  "Starting… If Windows asks, allow the app on private networks.": "Démarrage… Si Windows le demande, autorisez l'application sur les réseaux privés."
 });

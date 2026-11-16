@@ -221,5 +221,10 @@ I18N.add("cs", {
   "Fonts for {language}": "Písma podporující jazyk {language}",
   "Other fonts ({language} falls back to a default font)": "Ostatní písma (pro jazyk {language} se použije výchozí písmo)",
   "{n} installed fonts can write {language} (listed first). Each read area can also use its own font.": "Nainstalovaná písma podporující jazyk {language}: {n} (uvedena jako první). Každá oblast čtení může mít i vlastní písmo.",
-  "Drag to resize the live translations": "Přetažením změníte velikost živých překladů"
+  "Drag to resize the live translations": "Přetažením změníte velikost živých překladů",
+  "Live translations on other devices": "Živé překlady na jiných zařízeních",
+  "Share on my home network": "Sdílet v domácí síti",
+  "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Otevřete tuto adresu na telefonu, tabletu nebo počítači ve stejné síti Wi-Fi:",
+  "Off. Turn it on to read the live translations on another device on your home network.": "Vypnuto. Zapněte, chcete-li číst živé překlady na jiném zařízení v domácí síti.",
+  "Starting… If Windows asks, allow the app on private networks.": "Spouštění… Pokud se Windows zeptá, povolte aplikaci v privátních sítích."
 });

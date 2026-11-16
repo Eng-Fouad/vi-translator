@@ -119,6 +119,9 @@ pub struct Config {
     pub engine: String,
     /// Language to translate into (see `langs::LANGS`): "ar", "hi", "tr" …
     pub target_lang: String,
+    /// Live translations page for other devices on the home network (off by default).
+    pub lan_page: bool,
+    pub lan_port: u16,
     /// Language of the app's own interface: "en" or "ar" (right to left).
     pub ui_lang: String,
     pub deepl_key: String,
@@ -218,6 +221,8 @@ impl Default for Config {
             memory_tint: true,
             target_lang: "ar".into(),
             ui_lang: "en".into(),
+            lan_page: false,
+            lan_port: 8791,
             share_lines: true,
             install_id: String::new(),
             server_url: String::new(),
