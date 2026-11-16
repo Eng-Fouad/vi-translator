@@ -1,0 +1,146 @@
+# Pushing a tag vX.Y.Z releases version X.Y.Z of the app: portable executables for Windows and
+# Linux (x64 and arm64) and macOS (Apple silicon), each with an Ed25519 signature (.sig) that the app's auto-update
+# checks against its built-in public key, attached to a GitHub Release.
+#
+# Same tag rules as the backend: the tag must look like v1.2.3 and be newer than the latest release.
+#
+# Repository secret:
+#   UPDATE_SIGNING_KEY_PEM  the Ed25519 private key (PEM) matching updater::PUBLIC_KEY
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - name: Check the tag
+        id: v
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          if ! echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tags must look like v1.2.3 (got $GITHUB_REF_NAME)"; exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Must be newer than the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          CUR=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
+          CUR="${CUR#v}"
+          echo "latest release: ${CUR:-none}, tag: $V"
+          if [ -n "$CUR" ] && { [ "$CUR" = "$V" ] || [ "$(printf '%s\n%s\n' "$CUR" "$V" | sort -V | tail -n1)" != "$V" ]; }; then
+            echo "::error::$V is not newer than the latest release $CUR"; exit 1
+          fi
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows, arch: x64,   runner: windows-latest,   target: x86_64-pc-windows-msvc,    test: true }
+          - { os: windows, arch: arm64, runner: windows-11-arm,   target: aarch64-pc-windows-msvc,   test: true }
+          - { os: linux,   arch: x64,   runner: ubuntu-24.04,     target: x86_64-unknown-linux-gnu,  test: true }
+          - { os: linux,   arch: arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, test: true }
+          - { os: macos,   arch: arm64, runner: macos-latest,     target: aarch64-apple-darwin,      test: true }
+          # no macOS x64 (Intel Macs): the ONNX Runtime the translator links has no build for it
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Linux packages
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config clang libclang-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev \
+            libtesseract-dev libleptonica-dev tesseract-ocr tesseract-ocr-eng \
+            libxcb1-dev libxcb-randr0-dev libxcb-shm0-dev libxrandr-dev libdbus-1-dev libpipewire-0.3-dev \
+            libwayland-dev libegl-dev libgbm-dev libv4l-dev
+
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+
+      - name: Version from the tag
+        run: |
+          perl -0pi -e 's/^version = ".*?"/version = "$ENV{VERSION}"/m' src-tauri/Cargo.toml
+          perl -0pi -e 's/"version": "[^"]*"/"version": "$ENV{VERSION}"/' src-tauri/tauri.conf.json
+          grep -m1 '^version' src-tauri/Cargo.toml
+
+      - name: Test
+        if: matrix.test
+        working-directory: src-tauri
+        run: cargo test --target ${{ matrix.target }}
+
+      - name: Build
+        working-directory: src-tauri
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Name the executable
+        run: |
+          EXT=""; [ "${{ matrix.os }}" = windows ] && EXT=".exe"
+          mkdir -p out
+          cp "src-tauri/target/${{ matrix.target }}/release/vi-translator$EXT" "out/vi-translator-${{ matrix.os }}-${{ matrix.arch }}$EXT"
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vi-translator-${{ matrix.os }}-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Sign
+        env:
+          KEY: ${{ secrets.UPDATE_SIGNING_KEY_PEM }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::secret UPDATE_SIGNING_KEY_PEM is not set"; exit 1; }
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/key.pem"
+          for f in out/vi-translator-*; do
+            openssl pkeyutl -sign -inkey "$RUNNER_TEMP/key.pem" -rawin -in "$f" | base64 -w0 > "$f.sig"
+          done
+          rm -f "$RUNNER_TEMP/key.pem"
+          ls -l out
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.check.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" \
+            --title "VI Translator $V" --generate-notes --verify-tag
