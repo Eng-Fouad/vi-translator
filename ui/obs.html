@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ar">
+  <head>
+    <meta charset="utf-8" />
+    <title>GTA 6 Translator for OBS</title>
+    <link rel="stylesheet" href="fonts.css" />
+    <style>
+      /* OBS Browser Source: the page covers the game picture; only the Arabic is drawn */
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      #areas, #screen { position: fixed; inset: 0; }
+      .band { position: absolute; }
+    </style>
+  </head>
+  <body>
+    <div id="areas"></div>
+    <div id="screen"></div>
+    <script src="common.js"></script>
+    <script>
+      // Same drawing as the overlay windows (common.js), but for the whole frame at once: every rect
+      // is a fraction of the game picture, and the page is the game picture.
+      const areasEl = document.getElementById("areas");
+      const screenEl = document.getElementById("screen");
+      let state = null;
+      let lastText = "";
+      let build = null; // the app's run this page's code came from
+
+      function draw() {
+        if (!state) return;
+        const W = window.innerWidth, H = window.innerHeight;
+        const k = H / 1080; // style sizes are for 1080p
+        areasEl.innerHTML = "";
+        if (!state.screen) {
+          for (const a of state.areas) {
+            const ev = state.shown[a.id];
+            if (!a.enabled || !ev || !ev.segments || !ev.segments.length) continue;
+            const px = { x: a.x * W, y: a.y * H, w: a.w * W, h: a.h * H };
+            const r = AS.rectFor(a.placement, px, W, H, a);
+            const band = document.createElement("div");
+            band.className = "band";
+            Object.assign(band.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+            const box = document.createElement("div");
+            band.appendChild(box);
+            areasEl.appendChild(band);
+            AS.anchor(band, a.placement, a);
+            AS.renderBox(box, ev.segments, state.style, k, a.font_scale, a.placement, a, AS.matchedPx(a, ev.line_h, H));
+            if (a.placement === "under_text") {
+              if (ev.text_box) AS.placeUnderText(box, ev.text_box, ev.line_h, W, H, r.x, r.y);
+              else Object.assign(box.style, { position: "absolute", left: "0", top: `${px.h}px`, margin: "0" });
+            }
+            if (ev.cached && state.memory_tint !== false) box.style.color = AS.CACHED_TINT; // lines from the memory
+          }
+        }
+        AS.renderScreen(screenEl, state.screen, state.reason || [], state.profile_opts);
+      }
+
+      async function poll() {
+        try {
+          const text = await (await fetch("/state", { cache: "no-store" })).text();
+          if (text !== lastText) {
+            lastText = text;
+            state = JSON.parse(text);
+            AS.setLang(state.lang);
+            // the app was restarted (maybe updated): load its current code
+            if (build !== null && state.build !== build) { location.reload(); return; }
+            build = state.build;
+            draw();
+          }
+        } catch (e) {
+          // the app is closed: show nothing, keep trying
+          if (state) { state = null; lastText = ""; areasEl.innerHTML = ""; screenEl.innerHTML = ""; }
+        }
+        setTimeout(poll, 100);
+      }
+      window.addEventListener("resize", draw);
+      document.fonts.ready.then(draw);
+      poll();
+    </script>
+  </body>
+</html>

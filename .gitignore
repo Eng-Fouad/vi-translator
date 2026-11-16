@@ -1,0 +1,10 @@
+# Rust / Tauri build output
+/src-tauri/target/
+/src-tauri/gen/schemas/
+
+# local data and editors
+*.jsonl
+.env
+.idea/
+.vscode/
+*.part

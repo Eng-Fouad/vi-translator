@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GTA 6 Translator</title>
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span class="logo">ع</span> GTA 6 Translator</div>
+      <div id="status" class="pill">Starting…</div>
+      <div class="spacer"></div>
+      <button id="rec" class="rec hidden" title="Saving frames to disk — click to stop and open the folder">● Saving frames</button>
+      <button id="theme" class="theme-btn" title="Switch between light and dark">🌙 Dark</button>
+      <label class="switch" title="Show the Arabic on top of the game window">
+        <input type="checkbox" id="overlays_enabled" /> <span>Overlays on</span>
+      </label>
+      <span id="saved" class="saved"></span>
+    </header>
+
+    <main>
+      <section class="stage">
+        <div class="toolbar">
+          <button id="add-area" class="btn">＋ Add read area</button>
+          <label class="check"><input type="checkbox" id="show-sample" checked /> Show sample Arabic</label>
+          <input id="sample-text" class="sample" dir="auto" value="هذا نص تجريبي لمعاينة شكل *الترجمة* على الشاشة" />
+          <span class="hint">Drag a box to move it, drag its corners to resize.</span>
+        </div>
+        <div id="viewport" class="viewport">
+          <div id="frame-wrap" class="frame-wrap">
+            <img id="frame" alt="" draggable="false" />
+            <div id="screen-layer" class="layer" style="pointer-events: none; line-height: normal"></div>
+            <div id="layer" class="layer"></div>
+          </div>
+          <div id="empty" class="empty">
+            <div class="empty-title">No picture yet</div>
+            <div id="empty-msg">Pick the window to capture in <b>Source</b>.</div>
+          </div>
+        </div>
+        <div class="log-wrap">
+          <div class="log-head">Live translations <button id="clear-log" class="link">clear</button></div>
+          <div id="log" class="log"></div>
+        </div>
+      </section>
+
+      <aside>
+        <nav class="tabs">
+          <button data-tab="source" class="active">Source</button>
+          <button data-tab="profile">Game profile</button>
+          <button data-tab="translator">Translator</button>
+          <button data-tab="areas">Read areas</button>
+          <button data-tab="style">Arabic text</button>
+          <button data-tab="advanced">Advanced</button>
+        </nav>
+
+        <div class="tab" id="tab-source">
+          <h3>Picture source</h3>
+          <p class="muted">A window (only that window is read, even when covered), a capture card, or a source in OBS.</p>
+          <div class="row">
+            <select id="window_title" class="grow"></select>
+            <button id="refresh-windows" class="btn" title="Refresh the list">↻</button>
+          </div>
+          <p class="muted small">Capture card already used by OBS? OBS keeps it to itself — pick the card's <b>OBS source</b> instead.</p>
+          <div id="source-status" class="callout"></div>
+
+          <h3 style="margin-top:22px">OBS</h3>
+          <p class="muted small">To read OBS sources, turn on <b>Tools → WebSocket Server Settings → Enable WebSocket server</b> in OBS, then enter its port and password here and press ↻ above.</p>
+          <div class="row">
+            <label class="grow">Port <input type="number" id="obs_port" min="1" max="65535" /></label>
+            <label class="grow">Password <input type="password" id="obs_password" autocomplete="off" /></label>
+            <button id="obs-connect" class="btn">Connect</button>
+          </div>
+          <div id="obs-status" class="callout" style="margin-top:8px">Not connected yet.</div>
+          <p class="muted small" style="margin-top:14px">Show the Arabic in OBS: add a <b>Browser Source</b> above your capture card source with this URL, width and height the same as your canvas (e.g. 1920 × 1080):</p>
+          <div class="row">
+            <input id="obs-url" class="grow" readonly />
+            <button id="obs-url-copy" class="btn">Copy</button>
+          </div>
+        </div>
+
+        <div class="tab hidden" id="tab-profile">
+          <h3>Game profile</h3>
+          <p class="muted">A profile knows a game's special pages and gives them a hand-made Arabic layout that matches the game's own look.</p>
+          <div id="profile-form"></div>
+        </div>
+
+        <div class="tab hidden" id="tab-translator">
+          <h3>Language</h3>
+          <div class="field"><select id="target-lang"></select></div>
+          <p class="muted small" id="lang-note"></p>
+          <h3>Translation service</h3>
+          <div id="engines" class="engines"></div>
+          <div id="engine-fields"></div>
+          <p class="muted small">Keys are saved only on this PC, in the app's settings file.</p>
+        </div>
+
+        <div class="tab hidden" id="tab-areas">
+          <h3>Read areas</h3>
+          <p class="muted">Each area is read separately. Position and size are a percentage of the window, so they stay right if the window is resized.</p>
+          <div id="area-list"></div>
+          <button id="add-area-2" class="btn wide">＋ Add read area</button>
+        </div>
+
+        <div class="tab hidden" id="tab-style">
+          <h3>How the Arabic looks</h3>
+          <div class="sample-box" id="style-sample-wrap"><div id="style-sample"></div></div>
+          <div class="form" id="style-form"></div>
+        </div>
+
+        <div class="tab hidden" id="tab-advanced">
+          <h3>Timing</h3>
+          <div class="form" id="timing-form"></div>
+          <h3 style="margin-top:22px">Translation memory <span class="badge">experiment</span></h3>
+          <p class="muted small">Remembers every translated line and reuses it instantly the next time it appears — no translator call, and no waiting for the line to settle.</p>
+          <div class="form" id="memory-form"></div>
+          <h3 style="margin-top:22px">Debugging</h3>
+          <p class="muted small">Tools for developing the app.</p>
+          <div class="form" id="debug-form"></div>
+        </div>
+      </aside>
+    </main>
+
+    <script src="common.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

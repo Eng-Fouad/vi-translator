@@ -1,0 +1,8 @@
+/* Arabic fonts bundled with the app (SIL Open Font License; see fonts/*-OFL.txt). */
+@font-face { font-family: "Lalezar"; src: url("fonts/Lalezar-Regular.ttf") format("truetype"); font-weight: 100 900; }
+@font-face { font-family: "Changa"; src: url("fonts/Changa.ttf") format("truetype"); font-weight: 200 800; }
+@font-face { font-family: "Cairo"; src: url("fonts/Cairo.ttf") format("truetype"); font-weight: 200 1000; }
+@font-face { font-family: "Tajawal"; src: url("fonts/Tajawal-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "Tajawal"; src: url("fonts/Tajawal-Bold.ttf") format("truetype"); font-weight: 700; }
+@font-face { font-family: "Tajawal"; src: url("fonts/Tajawal-ExtraBold.ttf") format("truetype"); font-weight: 800 900; }
+@font-face { font-family: "Noto Sans Arabic"; src: url("fonts/NotoSansArabic.ttf") format("truetype"); font-weight: 100 900; font-stretch: 62.5% 100%; }
