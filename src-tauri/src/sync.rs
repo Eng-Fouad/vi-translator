@@ -18,8 +18,8 @@ use tauri::{AppHandle, Emitter};
 use crate::config::Config;
 use crate::memory::{self, Memory};
 
-/// The project server. Empty: sync is off (set once the server is online).
-pub const DEFAULT_SERVER: &str = "";
+/// The project server (a different one can be set in the settings file: `server_url`).
+pub const DEFAULT_SERVER: &str = "https://vitranslator.app";
 const UPLOAD_EVERY: Duration = Duration::from_secs(10 * 60);
 const DOWNLOAD_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 const MAX_LINES_PER_UPLOAD: usize = 500;
