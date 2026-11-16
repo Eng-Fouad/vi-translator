@@ -230,6 +230,26 @@ $("obs-url-copy").addEventListener("click", async () => {
   catch { $("obs-url").select(); document.execCommand("copy"); $("obs-url-copy").textContent = t("Copied ✓"); }
   setTimeout(() => ($("obs-url-copy").textContent = t("Copy")), 1500);
 });
+// ------------------------------------------------------------------------------------- updates
+
+function showUpdate(u) {
+  if (!u) return;
+  $("update-text").textContent = t("Version {version} is available.", { version: u.version });
+  $("update-bar").classList.remove("hidden");
+}
+listen("update-available", (e) => showUpdate(e.payload));
+$("update-later").addEventListener("click", () => $("update-bar").classList.add("hidden"));
+$("update-now").addEventListener("click", async () => {
+  $("update-now").disabled = true;
+  $("update-text").textContent = t("Downloading the update…");
+  try {
+    await invoke("install_update"); // the app restarts into the new version
+  } catch (e) {
+    $("update-text").textContent = t("Update failed: {e}", { e });
+    $("update-now").disabled = false;
+  }
+});
+
 // Live translations page on the home network: switch, address and QR code.
 async function updateLan() {
   const box = $("lan-info");
@@ -959,5 +979,6 @@ function applyTheme() {
   document.fonts.ready.then(drawLayer); // re-measure once the bundled fonts have loaded
   renderObs();
   updateLan();
+  invoke("update_status").then(showUpdate).catch(() => {});
   await loadWindows();
 })();

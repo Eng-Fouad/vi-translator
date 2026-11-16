@@ -226,5 +226,10 @@ I18N.add("nl", {
   "Share on my home network": "Delen op mijn thuisnetwerk",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Open dit adres op een telefoon, tablet of computer op hetzelfde wifi-netwerk:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Uit. Zet het aan om de live-vertalingen op een ander apparaat in je thuisnetwerk te lezen.",
-  "Starting… If Windows asks, allow the app on private networks.": "Starten… Als Windows erom vraagt, sta de app toe op privénetwerken."
+  "Starting… If Windows asks, allow the app on private networks.": "Starten… Als Windows erom vraagt, sta de app toe op privénetwerken.",
+  "Version {version} is available.": "Versie {version} is beschikbaar.",
+  "Update now": "Nu bijwerken",
+  "Later": "Later",
+  "Downloading the update…": "Update downloaden…",
+  "Update failed: {e}": "Bijwerken mislukt: {e}"
 });

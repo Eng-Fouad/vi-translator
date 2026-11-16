@@ -226,5 +226,10 @@ I18N.add("ar", {
   "Share on my home network": "المشاركة على شبكتي المنزلية",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "افتح هذا العنوان على هاتف أو جهاز لوحي أو حاسوب على نفس شبكة Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "متوقفة. فعّلها لقراءة الترجمات المباشرة على جهاز آخر في شبكتك المنزلية.",
-  "Starting… If Windows asks, allow the app on private networks.": "جارٍ التشغيل… إذا سألك Windows، اسمح للتطبيق على الشبكات الخاصة."
+  "Starting… If Windows asks, allow the app on private networks.": "جارٍ التشغيل… إذا سألك Windows، اسمح للتطبيق على الشبكات الخاصة.",
+  "Version {version} is available.": "الإصدار {version} متوفر.",
+  "Update now": "حدّث الآن",
+  "Later": "لاحقاً",
+  "Downloading the update…": "جارٍ تنزيل التحديث…",
+  "Update failed: {e}": "تعذّر التحديث: {e}"
 });

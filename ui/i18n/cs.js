@@ -226,5 +226,10 @@ I18N.add("cs", {
   "Share on my home network": "Sdílet v domácí síti",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Otevřete tuto adresu na telefonu, tabletu nebo počítači ve stejné síti Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Vypnuto. Zapněte, chcete-li číst živé překlady na jiném zařízení v domácí síti.",
-  "Starting… If Windows asks, allow the app on private networks.": "Spouštění… Pokud se Windows zeptá, povolte aplikaci v privátních sítích."
+  "Starting… If Windows asks, allow the app on private networks.": "Spouštění… Pokud se Windows zeptá, povolte aplikaci v privátních sítích.",
+  "Version {version} is available.": "Je k dispozici verze {version}.",
+  "Update now": "Aktualizovat nyní",
+  "Later": "Později",
+  "Downloading the update…": "Stahování aktualizace…",
+  "Update failed: {e}": "Aktualizace se nezdařila: {e}"
 });

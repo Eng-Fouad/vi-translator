@@ -226,5 +226,10 @@ I18N.add("vi", {
   "Share on my home network": "Chia sẻ trong mạng gia đình",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Mở địa chỉ này trên điện thoại, máy tính bảng hoặc máy tính cùng Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Đang tắt. Bật để đọc bản dịch trực tiếp trên thiết bị khác trong mạng gia đình.",
-  "Starting… If Windows asks, allow the app on private networks.": "Đang khởi động… Nếu Windows hỏi, hãy cho phép ứng dụng trên mạng riêng."
+  "Starting… If Windows asks, allow the app on private networks.": "Đang khởi động… Nếu Windows hỏi, hãy cho phép ứng dụng trên mạng riêng.",
+  "Version {version} is available.": "Đã có phiên bản {version}.",
+  "Update now": "Cập nhật ngay",
+  "Later": "Để sau",
+  "Downloading the update…": "Đang tải bản cập nhật…",
+  "Update failed: {e}": "Cập nhật thất bại: {e}"
 });

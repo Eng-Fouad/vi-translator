@@ -226,5 +226,10 @@ I18N.add("zh-Hans", {
   "Share on my home network": "在我的家庭网络中共享",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "在同一 Wi-Fi 下的手机、平板或电脑上打开此地址：",
   "Off. Turn it on to read the live translations on another device on your home network.": "已关闭。开启后可在家庭网络中的其他设备上阅读实时译文。",
-  "Starting… If Windows asks, allow the app on private networks.": "正在启动… 如果 Windows 询问，请允许该应用访问专用网络。"
+  "Starting… If Windows asks, allow the app on private networks.": "正在启动… 如果 Windows 询问，请允许该应用访问专用网络。",
+  "Version {version} is available.": "版本 {version} 已发布。",
+  "Update now": "立即更新",
+  "Later": "稍后",
+  "Downloading the update…": "正在下载更新…",
+  "Update failed: {e}": "更新失败：{e}"
 });

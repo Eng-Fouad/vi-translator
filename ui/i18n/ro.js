@@ -226,5 +226,10 @@ I18N.add("ro", {
   "Share on my home network": "Partajează în rețeaua mea de acasă",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Deschideți această adresă pe un telefon, o tabletă sau un computer din aceeași rețea Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Dezactivat. Activați pentru a citi traducerile în direct pe alt dispozitiv din rețeaua de acasă.",
-  "Starting… If Windows asks, allow the app on private networks.": "Pornire… Dacă Windows întreabă, permiteți aplicația în rețelele private."
+  "Starting… If Windows asks, allow the app on private networks.": "Pornire… Dacă Windows întreabă, permiteți aplicația în rețelele private.",
+  "Version {version} is available.": "Versiunea {version} este disponibilă.",
+  "Update now": "Actualizează acum",
+  "Later": "Mai târziu",
+  "Downloading the update…": "Se descarcă actualizarea…",
+  "Update failed: {e}": "Actualizarea a eșuat: {e}"
 });

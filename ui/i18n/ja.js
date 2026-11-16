@@ -226,5 +226,10 @@ I18N.add("ja", {
   "Share on my home network": "ホームネットワークで共有",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "同じ Wi-Fi のスマホ、タブレット、パソコンでこのアドレスを開いてください:",
   "Off. Turn it on to read the live translations on another device on your home network.": "オフです。ホームネットワーク内のほかのデバイスでライブ翻訳を読むにはオンにしてください。",
-  "Starting… If Windows asks, allow the app on private networks.": "起動中… Windows から確認された場合は、プライベートネットワークでのアプリを許可してください。"
+  "Starting… If Windows asks, allow the app on private networks.": "起動中… Windows から確認された場合は、プライベートネットワークでのアプリを許可してください。",
+  "Version {version} is available.": "バージョン {version} が利用可能です。",
+  "Update now": "今すぐ更新",
+  "Later": "後で",
+  "Downloading the update…": "更新をダウンロードしています…",
+  "Update failed: {e}": "更新に失敗しました: {e}"
 });

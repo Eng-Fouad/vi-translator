@@ -226,5 +226,10 @@ I18N.add("fil", {
   "Share on my home network": "I-share sa home network ko",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Buksan ang address na ito sa phone, tablet o computer na nasa parehong Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Naka-off. I-on para mabasa ang mga live na salin sa ibang device sa home network mo.",
-  "Starting… If Windows asks, allow the app on private networks.": "Sinisimulan… Kung magtanong ang Windows, payagan ang app sa mga private network."
+  "Starting… If Windows asks, allow the app on private networks.": "Sinisimulan… Kung magtanong ang Windows, payagan ang app sa mga private network.",
+  "Version {version} is available.": "Available na ang bersyon {version}.",
+  "Update now": "I-update ngayon",
+  "Later": "Mamaya",
+  "Downloading the update…": "Dina-download ang update…",
+  "Update failed: {e}": "Nabigo ang update: {e}"
 });

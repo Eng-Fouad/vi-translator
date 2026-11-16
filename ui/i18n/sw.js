@@ -226,5 +226,10 @@ I18N.add("sw", {
   "Share on my home network": "Shiriki kwenye mtandao wa nyumbani",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Fungua anwani hii kwenye simu, kompyuta kibao au kompyuta iliyo kwenye Wi-Fi hiyo hiyo:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Imezimwa. Iwashe ili kusoma tafsiri za moja kwa moja kwenye kifaa kingine cha mtandao wako wa nyumbani.",
-  "Starting… If Windows asks, allow the app on private networks.": "Inaanza… Windows ikiuliza, ruhusu programu kwenye mitandao ya faragha."
+  "Starting… If Windows asks, allow the app on private networks.": "Inaanza… Windows ikiuliza, ruhusu programu kwenye mitandao ya faragha.",
+  "Version {version} is available.": "Toleo {version} linapatikana.",
+  "Update now": "Sasisha sasa",
+  "Later": "Baadaye",
+  "Downloading the update…": "Inapakua sasisho…",
+  "Update failed: {e}": "Sasisho limeshindwa: {e}"
 });

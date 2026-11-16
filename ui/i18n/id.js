@@ -226,5 +226,10 @@ I18N.add("id", {
   "Share on my home network": "Bagikan di jaringan rumah saya",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Buka alamat ini di ponsel, tablet, atau komputer di Wi-Fi yang sama:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Mati. Nyalakan untuk membaca terjemahan langsung di perangkat lain di jaringan rumah Anda.",
-  "Starting… If Windows asks, allow the app on private networks.": "Memulai… Jika Windows bertanya, izinkan aplikasi di jaringan pribadi."
+  "Starting… If Windows asks, allow the app on private networks.": "Memulai… Jika Windows bertanya, izinkan aplikasi di jaringan pribadi.",
+  "Version {version} is available.": "Versi {version} tersedia.",
+  "Update now": "Perbarui sekarang",
+  "Later": "Nanti",
+  "Downloading the update…": "Mengunduh pembaruan…",
+  "Update failed: {e}": "Pembaruan gagal: {e}"
 });

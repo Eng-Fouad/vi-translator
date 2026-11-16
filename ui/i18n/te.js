@@ -226,5 +226,10 @@ I18N.add("te", {
   "Share on my home network": "నా హోమ్ నెట్‌వర్క్‌లో షేర్ చేయి",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "ఇదే వై-ఫైలోని ఫోన్, టాబ్లెట్ లేదా కంప్యూటర్‌లో ఈ చిరునామాను తెరవండి:",
   "Off. Turn it on to read the live translations on another device on your home network.": "ఆఫ్‌లో ఉంది. మీ హోమ్ నెట్‌వర్క్‌లోని మరో పరికరంలో లైవ్ అనువాదాలు చదవడానికి దీన్ని ఆన్ చేయండి.",
-  "Starting… If Windows asks, allow the app on private networks.": "ప్రారంభమవుతోంది… Windows అడిగితే, ప్రైవేట్ నెట్‌వర్క్‌లలో యాప్‌ను అనుమతించండి."
+  "Starting… If Windows asks, allow the app on private networks.": "ప్రారంభమవుతోంది… Windows అడిగితే, ప్రైవేట్ నెట్‌వర్క్‌లలో యాప్‌ను అనుమతించండి.",
+  "Version {version} is available.": "వెర్షన్ {version} అందుబాటులో ఉంది.",
+  "Update now": "ఇప్పుడే అప్‌డేట్ చేయి",
+  "Later": "తర్వాత",
+  "Downloading the update…": "అప్‌డేట్ డౌన్‌లోడ్ అవుతోంది…",
+  "Update failed: {e}": "అప్‌డేట్ విఫలమైంది: {e}"
 });

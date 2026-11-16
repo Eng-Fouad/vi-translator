@@ -226,5 +226,10 @@ I18N.add("th", {
   "Share on my home network": "แชร์ในเครือข่ายภายในบ้าน",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "เปิดที่อยู่นี้บนโทรศัพท์ แท็บเล็ต หรือคอมพิวเตอร์ที่ใช้ Wi-Fi เดียวกัน:",
   "Off. Turn it on to read the live translations on another device on your home network.": "ปิดอยู่ เปิดเพื่ออ่านคำแปลสดบนอุปกรณ์อื่นในเครือข่ายภายในบ้าน",
-  "Starting… If Windows asks, allow the app on private networks.": "กำลังเริ่ม… หาก Windows ถาม ให้อนุญาตแอปบนเครือข่ายส่วนตัว"
+  "Starting… If Windows asks, allow the app on private networks.": "กำลังเริ่ม… หาก Windows ถาม ให้อนุญาตแอปบนเครือข่ายส่วนตัว",
+  "Version {version} is available.": "มีเวอร์ชัน {version} แล้ว",
+  "Update now": "อัปเดตตอนนี้",
+  "Later": "ภายหลัง",
+  "Downloading the update…": "กำลังดาวน์โหลดอัปเดต…",
+  "Update failed: {e}": "อัปเดตไม่สำเร็จ: {e}"
 });

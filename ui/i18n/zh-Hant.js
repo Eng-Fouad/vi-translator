@@ -226,5 +226,10 @@ I18N.add("zh-Hant", {
   "Share on my home network": "在我的家用網路中分享",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "在同一個 Wi-Fi 的手機、平板或電腦上開啟此網址：",
   "Off. Turn it on to read the live translations on another device on your home network.": "已關閉。開啟後即可在家用網路中的其他裝置上閱讀即時譯文。",
-  "Starting… If Windows asks, allow the app on private networks.": "正在啟動… 如果 Windows 詢問，請允許此應用程式使用私人網路。"
+  "Starting… If Windows asks, allow the app on private networks.": "正在啟動… 如果 Windows 詢問，請允許此應用程式使用私人網路。",
+  "Version {version} is available.": "版本 {version} 已推出。",
+  "Update now": "立即更新",
+  "Later": "稍後",
+  "Downloading the update…": "正在下載更新…",
+  "Update failed: {e}": "更新失敗：{e}"
 });

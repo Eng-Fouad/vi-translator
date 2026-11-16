@@ -226,5 +226,10 @@ I18N.add("es-MX", {
   "Share on my home network": "Compartir en mi red doméstica",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Abre esta dirección en un celular, tableta o computadora conectada a la misma red Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Desactivado. Actívalo para leer las traducciones en vivo en otro dispositivo de tu red doméstica.",
-  "Starting… If Windows asks, allow the app on private networks.": "Iniciando… Si Windows lo pide, permite la app en redes privadas."
+  "Starting… If Windows asks, allow the app on private networks.": "Iniciando… Si Windows lo pide, permite la app en redes privadas.",
+  "Version {version} is available.": "La versión {version} está disponible.",
+  "Update now": "Actualizar ahora",
+  "Later": "Después",
+  "Downloading the update…": "Descargando la actualización…",
+  "Update failed: {e}": "No se pudo actualizar: {e}"
 });

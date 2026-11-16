@@ -226,5 +226,10 @@ I18N.add("el", {
   "Share on my home network": "Κοινή χρήση στο οικιακό μου δίκτυο",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Ανοίξτε αυτή τη διεύθυνση σε τηλέφωνο, tablet ή υπολογιστή στο ίδιο Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Ανενεργό. Ενεργοποιήστε το για να διαβάζετε τις ζωντανές μεταφράσεις σε άλλη συσκευή του οικιακού σας δικτύου.",
-  "Starting… If Windows asks, allow the app on private networks.": "Εκκίνηση… Αν ρωτήσουν τα Windows, επιτρέψτε την εφαρμογή στα ιδιωτικά δίκτυα."
+  "Starting… If Windows asks, allow the app on private networks.": "Εκκίνηση… Αν ρωτήσουν τα Windows, επιτρέψτε την εφαρμογή στα ιδιωτικά δίκτυα.",
+  "Version {version} is available.": "Η έκδοση {version} είναι διαθέσιμη.",
+  "Update now": "Ενημέρωση τώρα",
+  "Later": "Αργότερα",
+  "Downloading the update…": "Λήψη της ενημέρωσης…",
+  "Update failed: {e}": "Η ενημέρωση απέτυχε: {e}"
 });

@@ -119,6 +119,8 @@ pub struct Config {
     pub engine: String,
     /// Language to translate into (see `langs::LANGS`): "ar", "hi", "tr" …
     pub target_lang: String,
+    /// Look for a newer version of the app (on start and daily) and offer it.
+    pub update_check: bool,
     /// Live translations page for other devices on the home network (off by default).
     pub lan_page: bool,
     pub lan_port: u16,
@@ -221,6 +223,7 @@ impl Default for Config {
             memory_tint: true,
             target_lang: "ar".into(),
             ui_lang: "en".into(),
+            update_check: true,
             lan_page: false,
             lan_port: 8791,
             share_lines: true,

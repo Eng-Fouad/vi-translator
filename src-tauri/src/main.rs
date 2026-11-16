@@ -16,6 +16,7 @@ mod langs;
 mod screens;
 mod sync;
 mod translate;
+mod updater;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -124,6 +125,8 @@ struct AppState {
     shared: Arc<Shared>,
     saver: Arc<debug_frames::SaverState>,
     memory: Arc<Mutex<memory::Memory>>,
+    /// a newer version found by the updater
+    update: Arc<Mutex<Option<updater::Update>>>,
 }
 
 
@@ -247,6 +250,20 @@ struct FrameEvent {
 #[tauri::command]
 fn list_langs() -> Vec<langs::Lang> {
     langs::LANGS.to_vec()
+}
+
+/// A newer version of the app, if one was found.
+#[tauri::command]
+fn update_status(state: tauri::State<AppState>) -> Option<updater::Update> {
+    state.update.lock().unwrap().clone()
+}
+
+/// Download and check the newer version, put it in place and restart into it.
+#[tauri::command]
+async fn install_update(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let u = state.update.lock().unwrap().clone().ok_or("no update available")?;
+    tauri::async_runtime::spawn_blocking(move || updater::install(&u)).await.map_err(|e| e.to_string())?.map_err(|e| format!("{e:#}"))?;
+    app.restart()
 }
 
 /// The home-network page: on/off, its address and a QR code of it.
@@ -1493,10 +1510,11 @@ fn main() {
     let saver = Arc::new(debug_frames::SaverState::default());
     let memory = Arc::new(Mutex::new(memory::Memory::load(db_dir(), &cfg.lock().unwrap().target_lang)));
     let shared = Arc::new(Shared::default());
+    let update: Arc<Mutex<Option<updater::Update>>> = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
-        .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone() })
-        .invoke_handler(tauri::generate_handler![lan_info, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
+        .invoke_handler(tauri::generate_handler![update_status, install_update, lan_info, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
         .setup(move |app| {
             let handle = app.handle().clone();
             let latest = Arc::new(Mutex::new(HashMap::new()));
@@ -1515,6 +1533,10 @@ fn main() {
             {
                 let (h, c, s) = (app.handle().clone(), cfg.clone(), shared.clone());
                 std::thread::spawn(move || lan::run(h, c, s));
+            }
+            {
+                let (h, c, u) = (app.handle().clone(), cfg.clone(), update.clone());
+                std::thread::spawn(move || updater::run(h, c, u));
             }
 
             {

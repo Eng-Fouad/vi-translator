@@ -226,5 +226,10 @@ I18N.add("tr", {
   "Share on my home network": "Ev ağımda paylaş",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Bu adresi aynı Wi-Fi'daki bir telefon, tablet veya bilgisayarda açın:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Kapalı. Ev ağınızdaki başka bir cihazda canlı çevirileri okumak için açın.",
-  "Starting… If Windows asks, allow the app on private networks.": "Başlatılıyor… Windows sorarsa uygulamaya özel ağlarda izin verin."
+  "Starting… If Windows asks, allow the app on private networks.": "Başlatılıyor… Windows sorarsa uygulamaya özel ağlarda izin verin.",
+  "Version {version} is available.": "{version} sürümü kullanılabilir.",
+  "Update now": "Şimdi güncelle",
+  "Later": "Sonra",
+  "Downloading the update…": "Güncelleme indiriliyor…",
+  "Update failed: {e}": "Güncelleme başarısız: {e}"
 });

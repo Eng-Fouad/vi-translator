@@ -226,5 +226,10 @@ I18N.add("mr", {
   "Share on my home network": "माझ्या होम नेटवर्कवर शेअर करा",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "हा पत्ता त्याच वाय-फायवरील फोन, टॅबलेट किंवा संगणकावर उघडा:",
   "Off. Turn it on to read the live translations on another device on your home network.": "बंद. तुमच्या होम नेटवर्कवरील दुसऱ्या डिव्हाइसवर थेट भाषांतरे वाचण्यासाठी हे चालू करा.",
-  "Starting… If Windows asks, allow the app on private networks.": "सुरू होत आहे… Windows ने विचारल्यास, ॲपला खाजगी नेटवर्कवर परवानगी द्या."
+  "Starting… If Windows asks, allow the app on private networks.": "सुरू होत आहे… Windows ने विचारल्यास, ॲपला खाजगी नेटवर्कवर परवानगी द्या.",
+  "Version {version} is available.": "आवृत्ती {version} उपलब्ध आहे.",
+  "Update now": "आता अपडेट करा",
+  "Later": "नंतर",
+  "Downloading the update…": "अपडेट डाउनलोड होत आहे…",
+  "Update failed: {e}": "अपडेट अयशस्वी: {e}"
 });

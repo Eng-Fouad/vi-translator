@@ -226,5 +226,10 @@ I18N.add("ru", {
   "Share on my home network": "Делиться в домашней сети",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Откройте этот адрес на телефоне, планшете или компьютере в той же сети Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Выключено. Включите, чтобы читать живые переводы на другом устройстве в домашней сети.",
-  "Starting… If Windows asks, allow the app on private networks.": "Запуск… Если Windows спросит, разрешите приложение в частных сетях."
+  "Starting… If Windows asks, allow the app on private networks.": "Запуск… Если Windows спросит, разрешите приложение в частных сетях.",
+  "Version {version} is available.": "Доступна версия {version}.",
+  "Update now": "Обновить сейчас",
+  "Later": "Позже",
+  "Downloading the update…": "Загрузка обновления…",
+  "Update failed: {e}": "Не удалось обновить: {e}"
 });

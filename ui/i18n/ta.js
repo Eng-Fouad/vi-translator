@@ -226,5 +226,10 @@ I18N.add("ta", {
   "Share on my home network": "என் வீட்டு நெட்வொர்க்கில் பகிர்",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "இதே வைஃபையில் உள்ள போன், டேப்லெட் அல்லது கணினியில் இந்த முகவரியைத் திறக்கவும்:",
   "Off. Turn it on to read the live translations on another device on your home network.": "முடக்கப்பட்டுள்ளது. உங்கள் வீட்டு நெட்வொர்க்கில் உள்ள வேறு சாதனத்தில் நேரடி மொழிபெயர்ப்புகளைப் படிக்க இதை இயக்கவும்.",
-  "Starting… If Windows asks, allow the app on private networks.": "தொடங்குகிறது… Windows கேட்டால், தனிப்பட்ட நெட்வொர்க்குகளில் ஆப்பை அனுமதிக்கவும்."
+  "Starting… If Windows asks, allow the app on private networks.": "தொடங்குகிறது… Windows கேட்டால், தனிப்பட்ட நெட்வொர்க்குகளில் ஆப்பை அனுமதிக்கவும்.",
+  "Version {version} is available.": "பதிப்பு {version} கிடைக்கிறது.",
+  "Update now": "இப்போது புதுப்பி",
+  "Later": "பின்னர்",
+  "Downloading the update…": "புதுப்பிப்பு பதிவிறக்கப்படுகிறது…",
+  "Update failed: {e}": "புதுப்பிப்பு தோல்வி: {e}"
 });

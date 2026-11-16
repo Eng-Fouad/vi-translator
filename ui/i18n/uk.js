@@ -226,5 +226,10 @@ I18N.add("uk", {
   "Share on my home network": "Ділитися в домашній мережі",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "Відкрийте цю адресу на телефоні, планшеті чи комп'ютері в тій самій мережі Wi-Fi:",
   "Off. Turn it on to read the live translations on another device on your home network.": "Вимкнено. Увімкніть, щоб читати живі переклади на іншому пристрої в домашній мережі.",
-  "Starting… If Windows asks, allow the app on private networks.": "Запуск… Якщо Windows запитає, дозвольте застосунок у приватних мережах."
+  "Starting… If Windows asks, allow the app on private networks.": "Запуск… Якщо Windows запитає, дозвольте застосунок у приватних мережах.",
+  "Version {version} is available.": "Доступна версія {version}.",
+  "Update now": "Оновити зараз",
+  "Later": "Пізніше",
+  "Downloading the update…": "Завантаження оновлення…",
+  "Update failed: {e}": "Не вдалося оновити: {e}"
 });

@@ -226,5 +226,10 @@ I18N.add("ko", {
   "Share on my home network": "홈 네트워크에서 공유",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "같은 Wi-Fi에 연결된 휴대폰, 태블릿 또는 컴퓨터에서 이 주소를 여세요:",
   "Off. Turn it on to read the live translations on another device on your home network.": "꺼져 있습니다. 홈 네트워크의 다른 기기에서 실시간 번역을 보려면 켜세요.",
-  "Starting… If Windows asks, allow the app on private networks.": "시작하는 중… Windows에서 묻는 경우 개인 네트워크에서 앱을 허용하세요."
+  "Starting… If Windows asks, allow the app on private networks.": "시작하는 중… Windows에서 묻는 경우 개인 네트워크에서 앱을 허용하세요.",
+  "Version {version} is available.": "버전 {version}을(를) 사용할 수 있습니다.",
+  "Update now": "지금 업데이트",
+  "Later": "나중에",
+  "Downloading the update…": "업데이트를 다운로드하는 중…",
+  "Update failed: {e}": "업데이트 실패: {e}"
 });

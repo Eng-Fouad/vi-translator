@@ -226,5 +226,10 @@ I18N.add("ur", {
   "Share on my home network": "میرے گھریلو نیٹ ورک پر شیئر کریں",
   "Open this address on a phone, tablet or computer on the same Wi-Fi:": "یہ پتہ اسی وائی فائی پر فون، ٹیبلٹ یا کمپیوٹر میں کھولیں:",
   "Off. Turn it on to read the live translations on another device on your home network.": "بند ہے۔ اپنے گھریلو نیٹ ورک کے کسی دوسرے آلے پر براہ راست ترجمے پڑھنے کے لیے اسے آن کریں۔",
-  "Starting… If Windows asks, allow the app on private networks.": "شروع ہو رہا ہے… اگر Windows پوچھے تو ایپ کو نجی نیٹ ورکس پر اجازت دیں۔"
+  "Starting… If Windows asks, allow the app on private networks.": "شروع ہو رہا ہے… اگر Windows پوچھے تو ایپ کو نجی نیٹ ورکس پر اجازت دیں۔",
+  "Version {version} is available.": "ورژن {version} دستیاب ہے۔",
+  "Update now": "ابھی اپ ڈیٹ کریں",
+  "Later": "بعد میں",
+  "Downloading the update…": "اپ ڈیٹ ڈاؤن لوڈ ہو رہی ہے…",
+  "Update failed: {e}": "اپ ڈیٹ ناکام: {e}"
 });
