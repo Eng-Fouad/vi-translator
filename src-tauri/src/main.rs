@@ -335,6 +335,15 @@ fn get_config(state: tauri::State<AppState>) -> Config {
     state.cfg.lock().unwrap().clone()
 }
 
+/// The game pages a game's script has, and the switches it declares (for Game pages).
+#[tauri::command]
+fn page_options(game: String) -> serde_json::Value {
+    match pagescript::Pages::for_game(&game, &data_dir()) {
+        Some(p) => serde_json::json!({ "pages": p.list.iter().map(|i| serde_json::json!({ "id": i.id, "option": i.option })).collect::<Vec<_>>(), "options": p.options }),
+        None => serde_json::json!({ "pages": [], "options": [] }),
+    }
+}
+
 #[tauri::command]
 fn save_config(app: AppHandle, state: tauri::State<AppState>, config: Config) -> Result<(), String> {
     // (the profile in use decides the areas, style and pages; a built-in one can't be changed)
@@ -343,7 +352,10 @@ fn save_config(app: AppHandle, state: tauri::State<AppState>, config: Config) ->
         // the built-in profiles are the app's (layout updates may have changed them meanwhile)
         let now = state.cfg.lock().unwrap();
         config.builtins = now.builtins.clone();
+        config.server_games = now.server_games.clone();
+        config.games_version = now.games_version;
         config.layout_version = now.layout_version;
+        config.layout_versions = now.layout_versions.clone();
     }
     config.normalize();
     *state.cfg.lock().unwrap() = config.clone();
@@ -792,11 +804,23 @@ fn ocr_loop(
             // the script's pages whose switch is on in the profile
             let script_pages: Vec<String> = pages
                 .as_ref()
-                .map(|p| p.list.iter().filter(|i| pagescript::option_on(&c.profile_opts, &i.option)).map(|i| i.id.clone()).collect())
+                .map(|p| p.list.iter().filter(|i| p.switch_on(&c.profile_opts, &i.option)).map(|i| i.id.clone()).collect())
                 .unwrap_or_default();
             let gta5 = c.game() == "gta5";
             let screens_on = (gta5 && (c.profile_opts.mission_failed || c.profile_opts.pause_menu || c.profile_opts.captions)) || !script_pages.is_empty();
             let mut found: Option<screens::ScreenLayout> = None;
+            // A page on screen whose switch was just turned off (Game pages) goes now, not when the game
+            // closes it.
+            if let Some(old) = &screen {
+                let option = pages.as_ref().and_then(|p| p.info(&old.id)).map(|i| i.option.clone()).unwrap_or_else(|| pagescript::option_of(&old.id).to_string());
+                let on = match &pages {
+                    Some(p) => p.switch_on(&c.profile_opts, &option),
+                    None => pagescript::option_on(&c.profile_opts, &option),
+                };
+                if !on {
+                    hide_screen(&app, &shared, &mut screen);
+                }
+            }
             if screens_on {
                 match &screen {
                     None => {
@@ -1759,7 +1783,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, open_lan_page, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, open_lan_page, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

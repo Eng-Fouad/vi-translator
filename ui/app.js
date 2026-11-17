@@ -127,8 +127,8 @@ function drawLayer() {
   // (the regions stay in Setup, to place them).
   const overlays = cfg.overlays_enabled !== false;
   // The profile page replaces the normal subtitles while it is up, exactly like the real overlay.
-  AS.renderScreen(sl, overlays && profileGame() === "gta5" ? screen.layout : null, screen.reason, cfg.profile_opts);
-  if (screen.layout && profileGame() === "gta5") {
+  AS.renderScreen(sl, overlays ? screen.layout : null, screen.reason, cfg.profile_opts);
+  if (screen.layout) {
     for (const a of cfg.areas) layer.appendChild(areaBox(a));
     return;
   }
@@ -1116,6 +1116,24 @@ listen("translation", (e) => {
   drawLayer();
 });
 listen("status-msg", (e) => log({ info: e.payload }));
+// The app changed the built-in profiles (a layout update, a game the server added): take those
+// (the rest of the settings are the window's own, being edited here), and ask the pages again.
+listen("config", (e) => {
+  if (!cfg) return;
+  const now = e.payload;
+  // (every save comes back here too: only a real change does anything)
+  if (JSON.stringify(now.layout_versions) !== JSON.stringify(cfg.layout_versions)) for (const k of Object.keys(pageScripts)) delete pageScripts[k];
+  const changed = JSON.stringify(now.builtins) !== JSON.stringify(cfg.builtins);
+  Object.assign(cfg, { builtins: now.builtins, server_games: now.server_games, games_version: now.games_version, layout_versions: now.layout_versions });
+  if (!changed) return;
+  if (locked()) {
+    const p = activeProfile();
+    Object.assign(cfg, { areas: clone(p.areas), style: clone(p.style), profile_opts: clone(p.pages) });
+    renderAll();
+  } else {
+    renderProfile();
+  }
+});
 listen("screen", (e) => {
   const was = !!screen.layout;
   screen.layout = e.payload;
@@ -1131,7 +1149,8 @@ listen("screen", (e) => {
 // can't be changed: "Make a copy" gives the player one of their own. The settings the rest of the app
 // reads (cfg.areas, cfg.style, cfg.profile_opts) are the profile in use; with one of the player's
 // profiles, every save writes them back into it (see syncProfile).
-const GAMES = { gta5: "Grand Theft Auto V", gta6: "Grand Theft Auto VI" };
+// (the games: the app's own and any the server added, by their built-in profile)
+const gameName = (g) => (cfg.builtins || []).find((b) => b.id === g)?.name || g;
 const allProfiles = () => [...(cfg.builtins || []), ...(cfg.profiles || [])];
 const activeProfile = () => allProfiles().find((p) => p.id === cfg.profile) || (cfg.builtins || [])[0];
 const isBuiltin = (p) => (cfg.builtins || []).some((b) => b.id === p?.id);
@@ -1173,7 +1192,7 @@ function copyProfile(from) {
 function deleteProfile(p) {
   if (!confirm(t("Delete the profile “{name}”? This can't be undone.", { name: p.name }))) return;
   cfg.profiles = cfg.profiles.filter((x) => x.id !== p.id);
-  useProfile(p.game in GAMES ? p.game : "gta6");
+  useProfile((cfg.builtins || []).some((b) => b.id === p.game) ? p.game : "gta6");
 }
 
 function renderAll() {
@@ -1219,7 +1238,7 @@ function renderProfile() {
           ? `<div class="grow"><b>${AS.esc(p.name)}</b></div><span class="badge lock-badge">${t("Built-in")}</span>`
           : `<input type="text" id="pf-name" class="grow" value="${AS.esc(p.name)}" title="${AS.esc(t("Rename"))}" /><span class="badge">${t("Yours")}</span>`}
       </div>
-      <p class="muted small" style="margin:8px 0 0">${t("For {game} · {n} read area(s)", { game: GAMES[p.game] || p.game, n: p.areas.length })}</p>
+      <p class="muted small" style="margin:8px 0 0">${t("For {game} · {n} read area(s)", { game: gameName(p.game), n: p.areas.length })}</p>
       <div class="row" style="margin-top:12px">
         <button id="pf-copy" class="btn">${t("Make a copy")}</button>
         ${isBuiltin(p) ? "" : `<button id="pf-delete" class="btn danger">${t("Delete")}</button>`}
@@ -1239,21 +1258,39 @@ function renderProfile() {
   $("pf-name")?.addEventListener("change", () => renderProfile());
 }
 
-/** Game pages of the profile in use (only GTA V's are recognised so far). */
-function renderPages() {
+/** A script's text: plain, or by interface language (English the fallback). */
+const scriptText = (v) => (typeof v === "string" ? v : v ? v[cfg.ui_lang] || v.en || Object.values(v)[0] || "" : "");
+
+/** The pages a game's script has and the switches it declares, asked once per game. */
+const pageScripts = {};
+async function pageScript(game) {
+  if (!pageScripts[game]) pageScripts[game] = invoke("page_options", { game }).catch(() => ({ pages: [], options: [] }));
+  return pageScripts[game];
+}
+
+/** Game pages of the profile in use: GTA V's own, plus any switches the game's pages script declares. */
+async function renderPages() {
   const f = $("pages-form");
   const o = cfg.profile_opts;
-  if (profileGame() !== "gta5") {
-    f.innerHTML = `<div class="callout">${t("{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.", { game: GAMES[profileGame()] || profileGame() })}</div>`;
+  const game = profileGame();
+  const script = await pageScript(game);
+  if (profileGame() !== game) return; // (another profile meanwhile: its own render runs)
+  const gta5 = game === "gta5";
+  if (!gta5 && !script.pages.length) {
+    f.innerHTML = `<div class="callout">${t("{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.", { game: gameName(game) })}</div>`;
     return;
   }
-  f.innerHTML = `
+  o.more = o.more || {};
+  const isOn = (opt) => (opt.id in o.more ? o.more[opt.id] : opt.on);
+  const fonts = `
+      <div class="field"><label>${t("Title font")}</label><select id="pf-title">${fontOptions(o.title_font)}</select></div>
+      <div class="field" style="margin-top:10px"><label>${t("Reason and button font")}</label><select id="pf-text">${fontOptions(o.text_font)}</select></div>`;
+  const own = gta5 ? `
     <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" id="pf-mf" ${o.mission_failed ? "checked" : ""}/> ${t("“Mission Failed” page")}</label>
       <p class="muted small" style="margin:6px 0 10px">${t("Adds the title in the same colour and size above the red title, the reason under the English reason, and translated labels with the game's own button icons above Retry / Restart / Skip.")}</p>
       <div id="pf-status" class="callout" style="margin:0 0 10px"></div>
-      <div class="field"><label>${t("Title font")}</label><select id="pf-title">${fontOptions(o.title_font)}</select></div>
-      <div class="field" style="margin-top:10px"><label>${t("Reason and button font")}</label><select id="pf-text">${fontOptions(o.text_font)}</select></div>
+      ${fonts}
     </div>
     <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" id="pf-pause" ${o.pause_menu !== false ? "checked" : ""}/> ${t("Pause menu")}</label>
@@ -1262,10 +1299,18 @@ function renderPages() {
     <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" id="pf-cap" ${o.captions !== false ? "checked" : ""}/> ${t("Captions in the middle of a black screen")}</label>
       <p class="muted small" style="margin:6px 0 0">${t("Place and time cards such as “Ludendorff, North Yankton, nine years ago.”: the translation appears centred just below the English, for as long as it is on screen.")}</p>
-    </div>`;
-  $("pf-mf").addEventListener("change", (e) => { o.mission_failed = e.target.checked; save(); });
-  $("pf-pause").addEventListener("change", (e) => { o.pause_menu = e.target.checked; save(); });
-  $("pf-cap").addEventListener("change", (e) => { o.captions = e.target.checked; save(); });
+    </div>` : "";
+  // switches the game's script declares (pages that come with layout updates)
+  const declared = script.options.map((opt) => `
+    <div class="card">
+      <label class="check" style="font-weight:600"><input type="checkbox" data-more="${AS.esc(opt.id)}" ${isOn(opt) ? "checked" : ""}/> ${AS.esc(scriptText(opt.name) || opt.id)}</label>
+      ${scriptText(opt.about) ? `<p class="muted small" style="margin:6px 0 0">${AS.esc(scriptText(opt.about))}</p>` : ""}
+    </div>`).join("");
+  f.innerHTML = own + declared + (gta5 ? "" : `<div class="card">${fonts}</div>`);
+  $("pf-mf")?.addEventListener("change", (e) => { o.mission_failed = e.target.checked; save(); });
+  $("pf-pause")?.addEventListener("change", (e) => { o.pause_menu = e.target.checked; save(); });
+  $("pf-cap")?.addEventListener("change", (e) => { o.captions = e.target.checked; save(); });
+  f.querySelectorAll("[data-more]").forEach((el) => el.addEventListener("change", () => { o.more[el.dataset.more] = el.checked; save(); }));
   for (const [id, key] of [["pf-title", "title_font"], ["pf-text", "text_font"]]) {
     const sel = $(id);
     sel.style.fontFamily = `'${sel.value}'`;

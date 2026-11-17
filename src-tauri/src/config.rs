@@ -162,8 +162,14 @@ pub struct Config {
     pub server_url: String,
     /// Apply read-area and font updates for the game profile automatically.
     pub auto_layout: bool,
-    /// Version of the last layout update applied.
+    /// Version of the last layout update applied (from before per-game versions; see `layout_versions`).
     pub layout_version: u32,
+    /// Version of the last layout update applied, by game.
+    pub layout_versions: std::collections::BTreeMap<String, u32>,
+    /// Games the server added (built-in profiles beyond the app's own `BUILTINS`), and the version of
+    /// the list they came in.
+    pub server_games: Vec<String>,
+    pub games_version: u32,
     /// OBS on this PC: its WebSocket server (Tools → WebSocket Server Settings), used to read an OBS
     /// source ("obs:<name>" as the source) while OBS owns the capture card.
     pub obs_port: u16,
@@ -220,7 +226,8 @@ fn same_json<T: Serialize>(a: &T, b: &T) -> bool {
     serde_json::to_value(a).ok() == serde_json::to_value(b).ok()
 }
 
-/// The built-in profiles, in the order they are listed.
+/// The app's own built-in profiles, in the order they are listed (the server can add more games:
+/// `Config::server_games`).
 pub const BUILTINS: [&str; 2] = ["gta6", "gta5"];
 
 /// A built-in profile as the app ships it.
@@ -288,6 +295,9 @@ pub struct ProfileOpts {
     pub pause_menu: bool,
     /// GTA V: translate captions shown in the middle of a black screen (place / time cards).
     pub captions: bool,
+    /// Switches a game's pages script declares itself (`pages.option`), by name; one not set here
+    /// takes the script's default.
+    pub more: std::collections::BTreeMap<String, bool>,
     /// Font for big titles such as "فشلت المهمة".
     pub title_font: String,
     /// Font for the smaller screen text (reason, buttons).
@@ -296,7 +306,7 @@ pub struct ProfileOpts {
 
 impl Default for ProfileOpts {
     fn default() -> Self {
-        Self { mission_failed: true, pause_menu: true, captions: true, title_font: "Lalezar".into(), text_font: "Tajawal".into() }
+        Self { mission_failed: true, pause_menu: true, captions: true, more: Default::default(), title_font: "Lalezar".into(), text_font: "Tajawal".into() }
     }
 }
 
@@ -334,6 +344,9 @@ impl Default for Config {
             server_url: String::new(),
             auto_layout: true,
             layout_version: 0,
+            layout_versions: Default::default(),
+            server_games: Vec::new(),
+            games_version: 0,
             obs_port: 4455,
             obs_password: String::new(),
             obs_page_port: 8790,
@@ -361,9 +374,14 @@ impl Config {
         c
     }
 
-    /// The game the profile in use is for ("gta5" | "gta6").
+    /// A built-in profile (the app's own, or a game the server added)?
+    pub fn is_builtin(&self, id: &str) -> bool {
+        BUILTINS.contains(&id) || self.server_games.iter().any(|g| g == id)
+    }
+
+    /// The game the profile in use is for ("gta5" | "gta6" | one the server added).
     pub fn game(&self) -> String {
-        if BUILTINS.contains(&self.profile.as_str()) {
+        if self.is_builtin(&self.profile) {
             return self.profile.clone();
         }
         self.profiles.iter().find(|p| p.id == self.profile).map(|p| p.game.clone()).unwrap_or_else(|| "gta5".into())
@@ -382,7 +400,13 @@ impl Config {
                 self.builtins.push(builtin_profile(id).expect("built-in"));
             }
         }
-        self.builtins.retain(|p| BUILTINS.contains(&p.id.as_str()));
+        let server_games = std::mem::take(&mut self.server_games);
+        self.server_games = server_games.into_iter().filter(|g| self.builtins.iter().any(|p| &p.id == g)).collect();
+        let keep: Vec<String> = self.builtins.iter().map(|p| p.id.clone()).filter(|id| self.is_builtin(id)).collect();
+        self.builtins.retain(|p| keep.contains(&p.id));
+        // (one per id: the first)
+        let mut seen = std::collections::HashSet::new();
+        self.builtins.retain(|p| seen.insert(p.id.clone()));
         for p in self.builtins.iter_mut() {
             p.game = p.id.clone();
             if let Some(d) = builtin_profile(&p.id) {
@@ -415,14 +439,19 @@ impl Config {
                 self.profile = base.id;
             }
         }
+        // a single layout version from before per-game ones: it was the game in use's
+        if self.layout_versions.is_empty() && self.layout_version > 0 {
+            self.layout_versions.insert(self.game(), self.layout_version);
+        }
         // ids are unique; names are never empty
         let mut seen = std::collections::HashSet::new();
-        self.profiles.retain(|p| !BUILTINS.contains(&p.id.as_str()) && !p.id.is_empty() && seen.insert(p.id.clone()));
+        let builtin_ids: Vec<String> = self.builtins.iter().map(|p| p.id.clone()).collect();
+        self.profiles.retain(|p| !builtin_ids.contains(&p.id) && !p.id.is_empty() && seen.insert(p.id.clone()));
         for p in self.profiles.iter_mut() {
             if p.name.trim().is_empty() {
                 p.name = "My profile".into();
             }
-            if !BUILTINS.contains(&p.game.as_str()) {
+            if !builtin_ids.contains(&p.game) {
                 p.game = "gta5".into();
             }
         }
@@ -439,6 +468,42 @@ impl Config {
         self.profile_opts = active.pages;
     }
 
+    /// The server's list of games (the layout update named "games"):
+    /// `{"games": [{"id": "rdr2", "name": "Red Dead Redemption 2", "areas": [...], "style": {...}, "pages": {...}}]}`,
+    /// each a built-in profile for a game the app doesn't carry itself. A newer list adds those games
+    /// and replaces the ones it added before (the app's own games are never replaced; a game the list
+    /// no longer has stays, so a profile in use never disappears). The games it changed, for their
+    /// layout updates to be applied again.
+    pub fn apply_games(&mut self, list: &serde_json::Value, version: u32) -> Vec<String> {
+        if version <= self.games_version {
+            return Vec::new();
+        }
+        let mut changed = Vec::new();
+        for g in list["games"].as_array().into_iter().flatten() {
+            let Ok(mut p) = serde_json::from_value::<Profile>(g.clone()) else { continue };
+            let ok_id = !p.id.is_empty() && p.id.len() <= 16 && p.id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
+            if !ok_id || BUILTINS.contains(&p.id.as_str()) || p.name.trim().is_empty() {
+                continue;
+            }
+            // a profile of the player's with that id (unlikely: theirs are "custom-…") gives way
+            if self.profiles.iter().any(|x| x.id == p.id) {
+                continue;
+            }
+            p.game = p.id.clone();
+            self.builtins.retain(|x| x.id != p.id);
+            self.builtins.push(p.clone());
+            if !self.server_games.contains(&p.id) {
+                self.server_games.push(p.id.clone());
+            }
+            // its layout update applies again over the new profile
+            self.layout_versions.remove(&p.id);
+            changed.push(p.id);
+        }
+        self.games_version = version;
+        self.normalize();
+        changed
+    }
+
     pub fn save(&self, path: &PathBuf) -> anyhow::Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -451,6 +516,36 @@ impl Config {
 #[cfg(test)]
 mod profile_tests {
     use super::*;
+
+    #[test]
+    fn the_server_adds_games() {
+        let mut c = Config::default();
+        c.normalize();
+        let list = serde_json::json!({"games": [
+            {"id": "rdr2", "name": "Red Dead Redemption 2", "areas": [], "pages": {"more": {"camp": false}}},
+            {"id": "gta5", "name": "Not this one"},
+            {"id": "Bad Id", "name": "x"}
+        ]});
+        assert_eq!(c.apply_games(&list, 3), vec!["rdr2".to_string()]);
+        assert!(c.is_builtin("rdr2") && !c.is_builtin("custom-1"));
+        assert_eq!(c.builtins.iter().find(|p| p.id == "gta5").unwrap().name, "Grand Theft Auto V");
+        assert!(c.apply_games(&list, 3).is_empty(), "same version: nothing new");
+        c.profile = "rdr2".into();
+        c.normalize();
+        assert_eq!((c.game().as_str(), c.areas.len(), c.profile_opts.more.get("camp")), ("rdr2", 0, Some(&false)));
+        // kept across a save and a load
+        let back: Config = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        let mut back = back;
+        back.normalize();
+        assert_eq!(back.profile, "rdr2");
+        // a copy of it is for that game
+        back.profiles.push(Profile { id: "custom-9".into(), name: "Mine".into(), game: "rdr2".into(), ..Profile::default() });
+        back.normalize();
+        assert_eq!(back.profiles[0].game, "rdr2");
+        // a newer list that drops it: the game stays
+        assert!(back.apply_games(&serde_json::json!({"games": []}), 4).is_empty());
+        assert!(back.is_builtin("rdr2"));
+    }
 
     /// A settings file from before profiles, with the given areas.
     fn old_settings(areas: Vec<Area>, profile: &str) -> Config {

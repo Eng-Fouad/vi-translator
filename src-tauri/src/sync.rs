@@ -238,6 +238,15 @@ fn download(
             memory.lock().unwrap().set_shared(entries);
         }
     }
+    // the games the server adds (published like a layout, under the name "games")
+    let k = "layout/games".to_string();
+    if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), st.versions.get(&k)) {
+        if let Ok(list) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            let _ = std::fs::write(paths.layout("games"), &bytes);
+            st.versions.insert(k, tag.clone());
+            apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
+        }
+    }
     // layout
     let k = format!("layout/{game}");
     if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), st.versions.get(&k)) {
@@ -245,7 +254,7 @@ fn download(
             let _ = std::fs::write(paths.layout(game), &bytes);
             st.versions.insert(k, tag.clone());
             crate::pagescript::save_from_layout(&paths.data, game, &layout);
-            apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang);
+            apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
     save_state(paths, &st);
@@ -267,6 +276,11 @@ fn fetch(http: &reqwest::blocking::Client, url: &str, have: Option<&String>) -> 
 
 fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Memory>>, paths: &Paths, game: &str, lang: &str) {
     let st = load_state(paths);
+    if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout("games")), st.versions.get("layout/games")) {
+        if let Ok(list) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
+        }
+    }
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.shared(game, lang)), st.versions.get(&format!("data/{game}/{lang}"))) {
         if let Some(entries) = open_pack(&bytes, game, lang, tag) {
             memory.lock().unwrap().set_shared(entries);
@@ -274,7 +288,28 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
     }
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout(game)), st.versions.get(&format!("layout/{game}"))) {
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang);
+            apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
+        }
+    }
+}
+
+/// A new list of games from the server: the games it changed get their saved layout again.
+fn apply_games(app: &AppHandle, cfg: &Arc<Mutex<Config>>, paths: &Paths, st: &State, list: &serde_json::Value, version: u32, lang: &str) {
+    let changed = {
+        let mut c = cfg.lock().unwrap();
+        let changed = c.apply_games(list, version);
+        if changed.is_empty() {
+            return;
+        }
+        let _ = c.save(&crate::config_path());
+        let _ = app.emit("config", &*c);
+        changed
+    };
+    for g in changed {
+        if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout(&g)), st.versions.get(&format!("layout/{g}"))) {
+            if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, &g);
+            }
         }
     }
 }
@@ -343,7 +378,7 @@ fn open_pack_with(key: &[u8; 32], file: &[u8], game: &str, lang: &str, version: 
 /// Words always apply (they only add to or fix the built-in lists). Areas and fonts are applied
 /// once per new layout version, and only with "Automatic layout updates" on: the player's own
 /// changes stay until the next new layout.
-fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::Value, version: u32, lang: &str) {
+fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::Value, version: u32, lang: &str, game: &str) {
     // (the built-in word lists are Arabic; a layout can carry words for any language)
     let words = |kind: &str| -> Vec<(String, String)> {
         layout["words"][lang][kind]
@@ -351,14 +386,14 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
             .map(|m| m.iter().filter_map(|(en, ar)| Some((en.clone(), ar.as_str()?.to_string()))).collect())
             .unwrap_or_default()
     };
-    crate::screens::set_layout_words(words("menu"), words("buttons"), words("tabs"));
-
     let mut c = cfg.lock().unwrap();
-    if !c.auto_layout || version <= c.layout_version {
+    if game == c.game() {
+        crate::screens::set_layout_words(words("menu"), words("buttons"), words("tabs"));
+    }
+    if !c.auto_layout || version <= c.layout_versions.get(game).copied().unwrap_or(0) {
         return;
     }
     // The update tunes the game's built-in profile (the player's own copies are theirs: untouched).
-    let game = c.game();
     let Some(p) = c.builtins.iter_mut().find(|p| p.id == game) else { return };
     if let Some(areas) = layout["areas"].as_array() {
         for a in areas {
@@ -378,7 +413,7 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
     if let Some(f) = layout["fonts"]["text_font"].as_str() {
         p.pages.text_font = f.to_string();
     }
-    c.layout_version = version;
+    c.layout_versions.insert(game.to_string(), version);
     c.normalize(); // (if that built-in profile is in use, its new layout applies now)
     let _ = c.save(&crate::config_path());
     let _ = app.emit("config", &*c);

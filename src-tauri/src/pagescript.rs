@@ -17,6 +17,14 @@
 //! });
 //! ```
 //!
+//! A page's `option` is one of the app's switches ("mission_failed", "pause_menu", "captions") or one
+//! the script declares, which then shows in Game pages with its name and explanation (text, or text
+//! by interface language, `en` the fallback):
+//!
+//! ```js
+//! pages.option({ id: "heists", name: { en: "Heist board", ar: "لوحة السرقات" }, about: "…", on: true });
+//! ```
+//!
 //! and gets, in each call, a frame `f` with: `f.w`, `f.h` (pixels), and
 //!  - `f.pixels(rect, {step, bright: [min, max], spread: [min, max], near: [r, g, b], tol})` →
 //!    `{count, box}`: how many sampled pixels match (bright = brightest channel, spread = brightest −
@@ -63,6 +71,16 @@ pub fn option_on(opts: &crate::config::ProfileOpts, option: &str) -> bool {
     }
 }
 
+/// The switch of a page the app reads itself (when no script has it).
+pub fn option_of(id: &str) -> &'static str {
+    match id {
+        crate::screens::PAUSE_ID => "pause_menu",
+        crate::screens::CAPTION_ID => "captions",
+        crate::screens::ALERT_ID | "gta5_mission_failed" => "mission_failed",
+        _ => "",
+    }
+}
+
 /// A layout update may carry a newer pages script: `"pages": {"script": "...", "sig": "<base64>"}`.
 /// Saved (and loaded by the detection loop) only if it is signed with the app's key.
 pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value) {
@@ -100,12 +118,26 @@ pub struct PageInfo {
     pub reread_ms: u64,
 }
 
+/// A switch a script declares for its pages (shown in Game pages).
+#[derive(Deserialize, serde::Serialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct OptionInfo {
+    pub id: String,
+    /// text, or `{"en": …, "ar": …}`
+    pub name: serde_json::Value,
+    pub about: serde_json::Value,
+    /// on unless the profile says otherwise
+    pub on: bool,
+}
+
 pub struct Pages {
     _rt: Runtime,
     ctx: Context,
     deadline: Arc<AtomicU64>,
     started: Instant,
     pub list: Vec<PageInfo>,
+    /// the switches it declares
+    pub options: Vec<OptionInfo>,
     /// where the script came from and its version, for the log
     pub origin: String,
 }
@@ -179,9 +211,9 @@ impl Pages {
             script_ms > d.load(Ordering::Relaxed)
         })));
         let ctx = Context::full(&rt)?;
-        let pages = Pages { _rt: rt, ctx, deadline, started, list: Vec::new(), origin: String::new() };
+        let pages = Pages { _rt: rt, ctx, deadline, started, list: Vec::new(), options: Vec::new(), origin: String::new() };
         pages.arm();
-        let list = pages.ctx.with(|ctx| -> Result<String> {
+        let list = pages.ctx.with(|ctx| -> Result<(String, String)> {
             let g = ctx.globals();
             g.set("__w", Function::new(ctx.clone(), || with_frame(|f, _| f.w).unwrap_or(0))?)?;
             g.set("__h", Function::new(ctx.clone(), || with_frame(|f, _| f.h).unwrap_or(0))?)?;
@@ -209,11 +241,14 @@ impl Pages {
             ctx.eval::<(), _>(PRELUDE).map_err(|e| js_error(&ctx, e))?;
             ctx.eval::<(), _>(script).map_err(|e| js_error(&ctx, e))?;
             let list: String = ctx.eval("__list()").map_err(|e| js_error(&ctx, e))?;
-            Ok(list)
+            let options: String = ctx.eval("__option_list()").map_err(|e| js_error(&ctx, e))?;
+            Ok((list, options))
         })?;
         pages.disarm();
         let mut pages = pages;
+        let (list, options) = list;
         pages.list = serde_json::from_str(&list).context("the page list")?;
+        pages.options = serde_json::from_str(&options).context("the switches")?;
         Ok(pages)
     }
 
@@ -295,15 +330,31 @@ impl Pages {
     pub fn info(&self, id: &str) -> Option<&PageInfo> {
         self.list.iter().find(|p| p.id == id)
     }
+
+    /// Is a switch on in the profile? The app's own switches as the profile has them; one the script
+    /// declares as the profile set it, else the script's default.
+    pub fn switch_on(&self, opts: &crate::config::ProfileOpts, option: &str) -> bool {
+        match option {
+            "mission_failed" | "pause_menu" | "captions" | "" => option_on(opts, option),
+            _ => opts.more.get(option).copied().unwrap_or_else(|| self.options.iter().find(|o| o.id == option).is_none_or(|o| o.on)),
+        }
+    }
 }
 
 /// The JavaScript side of the helpers and the page registry.
 const PRELUDE: &str = r#"
 const __pages = new Map();
+const __options = new Map();
 globalThis.pages = Object.freeze({
   add(p) {
     if (!p || typeof p.id !== "string" || !p.id) throw new Error("a page needs an id");
     __pages.set(p.id, p);
+  },
+  option(o) {
+    if (!o || typeof o.id !== "string" || !/^[a-z0-9_]{1,32}$/.test(o.id)) throw new Error("a switch needs an id (a-z, 0-9, _)");
+    if (["mission_failed", "pause_menu", "captions"].includes(o.id)) throw new Error("that switch is the app's");
+    const text = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, t]) => typeof t === "string")) : "");
+    __options.set(o.id, { id: o.id, name: text(o.name) || o.id, about: text(o.about), on: o.on !== false });
   },
 });
 function __frame() {
@@ -337,6 +388,7 @@ globalThis.__list = () => JSON.stringify([...__pages.values()].map((p) => ({
   id: p.id, option: p.option || "",
   hold_ms: (p.hold && p.hold.ms) || 0, end_when_dark: !!(p.hold && p.hold.endWhenDark), reread_ms: (p.hold && p.hold.rereadMs) || 0,
 })));
+globalThis.__option_list = () => JSON.stringify([...__options.values()]);
 globalThis.__call = (id, fn, arg) => {
   const p = __pages.get(id);
   if (!p || typeof p[fn] !== "function") return "null";
@@ -909,6 +961,19 @@ mod tests {
     fn a_broken_script_is_an_error_not_a_crash() {
         assert!(Pages::load("this is not javascript (").is_err());
         assert!(Pages::load(r#"pages.add({});"#).is_err(), "a page needs an id");
+        assert!(Pages::load(r#"pages.option({ id: "pause_menu" });"#).is_err(), "the app's switches are the app's");
+        let p = Pages::load(r#"
+            pages.option({ id: "heists", name: { en: "Heist board", ar: "لوحة" }, about: "Plans", on: false });
+            pages.option({ id: "camp", name: "Camp" });
+            pages.add({ id: "board", option: "heists" });
+            pages.add({ id: "fire", option: "camp" });"#).expect("loads");
+        assert_eq!(p.options.len(), 2);
+        assert_eq!(p.options[0].name["ar"], "لوحة");
+        let mut o = crate::config::ProfileOpts::default();
+        assert!(!p.switch_on(&o, "heists") && p.switch_on(&o, "camp") && p.switch_on(&o, "unknown"));
+        o.more.insert("heists".into(), true);
+        o.pause_menu = false;
+        assert!(p.switch_on(&o, "heists") && !p.switch_on(&o, "pause_menu"));
         assert_eq!(version_of("// pages-version: 7\npages.add({id:'x'})"), 7);
     }
 
