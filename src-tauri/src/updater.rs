@@ -20,7 +20,7 @@ use crate::config::Config;
 /// Where releases are published.
 const RELEASES: &str = "https://api.github.com/repos/Eng-Fouad/vi-translator/releases/latest";
 /// Ed25519 public key that release files are signed with (base64 of the 32 raw bytes).
-const PUBLIC_KEY: &str = "kQ2qBATJSRXwW3PtomkxkIUplaHqPHwoq+z3zJjTpWk=";
+pub(crate) const PUBLIC_KEY: &str = "kQ2qBATJSRXwW3PtomkxkIUplaHqPHwoq+z3zJjTpWk=";
 const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// The release file for this platform: vi-translator-<windows|linux|macos>-<x64|arm64>[.exe]

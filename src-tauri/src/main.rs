@@ -9,6 +9,7 @@ mod device;
 mod obs;
 mod obs_page;
 mod memory;
+mod secure;
 // installed fonts: DirectWrite on Windows, fontdb elsewhere
 #[cfg_attr(not(windows), path = "fonts_fontdb.rs")]
 mod fonts;
@@ -18,6 +19,7 @@ mod phrasebook;
 mod lan;
 mod langs;
 mod screens;
+mod pagescript;
 mod sync;
 mod translate;
 mod updater;
@@ -335,6 +337,15 @@ fn get_config(state: tauri::State<AppState>) -> Config {
 
 #[tauri::command]
 fn save_config(app: AppHandle, state: tauri::State<AppState>, config: Config) -> Result<(), String> {
+    // (the profile in use decides the areas, style and pages; a built-in one can't be changed)
+    let mut config = config;
+    {
+        // the built-in profiles are the app's (layout updates may have changed them meanwhile)
+        let now = state.cfg.lock().unwrap();
+        config.builtins = now.builtins.clone();
+        config.layout_version = now.layout_version;
+    }
+    config.normalize();
     *state.cfg.lock().unwrap() = config.clone();
     config.save(&config_path()).map_err(|e| e.to_string())?;
     app.emit("config", &config).map_err(|e| e.to_string())
@@ -735,6 +746,9 @@ fn ocr_loop(
     let mut screen_missing = false;
     // the Mission Failed reason now on screen and since when — for the lines log (translation DB)
     let mut reason_on: Option<(String, Instant)> = None;
+    // the game's pages script (pagescript.rs), loaded again when the game or the script changes
+    let mut pages: Option<pagescript::Pages> = None;
+    let mut pages_for: (String, u64) = (String::new(), u64::MAX);
     loop {
         if shared.reset_sizes.swap(false, std::sync::atomic::Ordering::Relaxed) {
             sizes.lock().unwrap().reset();
@@ -767,25 +781,103 @@ fn ocr_loop(
             //       does, and disappears the moment it goes (no delay, no flicker from OCR misses).
             // Refresh: once a second, re-read the reason and buttons (they can change: Yes / No ...);
             //       a re-read that misses them keeps the last good ones.
-            let screens_on = c.profile == "gta5" && (c.profile_opts.mission_failed || c.profile_opts.pause_menu || c.profile_opts.captions);
+            let now_for = (c.game(), pagescript::GENERATION.load(std::sync::atomic::Ordering::Relaxed));
+            if now_for != pages_for {
+                pages = pagescript::Pages::for_game(&now_for.0, &data_dir());
+                if let (Some(p), true) = (&pages, std::env::var_os("VI_TRANSLATOR_DEBUG").is_some()) {
+                    eprintln!("[pages] {} script ({}): {:?}", now_for.0, p.origin, p.list.iter().map(|i| &i.id).collect::<Vec<_>>());
+                }
+                pages_for = now_for;
+            }
+            // the script's pages whose switch is on in the profile
+            let script_pages: Vec<String> = pages
+                .as_ref()
+                .map(|p| p.list.iter().filter(|i| pagescript::option_on(&c.profile_opts, &i.option)).map(|i| i.id.clone()).collect())
+                .unwrap_or_default();
+            let gta5 = c.game() == "gta5";
+            let screens_on = (gta5 && (c.profile_opts.mission_failed || c.profile_opts.pause_menu || c.profile_opts.captions)) || !script_pages.is_empty();
             let mut found: Option<screens::ScreenLayout> = None;
             if screens_on {
                 match &screen {
                     None => {
-                        found = if c.profile_opts.mission_failed { screens::detect_gta5_mission_failed(&frame, &ocr) } else { None };
-                        if found.is_none() && c.profile_opts.pause_menu {
+                        // the app's own detection, for the pages the script doesn't have
+                        let by_script = |id: &str| pages.as_ref().is_some_and(|p| p.has(id));
+                        found = if gta5 && c.profile_opts.mission_failed && !by_script("gta5_mission_failed") { screens::detect_gta5_mission_failed(&frame, &ocr) } else { None };
+                        if found.is_none() && gta5 && c.profile_opts.pause_menu && !by_script(screens::PAUSE_ID) {
                             found = screens::detect_gta5_pause(&frame, &ocr);
                         }
-                        if found.is_none() && c.profile_opts.mission_failed && screens::alert_present(&frame) {
+                        if found.is_none() && gta5 && c.profile_opts.mission_failed && !by_script(screens::ALERT_ID) && screens::alert_present(&frame) {
                             found = screens::detect_gta5_alert(&frame, &ocr);
                         }
-                        if found.is_none() && c.profile_opts.captions && screens::find_caption(&frame).is_some() {
+                        // the script's pages (captions, and whatever a newer script brings)
+                        if let (None, Some(p)) = (&found, &pages) {
+                            for id in &script_pages {
+                                if let Some(k) = p.present(id, &frame, &ocr) {
+                                    found = p.read(id, &frame, &ocr, &k);
+                                    if found.is_some() {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        // no script for the captions: the app's own detection
+                        let script_captions = pages.as_ref().is_some_and(|p| p.has(screens::CAPTION_ID));
+                        if found.is_none() && gta5 && c.profile_opts.captions && !script_captions && screens::find_caption(&frame).is_some() {
                             found = screens::detect_gta5_caption(&frame, &ocr);
+                        }
+                    }
+                    // A script's page is up. Without hold rules (captions): still the same? Else read it
+                    // again, or it's gone. With them (Mission Failed): kept while its title blinks out
+                    // (up to hold_ms), ended once the screen is dark, read again every reread_ms.
+                    Some(old) if old.id != screens::PAUSE_ID && pages.as_ref().is_some_and(|p| p.has(&old.id)) => {
+                        let p = pages.as_ref().expect("checked");
+                        let id = old.id.clone();
+                        let info = p.info(&id).cloned().unwrap_or_default();
+                        let still = p.same(&id, &frame, &ocr, old) == Some(true);
+                        if info.hold_ms == 0 && info.reread_ms == 0 {
+                            if !still {
+                                match p.present(&id, &frame, &ocr).and_then(|k| p.read(&id, &frame, &ocr, &k)) {
+                                    Some(l) => found = Some(l),
+                                    None => hide_screen(&app, &shared, &mut screen),
+                                }
+                            }
+                        } else {
+                            if still {
+                                title_missing_since = None;
+                            }
+                            let missing = title_missing_since.get_or_insert_with(Instant::now).elapsed();
+                            if !still && ((info.end_when_dark && screens::is_dark(&frame)) || missing > Duration::from_millis(info.hold_ms)) {
+                                hide_screen(&app, &shared, &mut screen);
+                                title_missing_since = None;
+                            } else if !still {
+                                // still fading: keep showing, no re-read
+                            } else if info.reread_ms > 0 && screen_checked.elapsed() >= Duration::from_millis(info.reread_ms) {
+                                screen_checked = Instant::now();
+                                if let Some(mut l) = p.present(&id, &frame, &ocr).and_then(|k| p.read(&id, &frame, &ocr, &k)) {
+                                    screens::keep_measured(&mut l, old);
+                                    found = Some(l);
+                                }
+                            }
                         }
                     }
                     // Pause menu: gone the moment its tab bar is; re-read twice a second (the selected
                     // tab moves as the player browses).
                     Some(old) if old.id == screens::PAUSE_ID => {
+                        // the script reads the menu when it has it; the app follows it here either way
+                        let by_script = pages.as_ref().filter(|p| p.has(screens::PAUSE_ID));
+                        let pause_present = |f: &capture::FrameData| match by_script {
+                            Some(p) => p.same(screens::PAUSE_ID, f, &ocr, old) == Some(true),
+                            None => screens::pause_present(f),
+                        };
+                        let reread = |f: &capture::FrameData| match by_script {
+                            Some(p) if p.can(screens::PAUSE_ID, "reread") => p.reread(screens::PAUSE_ID, f, &ocr, old),
+                            Some(p) => p.present(screens::PAUSE_ID, f, &ocr).and_then(|k| p.read(screens::PAUSE_ID, f, &ocr, &k)),
+                            None => screens::reread_pause_menu(f, &ocr, old),
+                        };
+                        let full_read = |f: &capture::FrameData| match by_script {
+                            Some(p) => p.present(screens::PAUSE_ID, f, &ocr).and_then(|k| p.read(screens::PAUSE_ID, f, &ocr, &k)),
+                            None => screens::detect_gta5_pause(f, &ocr),
+                        };
                         // Every frame: a menu line whose English changed or went away loses its Arabic
                         // at once, and the menu is read again straight away.
                         let gone = old.menu.iter().any(|m| !screens::region_same(&frame, &m.rect, &m.sig))
@@ -801,7 +893,7 @@ fn ocr_loop(
                             .then(|| menu_states.iter().find(|(t, sig, _)| *t == tab && !screens::content_changed(&frame, sig)))
                             .flatten()
                             .filter(|(_, sig, _)| *sig != old.content_sig);
-                        if !screens::pause_present(&frame) {
+                        if !pause_present(&frame) {
                             hide_screen(&app, &shared, &mut screen);
                         } else if let Some((_, sig, menu)) = known {
                             let mut l = old.clone();
@@ -813,7 +905,7 @@ fn ocr_loop(
                             // the menu again right now (~150 ms), so the old lines go and the new ones come
                             // together, with no half-empty moment in between.
                             screen_checked = Instant::now();
-                            match screens::reread_pause_menu(&frame, &ocr, old) {
+                            match reread(&frame) {
                                 Some(l) => found = Some(l),
                                 None => {
                                     let mut l = old.clone();
@@ -836,7 +928,7 @@ fn ocr_loop(
                             screen_checked = Instant::now();
                             // same tabs as before: a quick re-read of just the menu; else a full read
                             let tabs_same = old.labels.iter().all(|l| screens::region_same(&frame, &l.rect, &l.sig));
-                            let read = if tabs_same { screens::reread_pause_menu(&frame, &ocr, old) } else { screens::detect_gta5_pause(&frame, &ocr) };
+                            let read = if tabs_same { reread(&frame) } else { full_read(&frame) };
                             match read {
                                 Some(l) => found = Some(l),
                                 // mid-transition (tabs sliding): try again in half a second
@@ -890,25 +982,7 @@ fn ocr_loop(
                         } else if screen_checked.elapsed() >= Duration::from_secs(1) {
                             screen_checked = Instant::now();
                             if let Some(mut l) = screens::detect_gta5_mission_failed(&frame, &ocr) {
-                                if l.reason_en.is_empty() {
-                                    (l.reason, l.reason_line_h, l.reason_en) = (old.reason.clone(), old.reason_line_h, old.reason_en.clone());
-                                }
-                                if l.buttons.is_empty() {
-                                    (l.buttons, l.buttons_row) = (old.buttons.clone(), old.buttons_row.clone());
-                                }
-                                // Geometry is measured once, when the page appears: re-measuring as the scene
-                                // behind fades to black would make the Arabic jump in size and place. Re-reads
-                                // only update the words (a new reason, Yes / No buttons).
-                                l.title = old.title.clone();
-                                if l.reason_en == old.reason_en {
-                                    (l.reason, l.reason_line_h) = (old.reason.clone(), old.reason_line_h);
-                                }
-                                if l.buttons.len() == old.buttons.len() {
-                                    for (b, o) in l.buttons.iter_mut().zip(&old.buttons) {
-                                        (b.icon, b.icon_rect, b.text_rect) = (o.icon.clone(), o.icon_rect.clone(), o.text_rect.clone());
-                                    }
-                                    l.buttons_row = old.buttons_row.clone();
-                                }
+                                screens::keep_measured(&mut l, old);
                                 found = Some(l);
                             }
                         }
@@ -1249,7 +1323,7 @@ fn translate_loop(
         }
         // A hand-written phrasebook line beats a machine translation remembered earlier (only an
         // reviewed line ranks above it).
-        if c.profile == "gta5" && c.target_lang == "ar" && remembered.as_ref().is_some_and(|(_, src)| src != "reviewed" && src != "phrasebook") {
+        if c.game() == "gta5" && c.target_lang == "ar" && remembered.as_ref().is_some_and(|(_, src)| src != "reviewed" && src != "phrasebook") {
             if phrasebook::lookup(&job.en, &job.icons).is_some() {
                 remembered = None; // the translator below answers from the phrasebook, and memory is updated
             }
@@ -1266,7 +1340,7 @@ fn translate_loop(
         let mem_note = if use_memory {
             let mut m = memory.lock().unwrap();
             if let (false, Ok(segs)) = (hit, &result) {
-                let source = if c.profile == "gta5" && c.target_lang == "ar" && phrasebook::lookup(&job.en, &job.icons).is_some() { "phrasebook" } else { c.engine.as_str() };
+                let source = if c.game() == "gta5" && c.target_lang == "ar" && phrasebook::lookup(&job.en, &job.icons).is_some() { "phrasebook" } else { c.engine.as_str() };
                 m.put(&job.en, segs, source);
             }
             m.record(hit, ready_ms);
@@ -1502,6 +1576,109 @@ fn main() {
         println!("{segs:?}");
         return;
     }
+    // `--compare-pages <folder>`: run the built-in pages script and the Rust detection on every PNG in a
+    // folder (e.g. saved debug frames) and report where they differ.
+    if let Some(dir) = args.iter().position(|a| a == "--compare-pages").and_then(|i| args.get(i + 1)) {
+        let run = || -> anyhow::Result<()> {
+            Ocr::init_thread();
+            let ocr = Ocr::new()?;
+            let pages = pagescript::Pages::for_game("gta5", std::path::Path::new("")).ok_or_else(|| anyhow::anyhow!("no gta5 script"))?;
+            println!("script: {}", pages.origin);
+            let mut files: Vec<_> = std::fs::read_dir(dir)?.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "png")).collect();
+            files.sort();
+            let (mut n, mut found, mut differ, mut ms_rust, mut ms_js) = (0, 0, 0, 0u128, 0u128);
+            for path in files {
+                let Ok(img) = image::open(&path) else { continue };
+                let img = img.to_rgba8();
+                let (w, h) = img.dimensions();
+                let frame = capture::FrameData { w, h, rgba: img.into_raw(), seq: 1 };
+                n += 1;
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                // each page, the app's Rust detection and the script, compared in full
+                let checks: [(&str, Box<dyn Fn() -> Option<screens::ScreenLayout>>); 4] = [
+                    (screens::CAPTION_ID, Box::new(|| screens::find_caption(&frame).and_then(|_| screens::detect_gta5_caption(&frame, &ocr)))),
+                    ("gta5_mission_failed", Box::new(|| screens::detect_gta5_mission_failed(&frame, &ocr))),
+                    (screens::ALERT_ID, Box::new(|| if screens::alert_present(&frame) { screens::detect_gta5_alert(&frame, &ocr) } else { None })),
+                    (screens::PAUSE_ID, Box::new(|| screens::detect_gta5_pause(&frame, &ocr))),
+                ];
+                // the pause menu's quick re-read (against the Rust read of this same frame)
+                if let Some(old) = screens::detect_gta5_pause(&frame, &ocr) {
+                    let (a, b) = (screens::reread_pause_menu(&frame, &ocr, &old), pages.reread(screens::PAUSE_ID, &frame, &ocr, &old));
+                    let (a, b) = (a.map(|l| serde_json::to_value(l).unwrap()), b.map(|l| serde_json::to_value(l).unwrap()));
+                    if a == b {
+                        println!("same      {name} pause re-read");
+                    } else {
+                        differ += 1;
+                        println!("DIFFERENT {name} pause re-read: rust {} | script {}", a.map(|v| v.to_string().chars().take(300).collect::<String>()).unwrap_or_default(), b.map(|v| v.to_string().chars().take(300).collect::<String>()).unwrap_or_default());
+                    }
+                }
+                for (id, rust_fn) in checks.iter() {
+                    let t = Instant::now();
+                    let rust = rust_fn();
+                    ms_rust += t.elapsed().as_millis();
+                    let t = Instant::now();
+                    let js = pages.present(id, &frame, &ocr).and_then(|k| pages.read(id, &frame, &ocr, &k));
+                    ms_js += t.elapsed().as_millis();
+                    let (a, b) = (rust.as_ref().map(|l| serde_json::to_value(l).unwrap()), js.as_ref().map(|l| serde_json::to_value(l).unwrap()));
+                    if a.is_none() && b.is_none() {
+                        continue;
+                    }
+                    found += 1;
+                    if a == b {
+                        println!("same      {name} {id}: {:?}", rust.as_ref().map(|l| &l.reason_en));
+                    } else {
+                        differ += 1;
+                        println!("DIFFERENT {name} {id}");
+                        match (&a, &b) {
+                            (Some(serde_json::Value::Object(x)), Some(serde_json::Value::Object(y))) => {
+                                for (k, v) in x {
+                                    // buttons: say which part of which button differs
+                                    if let (true, Some(serde_json::Value::Array(ra)), Some(serde_json::Value::Array(sa))) = (k == "buttons", Some(v), y.get(k)) {
+                                        for (i, (rb, sb)) in ra.iter().zip(sa).enumerate() {
+                                            for (bk, bv) in rb.as_object().into_iter().flatten() {
+                                                if sb.get(bk) != Some(bv) {
+                                                    let s = |v: &serde_json::Value| { let t = v.to_string(); if t.len() > 120 { format!("{}… ({} chars)", &t[..120], t.len()) } else { t } };
+                                                    println!("    buttons[{i}].{bk}: rust {} | script {}", s(bv), sb.get(bk).map(s).unwrap_or_default());
+                                                }
+                                            }
+                                        }
+                                        if ra.len() != sa.len() {
+                                            println!("    buttons: rust {} | script {}", ra.len(), sa.len());
+                                        }
+                                        continue;
+                                    }
+                                    if let (true, Some(serde_json::Value::Array(ra)), Some(serde_json::Value::Array(sa))) = (k == "menu" || k == "labels", Some(v), y.get(k)) {
+                                        for (i, (rb, sb)) in ra.iter().zip(sa).enumerate() {
+                                            if rb != sb {
+                                                println!("    {k}[{i}]: rust {rb} | script {sb}");
+                                            }
+                                        }
+                                        if ra.len() != sa.len() {
+                                            println!("    {k}: rust {} | script {}", ra.len(), sa.len());
+                                        }
+                                        continue;
+                                    }
+                                    if y.get(k) != Some(v) {
+                                        let short = |v: &serde_json::Value| { let s = v.to_string(); if s.len() > 300 { format!("{}…", &s[..300]) } else { s } };
+                                        println!("    {k}: rust {} | script {}", short(v), y.get(k).map(short).unwrap_or_default());
+                                    }
+                                }
+                            }
+                            _ => println!("    rust found: {}, script found: {} (script present() gave {:?})", a.is_some(), b.is_some(), pages.present(id, &frame, &ocr)),
+                        }
+                    }
+                }
+            }
+            println!("{n} frames, {found} pages found, {differ} different; time: rust {ms_rust} ms, script {ms_js} ms");
+            Ok(())
+        };
+        if let Err(e) = run() {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     // `--test-screen shot.png`: run the GTA V screen detector on a screenshot and print the layout.
     if let Some(path) = args.iter().position(|a| a == "--test-screen").and_then(|i| args.get(i + 1)) {
         let run = || -> anyhow::Result<()> {

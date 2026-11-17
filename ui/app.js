@@ -15,6 +15,7 @@ const lastTextBox = {}; // area id -> English text block [x, y, w, h] (fractions
 
 let saveTimer = null;
 function save(redraw = true) {
+  syncProfile();
   if (redraw) drawLayer();
   updateGlance();
   clearTimeout(saveTimer);
@@ -88,8 +89,7 @@ function updateGlance() {
   $("ps-engine").textContent = e ? t(e.name) : "";
   const on = cfg.areas.filter((a) => a.enabled);
   $("ps-areas").textContent = on.map((a) => a.name).join(", ") || "—";
-  const p = PROFILES.find(([v]) => v === cfg.profile);
-  $("ps-profile").textContent = p && cfg.profile !== "none" ? t(p[1]) : "";
+  $("ps-profile").textContent = activeProfile()?.name || "";
 }
 
 // ------------------------------------------------------------------------------------- preview
@@ -127,8 +127,8 @@ function drawLayer() {
   // (the regions stay in Setup, to place them).
   const overlays = cfg.overlays_enabled !== false;
   // The profile page replaces the normal subtitles while it is up, exactly like the real overlay.
-  AS.renderScreen(sl, overlays && cfg.profile === "gta5" ? screen.layout : null, screen.reason, cfg.profile_opts);
-  if (screen.layout && cfg.profile === "gta5") {
+  AS.renderScreen(sl, overlays && profileGame() === "gta5" ? screen.layout : null, screen.reason, cfg.profile_opts);
+  if (screen.layout && profileGame() === "gta5") {
     for (const a of cfg.areas) layer.appendChild(areaBox(a));
     return;
   }
@@ -201,6 +201,7 @@ function toCustom(area) {
 function startDrag(e, area, mode, kind = "read") {
   e.preventDefault();
   e.stopPropagation();
+  if (locked()) return; // a built-in profile: copy it to move its areas
   selected = area.id;
   if (kind === "out") toCustom(area);
   renderAreas();
@@ -402,6 +403,7 @@ function renderLang() {
       renderStyleForm();
       renderAreas();
       renderProfile();
+      renderPages();
       save();
     });
   }
@@ -571,6 +573,7 @@ function renderAreas() {
     });
     list.appendChild(c);
   }
+  lockControls();
 }
 function highlightCards() {
   document.querySelectorAll("#area-list .card").forEach((c) => c.classList.toggle("selected", c.dataset.id === selected));
@@ -585,6 +588,7 @@ function updateAreaNumbers(a) {
   }
 }
 function addArea() {
+  if (locked()) return;
   const id = `area_${Date.now().toString(36)}`;
   cfg.areas.push({
     id, name: t("Area {n}", { n: cfg.areas.length + 1 }), enabled: true, x: 0.35, y: 0.4, w: 0.3, h: 0.12, placement: "above", font_scale: 1, font_family: "",
@@ -695,6 +699,7 @@ function renderStyleForm() {
   });
   form.appendChild(reset);
   drawStyleSample();
+  lockControls();
 }
 function setStyle(key, value) {
   cfg.style[key] = value;
@@ -1122,55 +1127,152 @@ listen("screen", (e) => {
 
 // ------------------------------------------------------------------------------------- game profile
 
-const PROFILES = [["none", "None — subtitles and read areas only"], ["gta5", "Grand Theft Auto V"]];
-const GTA5_AREAS = () => [
-  { id: "subtitles", name: t("Subtitles"), enabled: true, centered_only: true, x: 0.1, y: 0.78, w: 0.8, h: 0.17, placement: "above", text_pos: "bottom-center", background: "none", font_scale: 1.04, match_size: true, font_family: "Tajawal",
-    out_x: 0.1, out_y: 0.6, out_w: 0.8, out_h: 0.15, out_valign: "bottom", out_halign: "center" },
-  { id: "help", name: t("Instructions (top left)"), enabled: true, x: 0.01, y: 0.02, w: 0.3, h: 0.22, placement: "under_text", text_pos: "top-left", background: "game", font_scale: 0.92, match_size: true, font_family: "Tajawal",
-    out_x: 0.31, out_y: 0.02, out_w: 0.35, out_h: 0.3, out_valign: "top", out_halign: "left" },
-];
+// A game profile holds the read areas, the text style and the game pages. Built-in ones (GTA VI, GTA V)
+// can't be changed: "Make a copy" gives the player one of their own. The settings the rest of the app
+// reads (cfg.areas, cfg.style, cfg.profile_opts) are the profile in use; with one of the player's
+// profiles, every save writes them back into it (see syncProfile).
+const GAMES = { gta5: "Grand Theft Auto V", gta6: "Grand Theft Auto VI" };
+const allProfiles = () => [...(cfg.builtins || []), ...(cfg.profiles || [])];
+const activeProfile = () => allProfiles().find((p) => p.id === cfg.profile) || (cfg.builtins || [])[0];
+const isBuiltin = (p) => (cfg.builtins || []).some((b) => b.id === p?.id);
+const locked = () => isBuiltin(activeProfile());
+const profileGame = () => activeProfile()?.game || "gta5";
+const clone = (v) => JSON.parse(JSON.stringify(v));
+
+/** One of the player's profiles is in use: keep it equal to what is being edited. */
+function syncProfile() {
+  const p = (cfg.profiles || []).find((x) => x.id === cfg.profile);
+  if (p) Object.assign(p, { areas: clone(cfg.areas), style: clone(cfg.style), pages: clone(cfg.profile_opts) });
+}
+
+/** Use another profile: its areas, style and pages become the ones in use. */
+function useProfile(id) {
+  syncProfile();
+  const p = allProfiles().find((x) => x.id === id);
+  if (!p) return;
+  cfg.profile = p.id;
+  cfg.areas = clone(p.areas);
+  cfg.style = clone(p.style);
+  cfg.profile_opts = clone(p.pages);
+  selected = cfg.areas[0]?.id ?? null;
+  for (const k of Object.keys(lastSegs)) delete lastSegs[k];
+  renderAll();
+  save();
+}
+
+/** A copy of a profile (built-in or not) that the player can change. */
+function copyProfile(from) {
+  syncProfile();
+  const id = `custom-${Date.now().toString(36)}`;
+  cfg.profiles = cfg.profiles || [];
+  cfg.profiles.push({ id, name: t("{name} (copy)", { name: from.name }), game: from.game, areas: clone(from.areas), style: clone(from.style), pages: clone(from.pages) });
+  useProfile(id);
+  setTimeout(() => $("pf-name")?.select(), 0);
+}
+
+function deleteProfile(p) {
+  if (!confirm(t("Delete the profile “{name}”? This can't be undone.", { name: p.name }))) return;
+  cfg.profiles = cfg.profiles.filter((x) => x.id !== p.id);
+  useProfile(p.game in GAMES ? p.game : "gta6");
+}
+
+function renderAll() {
+  applyLock();
+  renderProfile();
+  renderPages();
+  renderAreas();
+  renderStyleForm();
+  drawLayer();
+  updateGlance();
+}
+
+/** Built-in profile in use: its parts can be looked at, not changed (a note offers a copy). */
+function applyLock() {
+  const on = locked();
+  document.body.classList.toggle("locked", on);
+  const p = activeProfile();
+  document.querySelectorAll("[data-lock]").forEach((el) => {
+    el.innerHTML = on
+      ? `<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+         <span>${AS.esc(t("“{name}” is built in and can't be changed.", { name: p.name }))}</span>
+         <button class="btn" data-copy>${t("Make a copy")}</button>`
+      : "";
+    el.querySelector("[data-copy]")?.addEventListener("click", () => copyProfile(activeProfile()));
+  });
+  lockControls();
+}
 
 function renderProfile() {
   const f = $("profile-form");
-  const o = cfg.profile_opts;
+  const p = activeProfile();
+  const opt = (x) => `<option value="${AS.esc(x.id)}" ${x.id === cfg.profile ? "selected" : ""}>${AS.esc(x.name)}</option>`;
+  const mine = cfg.profiles || [];
   f.innerHTML = `
-    <div class="field"><label>${t("Profile")}</label>
-      <select id="pf-profile">${PROFILES.map(([v, txt]) => `<option value="${v}" ${cfg.profile === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select></div>
-    ${cfg.profile === "gta5" ? `
-    <div class="card" style="margin-top:12px">
+    <div class="field"><label for="pf-select">${t("Profile in use")}</label>
+      <select id="pf-select">
+        <optgroup label="${AS.esc(t("Built-in"))}">${(cfg.builtins || []).map(opt).join("")}</optgroup>
+        ${mine.length ? `<optgroup label="${AS.esc(t("Your profiles"))}">${mine.map(opt).join("")}</optgroup>` : ""}
+      </select></div>
+    <div class="card profile-card">
+      <div class="row">
+        ${isBuiltin(p)
+          ? `<div class="grow"><b>${AS.esc(p.name)}</b></div><span class="badge lock-badge">${t("Built-in")}</span>`
+          : `<input type="text" id="pf-name" class="grow" value="${AS.esc(p.name)}" title="${AS.esc(t("Rename"))}" /><span class="badge">${t("Yours")}</span>`}
+      </div>
+      <p class="muted small" style="margin:8px 0 0">${t("For {game} · {n} read area(s)", { game: GAMES[p.game] || p.game, n: p.areas.length })}</p>
+      <div class="row" style="margin-top:12px">
+        <button id="pf-copy" class="btn">${t("Make a copy")}</button>
+        ${isBuiltin(p) ? "" : `<button id="pf-delete" class="btn danger">${t("Delete")}</button>`}
+      </div>
+    </div>
+    <p class="muted small">${isBuiltin(p)
+      ? t("Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.")
+      : t("Your changes to read areas, text style and game pages are saved in this profile.")}</p>`;
+  $("pf-select").addEventListener("change", (e) => useProfile(e.target.value));
+  $("pf-copy").addEventListener("click", () => copyProfile(activeProfile()));
+  $("pf-delete")?.addEventListener("click", () => deleteProfile(activeProfile()));
+  $("pf-name")?.addEventListener("input", (e) => {
+    const mineNow = cfg.profiles.find((x) => x.id === cfg.profile);
+    if (mineNow) mineNow.name = e.target.value;
+    save(false);
+  });
+  $("pf-name")?.addEventListener("change", () => renderProfile());
+}
+
+/** Game pages of the profile in use (only GTA V's are recognised so far). */
+function renderPages() {
+  const f = $("pages-form");
+  const o = cfg.profile_opts;
+  if (profileGame() !== "gta5") {
+    f.innerHTML = `<div class="callout">${t("{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.", { game: GAMES[profileGame()] || profileGame() })}</div>`;
+    return;
+  }
+  f.innerHTML = `
+    <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" id="pf-mf" ${o.mission_failed ? "checked" : ""}/> ${t("“Mission Failed” page")}</label>
       <p class="muted small" style="margin:6px 0 10px">${t("Adds the title in the same colour and size above the red title, the reason under the English reason, and translated labels with the game's own button icons above Retry / Restart / Skip.")}</p>
       <div id="pf-status" class="callout" style="margin:0 0 10px"></div>
       <div class="field"><label>${t("Title font")}</label><select id="pf-title">${fontOptions(o.title_font)}</select></div>
       <div class="field" style="margin-top:10px"><label>${t("Reason and button font")}</label><select id="pf-text">${fontOptions(o.text_font)}</select></div>
     </div>
-    <div class="card" style="margin-top:12px">
+    <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" id="pf-pause" ${o.pause_menu !== false ? "checked" : ""}/> ${t("Pause menu")}</label>
       <p class="muted small" style="margin:6px 0 0">${t("Translates the tabs (Map, Brief, Stats …), the menus and the buttons at the bottom right, in the game's own colours. Subtitle reading pauses while the menu is open.")}</p>
     </div>
-    <div class="card" style="margin-top:12px">
+    <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" id="pf-cap" ${o.captions !== false ? "checked" : ""}/> ${t("Captions in the middle of a black screen")}</label>
       <p class="muted small" style="margin:6px 0 0">${t("Place and time cards such as “Ludendorff, North Yankton, nine years ago.”: the translation appears centred just below the English, for as long as it is on screen.")}</p>
-    </div>
-    <button id="pf-areas" class="btn wide">${t("Use GTA V read areas (subtitles + top-left instructions)")}</button>` : ""}`;
-  $("pf-profile").addEventListener("change", (e) => { cfg.profile = e.target.value; renderProfile(); save(); });
-  if (cfg.profile !== "gta5") return;
+    </div>`;
   $("pf-mf").addEventListener("change", (e) => { o.mission_failed = e.target.checked; save(); });
   $("pf-pause").addEventListener("change", (e) => { o.pause_menu = e.target.checked; save(); });
   $("pf-cap").addEventListener("change", (e) => { o.captions = e.target.checked; save(); });
   for (const [id, key] of [["pf-title", "title_font"], ["pf-text", "text_font"]]) {
     const sel = $(id);
     sel.style.fontFamily = `'${sel.value}'`;
-    sel.addEventListener("change", () => { o[key] = sel.value; sel.style.fontFamily = `'${sel.value}'`; renderProfile(); save(); });
+    sel.addEventListener("change", () => { o[key] = sel.value; sel.style.fontFamily = `'${sel.value}'`; save(); });
   }
-  $("pf-areas").addEventListener("click", () => {
-    if (!confirm(t("Replace your read areas with the GTA V ones?"))) return;
-    cfg.areas = GTA5_AREAS();
-    selected = cfg.areas[0].id;
-    renderAreas();
-    save();
-  });
   updateProfileStatus();
+  lockControls();
 }
 function updateProfileStatus() {
   const s = $("pf-status");
@@ -1185,6 +1287,15 @@ function applyTheme() {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   // the icon shows where a click takes you (sun: to light, moon: to dark)
   $("theme").title = `${t("Switch between light and dark")} — ${dark ? t("☀ Light") : t("🌙 Dark")}`;
+}
+
+// A built-in profile in use: the controls of its parts are switched off (not just dimmed), so they
+// can't be reached with the keyboard either.
+function lockControls() {
+  const on = locked();
+  document.querySelectorAll("#tab-areas, #tab-style, #tab-pages").forEach((tab) =>
+    tab.querySelectorAll("input, select, textarea, button:not([data-copy])").forEach((el) => { el.disabled = on; }));
+  $("add-area").disabled = on;
 }
 
 (async function init() {
@@ -1221,7 +1332,9 @@ function applyTheme() {
     log({ error: t("Could not list fonts: {e}", { e }) });
   }
   renderEngines();
+  applyLock();
   renderProfile();
+  renderPages();
   renderAreas();
   renderStyleForm();
   renderTiming();

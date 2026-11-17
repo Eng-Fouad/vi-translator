@@ -28,8 +28,11 @@ const MAX_LINE_CHARS: usize = 400;
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 struct State {
-    /// how far into lines-log.jsonl has been shared (bytes)
+    /// how far into the old, plain-text lines-log.jsonl has been shared (bytes); once it has all
+    /// been handled the file is removed
     log_offset: u64,
+    /// how far into the encrypted lines log (memory::LOG_FILE) has been shared (bytes)
+    dat_offset: u64,
     /// ETag of each download
     versions: HashMap<String, String>,
 }
@@ -68,7 +71,7 @@ fn server(c: &Config) -> Option<String> {
 }
 
 fn game(c: &Config) -> Option<String> {
-    (!c.profile.is_empty() && c.profile != "none").then(|| c.profile.clone())
+    Some(c.game())
 }
 
 /// Use what was downloaded before (works offline), then keep it up to date.
@@ -132,28 +135,46 @@ struct UploadLine<'a> {
 
 /// Send the lines logged since the last upload. With sharing off, nothing is sent and the
 /// lines seen meanwhile are skipped for good (turning it on later doesn't send old lines).
+/// A log from before encryption (lines-log.jsonl) is finished first, then removed.
 fn share_lines(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &str, paths: &Paths) {
     let mut st = load_state(paths);
-    let log = paths.db.join("lines-log.jsonl");
-    let Ok(mut f) = std::fs::File::open(&log) else { return };
+    let legacy = paths.db.join("lines-log.jsonl");
+    if legacy.exists() {
+        let done = share_file(http, url, c, game, &legacy, &mut st.log_offset, false);
+        if done && std::fs::remove_file(&legacy).is_ok() {
+            st.log_offset = 0;
+        }
+        save_state(paths, &st);
+        if !done {
+            return; // offline: try again next time, in order
+        }
+    }
+    share_file(http, url, c, game, &paths.db.join(memory::LOG_FILE), &mut st.dat_offset, true);
+    save_state(paths, &st);
+}
+
+/// Share the whole lines of `path` after `offset` (moving it on). `sealed`: each line is an
+/// encrypted record. True when everything up to the end has been handled.
+fn share_file(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &str, path: &std::path::Path, offset: &mut u64, sealed: bool) -> bool {
+    let Ok(mut f) = std::fs::File::open(path) else { return true };
     let len = f.metadata().map(|m| m.len()).unwrap_or(0);
-    if st.log_offset > len {
-        st.log_offset = 0; // the log was cleared
+    if *offset > len {
+        *offset = 0; // the log was cleared
     }
     if !c.share_lines {
-        st.log_offset = len;
-        save_state(paths, &st);
-        return;
+        *offset = len;
+        return true;
     }
     let mut text = String::new();
-    if f.seek(SeekFrom::Start(st.log_offset)).is_err() || f.read_to_string(&mut text).is_err() {
-        return;
+    if f.seek(SeekFrom::Start(*offset)).is_err() || f.read_to_string(&mut text).is_err() {
+        return false;
     }
     // whole lines only (one may still be being written)
     let complete = text.rfind('\n').map(|i| i + 1).unwrap_or(0);
     let rows: Vec<LogRow> = text[..complete]
         .lines()
-        .filter_map(|l| serde_json::from_str::<LogRow>(l).ok())
+        .filter_map(|l| if sealed { memory::open_log_line(l) } else { Some(l.to_string()) })
+        .filter_map(|l| serde_json::from_str::<LogRow>(&l).ok())
         // menus can hold player names: never shared
         .filter(|r| !r.area.starts_with("__menu") && !r.area.starts_with("__free"))
         .filter(|r| r.en.chars().count() <= MAX_LINE_CHARS && looks_like_text(&r.en))
@@ -167,11 +188,11 @@ fn share_lines(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &s
             // the server refused these lines (too long, malformed): don't send them again
             Ok(r) if r.status().as_u16() == 400 || r.status().as_u16() == 413 => {}
             // offline, busy or rate-limited: try again next time, from here
-            _ => return,
+            _ => return false,
         }
     }
-    st.log_offset += complete as u64;
-    save_state(paths, &st);
+    *offset += complete as u64;
+    *offset >= len
 }
 
 /// Real words, not an OCR misread of icons ("bjlwg", "ulnJiJl hjluJ9"): a sentence ("Hi.",
@@ -223,6 +244,7 @@ fn download(
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
             let _ = std::fs::write(paths.layout(game), &bytes);
             st.versions.insert(k, tag.clone());
+            crate::pagescript::save_from_layout(&paths.data, game, &layout);
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang);
         }
     }
@@ -257,7 +279,7 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
     }
 }
 
-fn key() -> [u8; 32] {
+pub(crate) fn key() -> [u8; 32] {
     // (debug builds can test against a local server's key)
     if cfg!(debug_assertions) {
         if let Some(k) = std::env::var("VI_TRANSLATOR_DATA_KEY").ok().and_then(|s| b64(&s)).filter(|k| k.len() == 32) {
@@ -335,9 +357,12 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
     if !c.auto_layout || version <= c.layout_version {
         return;
     }
+    // The update tunes the game's built-in profile (the player's own copies are theirs: untouched).
+    let game = c.game();
+    let Some(p) = c.builtins.iter_mut().find(|p| p.id == game) else { return };
     if let Some(areas) = layout["areas"].as_array() {
         for a in areas {
-            let Some(area) = a["id"].as_str().and_then(|id| c.areas.iter_mut().find(|x| x.id == id)) else { continue };
+            let Some(area) = a["id"].as_str().and_then(|id| p.areas.iter_mut().find(|x| x.id == id)) else { continue };
             let num = |k: &str| a[k].as_f64().filter(|v| (0.0..=1.0).contains(v));
             if let (Some(x), Some(y), Some(w), Some(h)) = (num("x"), num("y"), num("w"), num("h")) {
                 (area.x, area.y, area.w, area.h) = (x, y, w, h);
@@ -348,12 +373,13 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
         }
     }
     if let Some(f) = layout["fonts"]["title_font"].as_str() {
-        c.profile_opts.title_font = f.to_string();
+        p.pages.title_font = f.to_string();
     }
     if let Some(f) = layout["fonts"]["text_font"].as_str() {
-        c.profile_opts.text_font = f.to_string();
+        p.pages.text_font = f.to_string();
     }
     c.layout_version = version;
+    c.normalize(); // (if that built-in profile is in use, its new layout applies now)
     let _ = c.save(&crate::config_path());
     let _ = app.emit("config", &*c);
 }

@@ -5,12 +5,14 @@
 //! template: `{n}` for the n-th icon and `<cK>…</cK>` for the K-th highlighted (coloured) phrase, so
 //! icons and colours from the current frame are put back on reuse.
 //!
-//! Everything lives in one folder ("translation DB"):
-//!  - `memory.jsonl`  — lines translated live by the chosen translator (appended, one JSON per line);
-//!  - `reviewed.jsonl` — the same shape: reviewed, high-quality translations
-//!                      (what a future backend will ship); it always wins and is never overwritten;
-//!  - `lines-log.jsonl` — every English line seen: area, start/end time — so lines that follow each
-//!                      other closely (one conversation) can be translated together, with context.
+//! Everything lives in one folder ("translation DB"), encrypted (see `secure`):
+//!  - `memory-<lang>.dat` — lines translated live by the chosen translator (appended, one sealed
+//!                      record per line). Lines that come from a downloaded shared pack replace them;
+//!  - `lines-log.dat`  — every English line seen: area, start/end time (shared with the server when
+//!                      the player allows it);
+//!  - `reviewed.jsonl` — only on the maintainer's PC: reviewed translations being prepared (plain
+//!                      text, read if present; the app never writes it).
+//! Files from before encryption (`memory.jsonl`, `memory-<lang>.jsonl`) are converted once, then removed.
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -18,7 +20,17 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::secure;
 use crate::translate::Segments;
+
+/// The lines log (encrypted), shared with the server by `sync`.
+pub const LOG_FILE: &str = "lines-log.dat";
+const LOG_KIND: &str = "lines-log";
+
+/// Read a sealed log record (for `sync`).
+pub fn open_log_line(line: &str) -> Option<String> {
+    secure::open(LOG_KIND, line)
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Entry {
@@ -168,25 +180,45 @@ fn fill(tpl: &str, icons: &[String], phrases: &[(String, String)]) -> Segments {
 }
 
 impl Memory {
-    /// Load the memory for a target language from the translation-DB folder (Arabic:
-    /// memory.jsonl and reviewed.jsonl; others: memory-<lang>.jsonl).
+    /// Load the memory for a target language from the translation-DB folder (`memory-<lang>.dat`, plus
+    /// `reviewed.jsonl` for Arabic when it's there). A memory file from before encryption is converted.
     pub fn load(dir: PathBuf, lang: &str) -> Self {
-        let arabic = lang == "ar";
-        let path = if arabic { dir.join("memory.jsonl") } else { dir.join(format!("memory-{lang}.jsonl")) };
-        let mut map = HashMap::new();
-        let files = [(path.clone(), None), (dir.join("reviewed.jsonl"), Some("reviewed"))];
-        for (file, forced) in files.into_iter().take(if arabic { 2 } else { 1 }) {
-            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+        convert_other_languages(&dir, lang);
+        let path = dir.join(format!("memory-{lang}.dat"));
+        let kind = format!("memory/{lang}");
+        let mut map: HashMap<String, Entry> = HashMap::new();
+        let add = |e: Entry, map: &mut HashMap<String, Entry>| {
+            // later lines win unless a better source is already there
+            let keep_old = map.get(&e.en).is_some_and(|old: &Entry| rank(&old.source) > rank(&e.source));
+            if !keep_old {
+                map.insert(e.en.clone(), e);
+            }
+        };
+        if let Ok(text) = std::fs::read_to_string(&path) {
             for line in text.lines() {
-                if let Ok(mut e) = serde_json::from_str::<Entry>(line) {
-                    if let Some(src) = forced {
-                        e.source = src.into();
+                if let Some(e) = secure::open(&kind, line).and_then(|j| serde_json::from_str::<Entry>(&j).ok()) {
+                    add(e, &mut map);
+                }
+            }
+        }
+        // before encryption: memory.jsonl (Arabic) or memory-<lang>.jsonl, in plain text
+        let legacy = if lang == "ar" { dir.join("memory.jsonl") } else { dir.join(format!("memory-{lang}.jsonl")) };
+        if let Ok(text) = std::fs::read_to_string(&legacy) {
+            let moved: Vec<Entry> = text.lines().filter_map(|l| serde_json::from_str::<Entry>(l).ok()).collect();
+            if append_sealed(&path, &kind, moved.iter().map(|e| serde_json::to_string(e).unwrap_or_default())) {
+                let _ = std::fs::remove_file(&legacy);
+            }
+            for e in moved {
+                add(e, &mut map);
+            }
+        }
+        if lang == "ar" {
+            if let Ok(text) = std::fs::read_to_string(dir.join("reviewed.jsonl")) {
+                for line in text.lines() {
+                    if let Ok(mut e) = serde_json::from_str::<Entry>(line) {
+                        e.source = "reviewed".into();
                         e.en = key_of(&e.en); // a hand-edited file may keep raw English
-                    }
-                    // later lines win unless a better source is already there
-                    let keep_old = map.get(&e.en).is_some_and(|old: &Entry| rank(&old.source) > rank(&e.source));
-                    if !keep_old {
-                        map.insert(e.en.clone(), e);
+                        add(e, &mut map);
                     }
                 }
             }
@@ -267,11 +299,8 @@ impl Memory {
         if key.is_empty() {
             return;
         }
-        let _ = std::fs::create_dir_all(&self.dir);
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(self.dir.join("lines-log.jsonl")) {
-            let row = serde_json::json!({ "area": area, "key": key, "en": en, "start": start_ms, "end": end_ms });
-            let _ = writeln!(f, "{row}");
-        }
+        let row = serde_json::json!({ "area": area, "key": key, "en": en, "start": start_ms, "end": end_ms });
+        append_sealed(&self.dir.join(LOG_FILE), LOG_KIND, [row.to_string()]);
     }
 
     pub fn put(&mut self, line: &str, segs: &Segments, source: &str) {
@@ -283,12 +312,7 @@ impl Memory {
             return;
         }
         let e = Entry { en: key.clone(), ar: to_template(segs), source: source.into() };
-        if let Some(dir) = self.path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&self.path) {
-            let _ = writeln!(f, "{}", serde_json::to_string(&e).unwrap_or_default());
-        }
+        append_sealed(&self.path, &format!("memory/{}", self.lang), [serde_json::to_string(&e).unwrap_or_default()]);
         self.insert(key, e);
     }
 
@@ -333,14 +357,43 @@ impl Memory {
         }
     }
 
-    /// Add translations downloaded in the background (they replace weaker ones).
+    /// Add translations downloaded in the background: they replace the player's own lines for the
+    /// same English, here and in the memory file (which then keeps only what the pack doesn't have).
     pub fn set_shared(&mut self, entries: Vec<Entry>) {
         for e in &entries {
             if self.map.get(&e.en).is_none_or(|old| rank(&old.source) <= rank(&e.source)) {
                 self.insert(e.en.clone(), e.clone());
             }
         }
+        let covered: std::collections::HashSet<&str> = entries.iter().map(|e| e.en.as_str()).collect();
+        self.drop_from_file(&covered);
         self.shared = entries;
+    }
+
+    /// Rewrite the memory file without the lines for these English keys (if it has any).
+    fn drop_from_file(&self, keys: &std::collections::HashSet<&str>) {
+        let kind = format!("memory/{}", self.lang);
+        let Ok(text) = std::fs::read_to_string(&self.path) else { return };
+        let mut removed = 0;
+        let kept: Vec<&str> = text
+            .lines()
+            .filter(|l| {
+                let gone = secure::open(&kind, l)
+                    .and_then(|j| serde_json::from_str::<Entry>(&j).ok())
+                    .is_some_and(|e| keys.contains(e.en.as_str()));
+                removed += gone as usize;
+                !gone
+            })
+            .collect();
+        if removed == 0 {
+            return;
+        }
+        // written next to it, then swapped in: a crash can't leave half a file
+        let tmp = self.path.with_extension("dat.tmp");
+        let body: String = kept.iter().map(|l| format!("{l}\n")).collect();
+        if std::fs::write(&tmp, body).is_ok() {
+            let _ = std::fs::rename(&tmp, &self.path);
+        }
     }
 
     /// Re-read the files (e.g. after new reviewed translations); session counters are kept.
@@ -351,6 +404,34 @@ impl Memory {
         self.set_shared(shared);
         (self.hits, self.misses, self.hit_ms, self.miss_ms) = (h, m, hm, mm);
     }
+}
+
+/// Memory files from before encryption for the other languages (memory-<lang>.jsonl): converted too,
+/// so nothing stays readable on disk (the one for `lang` is converted by `load` itself).
+fn convert_other_languages(dir: &std::path::Path, lang: &str) {
+    let Ok(files) = std::fs::read_dir(dir) else { return };
+    for f in files.flatten() {
+        let name = f.file_name().to_string_lossy().to_string();
+        let Some(other) = name.strip_prefix("memory-").and_then(|n| n.strip_suffix(".jsonl")) else { continue };
+        if other == lang || other.is_empty() || !other.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(f.path()) else { continue };
+        let lines = text.lines().filter(|l| serde_json::from_str::<Entry>(l).is_ok()).map(String::from);
+        if append_sealed(&dir.join(format!("memory-{other}.dat")), &format!("memory/{other}"), lines) {
+            let _ = std::fs::remove_file(f.path());
+        }
+    }
+}
+
+/// Append records, each sealed on its own line. False if the file couldn't be written.
+fn append_sealed(path: &std::path::Path, kind: &str, records: impl IntoIterator<Item = String>) -> bool {
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) else { return false };
+    let body: String = records.into_iter().map(|r| secure::seal(kind, &r) + "\n").collect();
+    f.write_all(body.as_bytes()).is_ok()
 }
 
 #[cfg(test)]
@@ -366,6 +447,37 @@ mod tests {
             Some(c) => format!("<{t}|{c}>"),
             None => t.clone(),
         }).collect()
+    }
+
+    #[test]
+    fn files_are_encrypted_old_ones_converted_and_shared_lines_replace_local_ones() {
+        let path = std::env::temp_dir().join(format!("vi-translator-enc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        // a memory file from before encryption
+        std::fs::write(
+            path.join("memory.jsonl"),
+            "{\"en\":\"take cover\",\"ar\":\"احتمِ\",\"source\":\"local\"}\n{\"en\":\"follow me\",\"ar\":\"اتبعني\",\"source\":\"local\"}\n",
+        )
+        .unwrap();
+        let mut m = Memory::load(path.clone(), "ar");
+        assert!(!path.join("memory.jsonl").exists(), "the plain file is converted, then removed");
+        let dat = std::fs::read_to_string(path.join("memory-ar.dat")).unwrap();
+        assert!(!dat.contains("take cover") && !dat.contains("احتمِ"), "nothing readable on disk");
+        assert!(m.get("Take cover!", &[], &[]).is_some(), "still remembered");
+        m.put("Get in the car.", &vec![("اركب السيارة.".into(), None)], "local");
+        m.log_line("subtitles", "Get in the car.", 1, 2);
+        assert!(!std::fs::read_to_string(path.join(LOG_FILE)).unwrap().contains("car"), "the log is sealed too");
+        // after a restart: the same lines, read back from the encrypted file
+        let mut m = Memory::load(path.clone(), "ar");
+        assert_eq!(m.get("get in the car", &[], &[]).unwrap().0[0].0, "اركب السيارة.");
+        // a shared pack with "take cover": it wins, and the local line leaves the file
+        m.set_shared(vec![Entry { en: "take cover".into(), ar: "احتمِ بساتر!".into(), source: "reviewed".into() }]);
+        assert_eq!(m.get("take cover", &[], &[]).unwrap().1, "reviewed");
+        let m2 = Memory::load(path.clone(), "ar");
+        assert!(m2.get("take cover", &[], &[]).is_none(), "the player's own line for it is gone");
+        assert!(m2.get("follow me", &[], &[]).is_some(), "lines the pack doesn't have stay");
+        let _ = std::fs::remove_dir_all(&path);
     }
 
     #[test]

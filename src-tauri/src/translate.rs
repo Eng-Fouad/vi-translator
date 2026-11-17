@@ -246,7 +246,7 @@ impl Translator {
             return Ok(s.clone());
         }
         // GTA V profile: the game's common instructions have exact, hand-written Arabic.
-        if cfg.profile == "gta5" && cfg.target_lang == "ar" {
+        if cfg.game() == "gta5" && cfg.target_lang == "ar" {
             if let Some(segs) = crate::phrasebook::lookup(line, icons) {
                 self.lines += 1;
                 self.cache.insert(key, segs.clone());

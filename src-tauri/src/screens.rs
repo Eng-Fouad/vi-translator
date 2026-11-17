@@ -6,13 +6,14 @@
 //! Every position is reported as a fraction of the frame, so the overlay can place the Arabic
 //! exactly relative to the English at any window size.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::capture::FrameData;
 use crate::ocr::{self, Crop, Ocr};
 
 /// Rectangle as fractions (0..1) of the frame.
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,
@@ -20,7 +21,8 @@ pub struct Rect {
     pub h: f64,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
 pub struct Button {
     pub en: String,
     pub ar: String,
@@ -35,7 +37,8 @@ pub struct Button {
 
 /// A piece of the game's UI covered by an Arabic replica (e.g. a pause-menu tab): same box, same
 /// background colour, Arabic in the matching text colour.
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
 pub struct Label {
     pub en: String,
     pub ar: String,
@@ -47,7 +50,8 @@ pub struct Label {
     pub sig: Vec<u8>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
 pub struct ScreenLayout {
     pub id: String,
     pub title: Rect,
@@ -78,7 +82,8 @@ pub struct ScreenLayout {
 pub const BUTTON_ROW: Rect = Rect { x: 0.55, y: 0.90, w: 0.45, h: 0.06 };
 
 /// One piece of pause-menu content: a list item or a paragraph, covered by an Arabic replica.
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
 pub struct MenuText {
     pub en: String,
     /// filled in by the app (built-in words, memory, or the translator); empty = not yet
@@ -110,7 +115,8 @@ pub fn selected_tab_name(l: &ScreenLayout) -> Option<&str> {
 }
 
 /// The pause menu's character / day / time block: Arabic lines drawn just left of the English.
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
 pub struct PlayerInfo {
     pub en: Vec<String>,
     pub ar: Vec<String>,
@@ -240,7 +246,7 @@ fn crop(f: &FrameData, r: &Rect) -> Option<(Crop, u32, u32)> {
     Some((c, (r.x.max(0.0) * f.w as f64) as u32, (r.y.max(0.0) * f.h as f64) as u32))
 }
 
-fn letters(s: &str) -> String {
+pub(crate) fn letters(s: &str) -> String {
     s.chars().filter(|c| c.is_alphabetic()).collect::<String>().to_lowercase()
 }
 
@@ -337,6 +343,52 @@ pub fn detect_gta5_mission_failed(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayo
         menu: Vec::new(),
         content_sig: Vec::new(),
         buttons_sig: Vec::new(),
+    })
+}
+
+/// A page read again while it's up: keep what was measured when it appeared (re-measuring as the
+/// scene behind fades to black would make the translation jump in size and place); only the words
+/// change (a new reason, Yes / No buttons). A part the new read missed is kept from before.
+pub fn keep_measured(l: &mut ScreenLayout, old: &ScreenLayout) {
+    if l.reason_en.is_empty() {
+        (l.reason, l.reason_line_h, l.reason_en) = (old.reason.clone(), old.reason_line_h, old.reason_en.clone());
+    }
+    if l.buttons.is_empty() {
+        (l.buttons, l.buttons_row) = (old.buttons.clone(), old.buttons_row.clone());
+    }
+    l.title = old.title.clone();
+    if l.reason_en == old.reason_en {
+        (l.reason, l.reason_line_h) = (old.reason.clone(), old.reason_line_h);
+    }
+    if l.buttons.len() == old.buttons.len() {
+        for (b, o) in l.buttons.iter_mut().zip(&old.buttons) {
+            (b.icon, b.icon_rect, b.text_rect) = (o.icon.clone(), o.icon_rect.clone(), o.text_rect.clone());
+        }
+        l.buttons_row = old.buttons_row.clone();
+    }
+}
+
+/// A page read by a script: the pictures the app compares later to see what changed (a script
+/// can't take them: they never leave the app). Taken now, from the frame it was read from.
+pub fn take_sigs(f: &FrameData, l: &mut ScreenLayout) {
+    for m in l.menu.iter_mut() {
+        m.sig = region_sig(f, &m.rect);
+    }
+    for lb in l.labels.iter_mut() {
+        lb.sig = region_sig(f, &lb.rect);
+    }
+    if l.id == PAUSE_ID {
+        l.content_sig = content_sig(f);
+        l.buttons_sig = region_sig(f, &BUTTON_ROW);
+    }
+}
+
+/// For a script re-reading a page that's up: which of its parts still show what they did.
+pub fn unchanged(f: &FrameData, old: &ScreenLayout) -> serde_json::Value {
+    serde_json::json!({
+        "menu": old.menu.iter().map(|m| region_same(f, &m.rect, &m.sig)).collect::<Vec<_>>(),
+        "labels": old.labels.iter().map(|l| region_same(f, &l.rect, &l.sig)).collect::<Vec<_>>(),
+        "buttons": region_same(f, &BUTTON_ROW, &old.buttons_sig),
     })
 }
 
@@ -916,11 +968,11 @@ fn menu_words() -> Vec<(&'static str, &'static str)> {
     with_layout(0, &MENU_WORDS)
 }
 
-fn button_words() -> Vec<(&'static str, &'static str)> {
+pub(crate) fn button_words() -> Vec<(&'static str, &'static str)> {
     with_layout(1, &BUTTON_WORDS)
 }
 
-fn tab_words() -> Vec<(&'static str, &'static str)> {
+pub(crate) fn tab_words() -> Vec<(&'static str, &'static str)> {
     with_layout(2, &TAB_WORDS)
 }
 
@@ -1284,7 +1336,7 @@ mod menu_item_tests {
 
 /// Height in pixels of the letters inside a box: the span of rows that hold the bright text
 /// (rows whose brightest pixel is above halfway between the dimmest and brightest rows).
-fn letter_height(f: &FrameData, x0: u32, y0: u32, x1: u32, y1: u32) -> u32 {
+pub(crate) fn letter_height(f: &FrameData, x0: u32, y0: u32, x1: u32, y1: u32) -> u32 {
     let lum = |x: u32, y: u32| {
         let (r, g, b) = px(f, x, y);
         (r as u32 * 3 + g as u32 * 6 + b as u32) / 10

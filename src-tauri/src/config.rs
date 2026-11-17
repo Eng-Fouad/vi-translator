@@ -178,11 +178,104 @@ pub struct Config {
     pub debug_save_frames: bool,
     /// Debugging: minimum time between saved frames.
     pub debug_frame_interval_ms: u64,
-    /// Game profile with hand-made screen layouts: none | gta5
+    /// The game profile in use: a built-in one ("gta5", "gta6") or one of `profiles` (a copy).
     pub profile: String,
+    /// The player's own profiles (copies they can change); the built-in ones are in `builtins`.
+    pub profiles: Vec<Profile>,
+    /// The built-in profiles as they are now (the app's defaults, tuned by layout updates from the
+    /// server). Never changed by the player: copied to make one of theirs.
+    pub builtins: Vec<Profile>,
+    /// 1 once the setup from before profiles has been moved into them.
+    pub profiles_version: u32,
+    /// The profile in use, as the rest of the app reads it (kept equal to that profile by `normalize`):
+    /// its game pages, read areas and translation text style.
     pub profile_opts: ProfileOpts,
     pub areas: Vec<Area>,
     pub style: Style,
+}
+
+/// A game profile: where the text is read and where its translation goes (read areas), how the
+/// translation looks (text style), and the game's own pages it translates (Mission Failed …).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Profile {
+    pub id: String,
+    pub name: String,
+    /// The game it is for ("gta5" | "gta6"): which game pages it can recognise, and which shared
+    /// translations and layout updates it gets. A copy keeps the game of the profile it came from.
+    pub game: String,
+    pub areas: Vec<Area>,
+    pub style: Style,
+    pub pages: ProfileOpts,
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        builtin_profile("gta5").expect("built-in")
+    }
+}
+
+/// Equal when written out (for settings that don't compare directly).
+fn same_json<T: Serialize>(a: &T, b: &T) -> bool {
+    serde_json::to_value(a).ok() == serde_json::to_value(b).ok()
+}
+
+/// The built-in profiles, in the order they are listed.
+pub const BUILTINS: [&str; 2] = ["gta6", "gta5"];
+
+/// A built-in profile as the app ships it.
+pub fn builtin_profile(id: &str) -> Option<Profile> {
+    let gta_areas = || {
+        vec![
+            Area {
+                id: "subtitles".into(),
+                name: "Subtitles".into(),
+                centered_only: true,
+                x: 0.10,
+                y: 0.78,
+                w: 0.80,
+                h: 0.17,
+                placement: "above".into(),
+                text_pos: "bottom-center".into(),
+                background: "none".into(),
+                font_family: "Tajawal".into(),
+                // matched size × 104% looks the same as GTA's subtitles (calibrated on real frames)
+                font_scale: 1.04,
+                ..Area::default()
+            },
+            Area {
+                id: "help".into(),
+                name: "Instructions (top left)".into(),
+                x: 0.01,
+                y: 0.02,
+                w: 0.30,
+                h: 0.22,
+                // right under GTA's own box: same left edge, at most its width, growing downward
+                placement: "under_text".into(),
+                text_pos: "top-left".into(),
+                font_family: "Tajawal".into(),
+                // square, dark see-through box like GTA's own instructions box
+                background: "game".into(),
+                // matched size × 92% looks the same as GTA's instruction text
+                font_scale: 0.92,
+                ..Area::default()
+            },
+        ]
+    };
+    match id {
+        "gta5" => Some(Profile { id: "gta5".into(), name: "Grand Theft Auto V".into(), game: "gta5".into(), areas: gta_areas(), style: Style::default(), pages: ProfileOpts::default() }),
+        // GTA VI starts from GTA V's areas; layout updates from the server tune it once the game is out.
+        // Its own pages aren't known yet: none are recognised.
+        "gta6" => Some(Profile {
+            id: "gta6".into(),
+            name: "Grand Theft Auto VI".into(),
+            game: "gta6".into(),
+            areas: gta_areas(),
+            style: Style::default(),
+            pages: ProfileOpts { mission_failed: false, pause_menu: false, captions: false, ..ProfileOpts::default() },
+        }),
+        _ => None,
+    }
 }
 
 /// Options for the game profile's special screens.
@@ -248,43 +341,14 @@ impl Default for Config {
             preview_fps: 30,
             debug_save_frames: false,
             debug_frame_interval_ms: 1000,
-            profile: "gta5".into(),
-            profile_opts: ProfileOpts::default(),
-            areas: vec![
-                Area {
-                    id: "subtitles".into(),
-                    name: "Subtitles".into(),
-                    centered_only: true,
-                    x: 0.10,
-                    y: 0.78,
-                    w: 0.80,
-                    h: 0.17,
-                    placement: "above".into(),
-                    text_pos: "bottom-center".into(),
-                    background: "none".into(),
-                    font_family: "Tajawal".into(),
-                    // matched size × 104% looks the same as GTA's subtitles (calibrated on real frames)
-                    font_scale: 1.04,
-                    ..Area::default()
-                },
-                Area {
-                    id: "help".into(),
-                    name: "Instructions (top left)".into(),
-                    x: 0.01,
-                    y: 0.02,
-                    w: 0.30,
-                    h: 0.22,
-                    // right under GTA's own box: same left edge, at most its width, growing downward
-                    placement: "under_text".into(),
-                    text_pos: "top-left".into(),
-                    font_family: "Tajawal".into(),
-                    // square, dark see-through box like GTA's own instructions box
-                    background: "game".into(),
-                    // matched size × 92% looks the same as GTA's instruction text
-                    font_scale: 0.92,
-                    ..Area::default()
-                },
-            ],
+            profile: "gta6".into(),
+            profiles: Vec::new(),
+            builtins: BUILTINS.iter().filter_map(|id| builtin_profile(id)).collect(),
+            // 0 here too: a settings file from before profiles has no such field and takes this
+            // value, which is what tells `normalize` to move its setup into a profile
+            profiles_version: 0,
+            profile_opts: builtin_profile("gta6").expect("built-in").pages,
+            areas: builtin_profile("gta6").expect("built-in").areas,
             style: Style::default(),
         }
     }
@@ -292,10 +356,87 @@ impl Default for Config {
 
 impl Config {
     pub fn load(path: &PathBuf) -> Self {
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        let mut c: Self = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        c.normalize();
+        c
+    }
+
+    /// The game the profile in use is for ("gta5" | "gta6").
+    pub fn game(&self) -> String {
+        if BUILTINS.contains(&self.profile.as_str()) {
+            return self.profile.clone();
+        }
+        self.profiles.iter().find(|p| p.id == self.profile).map(|p| p.game.clone()).unwrap_or_else(|| "gta5".into())
+    }
+
+    /// Keep the profiles consistent (after loading, and after the window saves):
+    ///  - every built-in profile is there;
+    ///  - the setup from before profiles becomes the player's own profile "My GTA V" if it differs
+    ///    from the built-in one (nothing they tuned is lost);
+    ///  - the profile in use exists, and the settings the app reads (areas, style, game pages) are
+    ///    that profile's: a built-in one exactly as it is (it can't be changed), one of the
+    ///    player's as they last saved it.
+    pub fn normalize(&mut self) {
+        for id in BUILTINS {
+            if !self.builtins.iter().any(|p| p.id == id) {
+                self.builtins.push(builtin_profile(id).expect("built-in"));
+            }
+        }
+        self.builtins.retain(|p| BUILTINS.contains(&p.id.as_str()));
+        for p in self.builtins.iter_mut() {
+            p.game = p.id.clone();
+            if let Some(d) = builtin_profile(&p.id) {
+                p.name = d.name; // (built-in names aren't the player's to change)
+            }
+        }
+        // (only a file from before profiles: no profiles of the player's yet, a built-in or "none" in use)
+        let before_profiles = self.profiles.is_empty() && (BUILTINS.contains(&self.profile.as_str()) || self.profile == "none");
+        if self.profiles_version == 0 && !before_profiles {
+            self.profiles_version = 1;
+        }
+        if self.profiles_version == 0 {
+            self.profiles_version = 1;
+            // compared with the built-in profile it was using (GTA V before profiles; a new install: GTA VI)
+            let base_id = if BUILTINS.contains(&self.profile.as_str()) { self.profile.clone() } else { "gta5".to_string() };
+            let base = self.builtins.iter().find(|p| p.id == base_id).cloned().expect("built-in");
+            let mine = Profile {
+                id: "custom-1".into(),
+                name: if base.id == "gta6" { "My GTA VI".into() } else { "My GTA V".into() },
+                game: base.id.clone(),
+                areas: self.areas.clone(),
+                style: self.style.clone(),
+                // "none" (no game pages) before profiles: keep them off
+                pages: if self.profile == "none" { ProfileOpts { mission_failed: false, pause_menu: false, captions: false, ..self.profile_opts.clone() } } else { self.profile_opts.clone() },
+            };
+            if self.profile == "none" || !(same_json(&mine.areas, &base.areas) && same_json(&mine.style, &base.style) && same_json(&mine.pages, &base.pages)) {
+                self.profile = mine.id.clone();
+                self.profiles.push(mine);
+            } else {
+                self.profile = base.id;
+            }
+        }
+        // ids are unique; names are never empty
+        let mut seen = std::collections::HashSet::new();
+        self.profiles.retain(|p| !BUILTINS.contains(&p.id.as_str()) && !p.id.is_empty() && seen.insert(p.id.clone()));
+        for p in self.profiles.iter_mut() {
+            if p.name.trim().is_empty() {
+                p.name = "My profile".into();
+            }
+            if !BUILTINS.contains(&p.game.as_str()) {
+                p.game = "gta5".into();
+            }
+        }
+        let active = self
+            .builtins
+            .iter()
+            .chain(self.profiles.iter())
+            .find(|p| p.id == self.profile)
+            .cloned()
+            .unwrap_or_else(|| self.builtins.iter().find(|p| p.id == "gta6").cloned().expect("built-in"));
+        self.profile = active.id.clone();
+        self.areas = active.areas;
+        self.style = active.style;
+        self.profile_opts = active.pages;
     }
 
     pub fn save(&self, path: &PathBuf) -> anyhow::Result<()> {
@@ -304,5 +445,99 @@ impl Config {
         }
         std::fs::write(path, serde_json::to_string_pretty(self)?)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    /// A settings file from before profiles, with the given areas.
+    fn old_settings(areas: Vec<Area>, profile: &str) -> Config {
+        let mut c = Config::default();
+        c.profiles_version = 0;
+        c.profiles.clear();
+        c.builtins.clear();
+        c.profile = profile.into();
+        c.areas = areas;
+        c.profile_opts = ProfileOpts::default();
+        c
+    }
+
+    #[test]
+    fn a_new_install_starts_on_the_built_in_gta_vi() {
+        let mut c = Config::default();
+        c.normalize();
+        assert_eq!(c.profile, "gta6");
+        assert!(c.profiles.is_empty(), "no copy is made for a new install");
+        // and loading a file saved by it doesn't make one later either
+        let mut again: Config = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        again.normalize();
+        assert!(again.profiles.is_empty());
+    }
+
+    #[test]
+    fn a_settings_file_from_before_profiles_is_moved_over() {
+        // (no "profiles_version" in it: it must count as 0)
+        let mut c: Config = serde_json::from_str(r#"{"profile":"gta5","areas":[{"id":"subtitles","name":"Subtitles","y":0.5}]}"#).unwrap();
+        c.normalize();
+        assert_eq!(c.profile, "custom-1");
+        assert_eq!(c.areas[0].y, 0.5);
+    }
+
+    #[test]
+    fn an_old_setup_that_was_changed_becomes_the_players_own_profile() {
+        let mut moved = builtin_profile("gta5").unwrap().areas;
+        moved[0].y = 0.5; // the player had moved the subtitles area
+        let mut c = old_settings(moved, "gta5");
+        c.normalize();
+        assert_eq!(c.profile, "custom-1");
+        assert_eq!(c.profiles[0].name, "My GTA V");
+        assert_eq!(c.profiles[0].game, "gta5");
+        assert_eq!(c.areas[0].y, 0.5, "nothing tuned is lost");
+        assert_eq!(c.game(), "gta5", "a copy keeps its game (pages, shared lines)");
+        assert_eq!(c.builtins.len(), BUILTINS.len());
+    }
+
+    #[test]
+    fn an_old_setup_like_the_built_in_one_just_uses_it() {
+        let mut c = old_settings(builtin_profile("gta5").unwrap().areas, "gta5");
+        c.normalize();
+        assert_eq!(c.profile, "gta5");
+        assert!(c.profiles.is_empty());
+    }
+
+    #[test]
+    fn a_built_in_profile_cant_be_changed() {
+        let mut c = Config::default();
+        c.profile = "gta5".into();
+        c.normalize();
+        // the window sends changed areas while a built-in profile is in use: they don't stick
+        c.areas[0].x = 0.9;
+        c.style.font_size = 99.0;
+        c.normalize();
+        assert_eq!(c.areas[0].x, builtin_profile("gta5").unwrap().areas[0].x);
+        assert_eq!(c.style.font_size, Style::default().font_size);
+        // the built-in itself can't be renamed or made another game's either
+        c.builtins[0].name = "Mine".into();
+        c.builtins[0].game = "x".into();
+        c.normalize();
+        assert!(c.builtins.iter().all(|p| p.game == p.id && builtin_profile(&p.id).unwrap().name == p.name));
+    }
+
+    #[test]
+    fn the_players_profile_keeps_their_changes_and_a_missing_one_falls_back() {
+        let mut c = Config::default();
+        let mut mine = builtin_profile("gta5").unwrap();
+        mine.id = "custom-x".into();
+        mine.name = "Mine".into();
+        mine.areas[0].h = 0.3;
+        c.profiles.push(mine);
+        c.profile = "custom-x".into();
+        c.normalize();
+        assert_eq!(c.areas[0].h, 0.3);
+        c.profile = "gone".into();
+        c.normalize();
+        assert_eq!(c.profile, "gta6", "an unknown profile falls back to a built-in one");
     }
 }
