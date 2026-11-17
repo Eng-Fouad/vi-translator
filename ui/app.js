@@ -1409,6 +1409,8 @@ function lockControls() {
   document.querySelectorAll("#tab-areas, #tab-style, #tab-pages").forEach((tab) =>
     tab.querySelectorAll("input, select, textarea, button:not([data-copy])").forEach((el) => { el.disabled = on; }));
   $("add-area").disabled = on;
+  // (its boxes can't be moved or resized, so the hint about doing that is gone too)
+  $("drag-hint").hidden = on;
 }
 
 (async function init() {
