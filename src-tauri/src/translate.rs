@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use ort::session::Session;
@@ -24,6 +24,64 @@ pub type Segments = Vec<(String, Option<String>)>;
 
 const MODEL_FILES: [&str; 4] =
     ["onnx/encoder_model_quantized.onnx", "onnx/decoder_model_quantized.onnx", "tokenizer.json", "config.json"];
+
+/// Each offline model at a fixed version (its commit), and the SHA-256 of its two model files: a
+/// download is what was tested, or it isn't used. (The tokenizer and config are small text files,
+/// fixed by the commit.) From the Hugging Face API; every language with a `local` model has one.
+const PINNED: [(&str, &str, [&str; 2]); 8] = [
+    ("Xenova/opus-mt-en-ar", "034a684356c19021a187cda4d7f823298b913921", ["53c354d87ced44b39085fe8a46a25f09ea4578d442dbce9663f3977228f8a04e", "94e6bdf90866151787d014b7b77be0adb0f036418ee04d235ec01238aa8426b9"]),
+    ("Xenova/opus-mt-en-hi", "7aad72006a1588a9c3485ed6203aed99eebbc872", ["3045cd6eaf06db96cff853204d6f0ffeb0c5af238a4f5a87a19fcaa94f7493c4", "f563f658721046b17aa3f3ec33d12efdb1497c962876ff7d7a5ca513f6b49f4e"]),
+    ("Xenova/opus-mt-en-id", "b3b41f654c2fb3286d007dee1da7b0f47fd27d82", ["9bfc9cf0f400f86ec11da24b2f56380fcfabab17fb2dbcf7bb4c1754b7076e24", "d46dea5d13bec5ed7552baa5c0917e0d3dfa32e14fb7f09eae534c50d0cfb42f"]),
+    ("Xenova/opus-mt-en-vi", "30bcd461c0d7338ad106b36314d3eedc2d4e998c", ["dfcd7a32be3fdd21cbcf5d354520d626f1768fd6e205ca62a6a11a4641d31f36", "cde3e02aaca72cfaf2267f6c31c4dcc1b323d769bf90c273f2a1c1d56198ddba"]),
+    ("Xenova/opus-mt-en-uk", "e6ca587292984b343fd829b6430ed55858496525", ["234c3738c258b3b7c913452a4ab6203b1a24f459355af8ef563dd4d94792d087", "60881867e00ee1c5ef5fb79cde3a52e5d76437199731cd6896b1cd948bb3ea29"]),
+    ("Xenova/opus-mt-en-nl", "c3a0541231a7329b4492809fc2bd7ab7d2ceb0bc", ["0febb990f8ca8ed9fd3e0017dfcb55ec5293999f20ead81d2bb4370e9e3120ff", "e9d1474106c1bdf8aaf236eb7ace8a29edf6fee655c583132f521e5b63ccbf97"]),
+    ("Xenova/opus-mt-en-ro", "3d816891778276930df2a45cbfb70689b3fe8981", ["843d42689aeba847c71e88863d9d6fbba43cac21d115f375e90afc9922ceadc6", "750ae52709f955bc95aec9cf7a4ea3d9e5525fc164e58b36a3a6424bfafd921f"]),
+    ("Xenova/opus-mt-en-cs", "ed163ca109a93297e2f055eb3397bd33230141ad", ["5ca546c92abb310fc14e5dcfc421252a83b1595ca91d117cac9afda7ab7d7c38", "d6b2a757e26d10cc8f1a290174ab6655c623eeb11bdf71bdf44429f30a1cc164"]),
+];
+
+/// The SHA-256 of a file, in hex.
+fn file_sha256(path: &Path) -> Result<String> {
+    use sha2::Digest as _;
+    let mut h = sha2::Sha256::new();
+    std::io::copy(&mut std::fs::File::open(path)?, &mut h)?;
+    Ok(format!("{:x}", h.finalize()))
+}
+
+/// Download one model file at the pinned commit into `path` (through `path.part`, which a cut-off
+/// download goes on from next time), checking its SHA-256 when it has one.
+fn download_model_file(http: &reqwest::blocking::Client, repo: &str, rev: &str, f: &str, path: &Path, sha: Option<&str>) -> Result<()> {
+    use std::io::Write as _;
+    let part = path.with_extension("part");
+    let have = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+    let mut req = http.get(format!("https://huggingface.co/{repo}/resolve/{rev}/{f}")).timeout(Duration::from_secs(600));
+    if have > 0 && sha.is_some() {
+        req = req.header(reqwest::header::RANGE, format!("bytes={have}-"));
+    }
+    let mut resp = req.send().with_context(|| format!("download {f}"))?;
+    let status = resp.status();
+    if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+        // (the part is whole already: checked below)
+    } else {
+        let mut resp_ok = resp.error_for_status_ref().map(|_| ()).with_context(|| format!("download {f}"));
+        if resp_ok.is_ok() {
+            // 206: the rest, after what's there; 200: the whole file again
+            let append = status == reqwest::StatusCode::PARTIAL_CONTENT;
+            let mut file = std::fs::OpenOptions::new().create(true).write(true).append(append).truncate(!append).open(&part)?;
+            resp_ok = resp.copy_to(&mut file).map(|_| ()).with_context(|| format!("download {f}"));
+            file.flush()?;
+            file.sync_all()?;
+        }
+        resp_ok?;
+    }
+    if let Some(want) = sha {
+        if file_sha256(&part)? != want {
+            let _ = std::fs::remove_file(&part);
+            bail!("download {f}: the file isn't the one expected (it will be downloaded again)");
+        }
+    }
+    std::fs::rename(&part, path)?;
+    Ok(())
+}
 
 /// ONNX Runtime allows one environment per process; create it once and keep it for the app's lifetime.
 fn ort_env() -> Result<&'static ort::environment::Environment> {
@@ -52,24 +110,16 @@ impl LocalMt {
         let repo = lang.local.ok_or_else(|| {
             anyhow!("There is no free offline model for {}: choose another translation service in the Translator tab.", lang.name)
         })?;
-        for f in MODEL_FILES {
+        let (rev, sums) = PINNED.iter().find(|p| p.0 == repo).map(|p| (p.1, p.2)).ok_or_else(|| anyhow!("no fixed version of {repo}"))?;
+        for (i, f) in MODEL_FILES.iter().enumerate() {
             let path = dir.join(f);
+            // (files already here were downloaded before: used as they are)
             if path.exists() {
                 continue;
             }
             status(format!("Downloading the free translation model: {f} ..."));
             std::fs::create_dir_all(path.parent().unwrap())?;
-            let mut resp = http
-                .get(format!("https://huggingface.co/{repo}/resolve/main/{f}"))
-                .timeout(Duration::from_secs(600))
-                .send()?
-                .error_for_status()
-                .with_context(|| format!("download {f}"))?;
-            let part = path.with_extension("part");
-            let mut file = std::fs::File::create(&part)?;
-            resp.copy_to(&mut file)?;
-            drop(file);
-            std::fs::rename(&part, &path)?;
+            download_model_file(http, repo, rev, f, &path, sums.get(i).copied())?;
         }
         status("Loading the translation model ...".into());
         // This export has an empty "Precompiled" normalizer, which the Rust tokenizer rejects; drop it.
@@ -169,6 +219,8 @@ pub struct Translator {
     history: VecDeque<(String, String)>,
     pub cost_usd: f64,
     pub lines: u64,
+    /// the offline model failed to download or load, when and why: not tried again on every line
+    local_failed: Option<(Instant, String)>,
 }
 
 impl Translator {
@@ -178,7 +230,7 @@ impl Translator {
             .timeout(Duration::from_secs(20))
             .build()
             .expect("http client");
-        Self { http, model_dir, local: None, cache: HashMap::new(), phrase_words: HashMap::new(), lang: String::new(), history: VecDeque::new(), cost_usd: 0.0, lines: 0 }
+        Self { http, model_dir, local: None, cache: HashMap::new(), phrase_words: HashMap::new(), lang: String::new(), history: VecDeque::new(), cost_usd: 0.0, lines: 0, local_failed: None }
     }
 
     /// `line` may contain button-icon placeholders "⟦n⟧" (see `ocr::text_with_icons`); `icons[n-1]` is
@@ -198,6 +250,7 @@ impl Translator {
         if self.lang != cfg.target_lang {
             self.lang = cfg.target_lang.clone();
             self.local = None;
+            self.local_failed = None;
             self.phrase_words.clear();
             self.history.clear();
         }
@@ -245,8 +298,7 @@ impl Translator {
         if let Some(s) = self.cache.get(&key) {
             return Ok(s.clone());
         }
-        // GTA V profile: the game's common instructions have exact, hand-written Arabic.
-        // (and any game's phrases from its layout update)
+        // The game's common instructions: exact, hand-written translations from its layout update.
         if let Some(segs) = crate::phrasebook::find(&cfg.game(), &cfg.target_lang, line, icons) {
             self.lines += 1;
             self.cache.insert(key, segs.clone());
@@ -372,10 +424,29 @@ impl Translator {
         match cfg.engine.as_str() {
             "local" => {
                 if self.local.is_none() {
+                    // (a download that failed is tried again after a while, not on every line)
+                    const RETRY: Duration = Duration::from_secs(180);
+                    if let Some((at, err)) = &self.local_failed {
+                        let waited = at.elapsed();
+                        if waited < RETRY {
+                            bail!("{err} (trying again in {} s)", (RETRY - waited).as_secs() + 1);
+                        }
+                    }
                     let lang = crate::langs::get(&cfg.target_lang);
                     // (Arabic's model stays where it always was; the others get their own folder)
                     let dir = if lang.code == "ar" { self.model_dir.clone() } else { self.model_dir.join(lang.code) };
-                    self.local = Some(LocalMt::load(&dir, lang, &self.http, status)?);
+                    match LocalMt::load(&dir, lang, &self.http, status) {
+                        Ok(mt) => {
+                            self.local = Some(mt);
+                            self.local_failed = None;
+                        }
+                        Err(e) => {
+                            if lang.local.is_some() {
+                                self.local_failed = Some((Instant::now(), format!("{e:#}")));
+                            }
+                            return Err(e);
+                        }
+                    }
                     status("Free local translator ready.".into());
                 }
                 let mt = self.local.as_mut().unwrap();
@@ -875,6 +946,17 @@ pub fn protect_terms(line: &str) -> (String, Vec<String>) {
 
 #[cfg(test)]
 mod term_tests {
+    #[test]
+    fn every_offline_model_has_a_fixed_version() {
+        for l in crate::langs::LANGS.iter() {
+            if let Some(repo) = l.local {
+                let row = super::PINNED.iter().find(|p| p.0 == repo).unwrap_or_else(|| panic!("{repo} has no fixed version"));
+                assert!(row.1.len() == 40 && row.1.bytes().all(|b| b.is_ascii_hexdigit()), "{repo}");
+                assert!(row.2.iter().all(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())), "{repo}");
+            }
+        }
+    }
+
     use super::protect_terms as p;
     #[test]
     fn game_terms_are_kept() {

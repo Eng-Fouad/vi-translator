@@ -115,7 +115,7 @@ function sampleSegments() {
     .filter((s) => s[0]);
 }
 
-// Profile page currently on screen (e.g. GTA V "Mission Failed") and its Arabic reason line.
+// Game page currently on screen (a menu, a "mission failed" page …) and its translated reason line.
 const screen = { layout: null, reason: [] };
 
 function drawLayer() {
@@ -184,6 +184,28 @@ function addHandles(el, area, kind) {
   }
 }
 
+/**
+ * A yes / no question in the page (window.confirm does nothing in the macOS webview): resolves true
+ * when `okLabel` is clicked, false on Cancel or Esc.
+ */
+function ask(text, okLabel) {
+  return new Promise((resolve) => {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<p></p><div class="row"><button class="btn" data-no></button><button class="btn danger" data-ok></button></div>`;
+    d.querySelector("p").textContent = text;
+    d.querySelector("[data-ok]").textContent = okLabel;
+    d.querySelector("[data-no]").textContent = t("Cancel");
+    const done = (v) => { d.close(); d.remove(); resolve(v); };
+    d.querySelector("[data-ok]").addEventListener("click", () => done(true));
+    d.querySelector("[data-no]").addEventListener("click", () => done(false));
+    d.addEventListener("cancel", (e) => { e.preventDefault(); done(false); }); // Esc
+    document.body.appendChild(d);
+    d.showModal();
+    d.querySelector("[data-no]").focus();
+  });
+}
+
 // Turn a preset placement into a custom region at the same spot, so dragging starts from where it is.
 function toCustom(area) {
   if (area.placement === "custom") return;
@@ -203,13 +225,23 @@ function startDrag(e, area, mode, kind = "read") {
   e.stopPropagation();
   if (locked()) return; // a built-in profile: copy it to move its areas
   selected = area.id;
-  if (kind === "out") toCustom(area);
   renderAreas();
   const K = kind === "out" ? { x: "out_x", y: "out_y", w: "out_w", h: "out_h" } : { x: "x", y: "y", w: "w", h: "h" };
   const start = { mx: e.clientX, my: e.clientY, x: area[K.x], y: area[K.y], w: area[K.w], h: area[K.h] };
   const min = 0.02;
   let raf = 0;
+  let moved = false;
   const move = (ev) => {
+    if (!moved) {
+      // (a plain click only selects; a translation region turns into a custom one when it's dragged)
+      if (Math.abs(ev.clientX - start.mx) + Math.abs(ev.clientY - start.my) < 4) return;
+      moved = true;
+      if (kind === "out") {
+        toCustom(area);
+        Object.assign(start, { x: area[K.x], y: area[K.y], w: area[K.w], h: area[K.h] });
+        renderAreas();
+      }
+    }
     const dx = (ev.clientX - start.mx) / shown.w;
     const dy = (ev.clientY - start.my) / shown.h;
     let { x, y, w, h } = start;
@@ -229,7 +261,7 @@ function startDrag(e, area, mode, kind = "read") {
   const up = () => {
     window.removeEventListener("mousemove", move);
     window.removeEventListener("mouseup", up);
-    save();
+    if (moved) save();
   };
   window.addEventListener("mousemove", move);
   window.addEventListener("mouseup", up);
@@ -298,7 +330,11 @@ function renderObs() {
   $("obs_password").value = cfg.obs_password;
   $("obs-url").value = `http://127.0.0.1:${cfg.obs_page_port}/obs`;
 }
-$("obs_port").addEventListener("input", (e) => { cfg.obs_port = parseInt(e.target.value, 10) || 4455; save(false); });
+$("obs_port").addEventListener("input", (e) => {
+  const v = parseInt(e.target.value, 10);
+  cfg.obs_port = v >= 1 && v <= 65535 ? v : 4455;
+  save(false);
+});
 $("obs_password").addEventListener("input", (e) => { cfg.obs_password = e.target.value; save(false); });
 $("obs-connect").addEventListener("click", () => { $("obs-status").textContent = t("Connecting ..."); $("refresh-windows").click(); });
 // Enter in the password box = connect
@@ -335,7 +371,12 @@ async function updateLan() {
   if (!cfg.lan_page) { box.textContent = t("Off. Turn it on to read the live translations on another device on your home network."); return; }
   try {
     const i = await invoke("lan_info");
-    if (!i.url) { box.textContent = t("Starting… If Windows asks, allow the app on private networks."); return; }
+    if (!i.url) {
+      box.textContent = i.error
+        ? t("The page couldn't start ({error}). Another program may be using this port.", { error: i.error })
+        : t("Starting… If Windows asks, allow the app on private networks.");
+      return;
+    }
     box.innerHTML = `<div>${AS.esc(t("Open this address on a phone, tablet or computer on the same Wi-Fi:"))}</div>
       <a href="#" class="lan-url" dir="ltr" title="${AS.esc(t("Open in your browser"))}">${AS.esc(i.url)}</a>
       <div class="lan-qr">${i.qr || ""}</div>`;
@@ -503,11 +544,11 @@ function renderAreas() {
       </div>
       <div class="row field inline-label">
         <label>${t("Font")}</label>
-        <select class="ff grow" style="font-family:'${AS.esc(a.font_family || cfg.style.font_family)}'">${fontOptions(a.font_family, t("Main font ({font})", { font: cfg.style.font_family }))}</select>
+        <select class="ff grow">${fontOptions(a.font_family, t("Main font ({font})", { font: cfg.style.font_family }))}</select>
       </div>
       <div class="row field inline-label">
         <label>${t("Background")}</label>
-        <select class="bgm grow">${[["", "Main style (Translation text tab)"], ["none", "None — outlined text, like game subtitles"], ["game", "Game-style dark box"]]
+        <select class="bgm grow">${[["", "Main style (Text style tab)"], ["none", "None — outlined text, like game subtitles"], ["game", "Game-style dark box"]]
           .map(([v, txt]) => `<option value="${v}" ${(a.background || "") === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select>
       </div>
       <label class="check"><input type="checkbox" class="ms" ${a.match_size !== false ? "checked" : ""}/> ${t("Match the game's text size")}</label>
@@ -553,9 +594,12 @@ function renderAreas() {
     c.querySelector(".bgm").addEventListener("change", (e) => { a.background = e.target.value; save(); });
     c.querySelector(".ms").addEventListener("change", (e) => { a.match_size = e.target.checked; renderAreas(); save(); });
     c.querySelector(".co").addEventListener("change", (e) => { a.centered_only = e.target.checked; save(); });
-    c.querySelector(".ff").addEventListener("change", (e) => {
+    const ff = c.querySelector(".ff");
+    paintFonts(ff);
+    ff.style.fontFamily = fontCss(a.font_family || cfg.style.font_family);
+    ff.addEventListener("change", (e) => {
       a.font_family = e.target.value;
-      e.target.style.fontFamily = `'${a.font_family || cfg.style.font_family}'`;
+      e.target.style.fontFamily = fontCss(a.font_family || cfg.style.font_family);
       save();
     });
     c.querySelector(".fs").addEventListener("input", (e) => {
@@ -564,8 +608,8 @@ function renderAreas() {
       save();
     });
     bindPosGrid(c, a, { x: "x", y: "y", w: "w", h: "h" }, "n");
-    c.querySelector(".del").addEventListener("click", () => {
-      if (!confirm(t('Delete the read area "{name}"?', { name: a.name }))) return;
+    c.querySelector(".del").addEventListener("click", async () => {
+      if (!(await ask(t('Delete the read area "{name}"?', { name: a.name }), t("Delete")))) return;
       cfg.areas = cfg.areas.filter((x) => x !== a);
       delete lastSegs[a.id];
       renderAreas();
@@ -616,10 +660,19 @@ const BUNDLED_FONTS = [
   { name: "Tajawal", note: "clean text" },
 ];
 
-// <option>s for a font <select>; each name is drawn in its own font. `defaultLabel` adds a "use main font" choice.
+/** A font name as a CSS font-family value (a quoted string): for `el.style.fontFamily` only. */
+const fontCss = (name) => JSON.stringify(String(name || ""));
+
+/** Draw each font <option> of a select in its own font (see fontOptions). */
+function paintFonts(sel) {
+  for (const o of sel.querySelectorAll("option")) if (o.value) o.style.fontFamily = fontCss(o.value);
+}
+
+// <option>s for a font <select> (then `paintFonts` draws each name in its own font). `defaultLabel`
+// adds a "use main font" choice.
 function fontOptions(current, defaultLabel) {
   const opt = (f) =>
-    `<option value="${AS.esc(f.name)}" style="font-family:'${AS.esc(f.name)}'" ${f.name === current ? "selected" : ""}>${AS.esc(f.name)}${f.note ? ` — ${AS.esc(t(f.note))}` : ""}</option>`;
+    `<option value="${AS.esc(f.name)}" ${f.name === current ? "selected" : ""}>${AS.esc(f.name)}${f.note ? ` — ${AS.esc(t(f.note))}` : ""}</option>`;
   let html = defaultLabel ? `<option value="" ${current ? "" : "selected"}>${AS.esc(defaultLabel)}</option>` : "";
   const isBundled = (n) => BUNDLED_FONTS.some((b) => b.name === n);
   if (current && !isBundled(current) && !FONT_LIST.some((f) => f.name === current)) {
@@ -664,13 +717,14 @@ function renderStyleForm() {
       f.innerHTML = `<label>${t(label)}</label><select class="grow">${fontOptions(s.font_family)}</select>
         <div class="muted small" style="margin:4px 0 0">${t("{n} installed fonts can write {language} (listed first). Each read area can also use its own font.", { n: FONT_LIST.filter(fitsLang).length, language: langNative() })}</div>`;
       const sel = f.querySelector("select");
-      const showFont = () => (sel.style.fontFamily = `'${sel.value}', 'Segoe UI'`);
+      paintFonts(sel);
+      const showFont = () => (sel.style.fontFamily = `${fontCss(sel.value)}, 'Segoe UI'`);
       showFont();
       sel.addEventListener("change", () => { showFont(); setStyle(key, sel.value); renderAreas(); });
     } else if (type === "size") {
       // slider + exact number, kept in sync
-      f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" />
-        <input type="number" min="${min}" max="${max}" step="${step}" value="${s[key]}" style="width:72px" /><span class="val" style="min-width:18px">px</span></div>`;
+      f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${AS.esc(s[key])}" />
+        <input type="number" min="${min}" max="${max}" step="${step}" value="${AS.esc(s[key])}" style="width:72px" /><span class="val" style="min-width:18px">px</span></div>`;
       const [range, num] = f.querySelectorAll("input");
       range.addEventListener("input", () => { num.value = range.value; setStyle(key, Number(range.value)); });
       num.addEventListener("change", () => {
@@ -679,11 +733,11 @@ function renderStyleForm() {
         setStyle(key, v);
       });
     } else if (type === "color") {
-      f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="color" value="${s[key]}" /><span class="val">${s[key]}</span></div>`;
+      f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="color" value="${AS.esc(s[key])}" /><span class="val">${AS.esc(s[key])}</span></div>`;
       f.querySelector("input").addEventListener("input", (e) => { f.querySelector(".val").textContent = e.target.value; setStyle(key, e.target.value); });
     } else {
       const fmt = (v) => (step < 1 ? Number(v).toFixed(2) : String(v));
-      f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${s[key]}" /><span class="val">${fmt(s[key])}</span></div>`;
+      f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${AS.esc(s[key])}" /><span class="val">${AS.esc(fmt(s[key]))}</span></div>`;
       f.querySelector("input").addEventListener("input", (e) => { f.querySelector(".val").textContent = fmt(e.target.value); setStyle(key, Number(e.target.value)); });
     }
     form.appendChild(f);
@@ -788,7 +842,7 @@ function renderMemory() {
   $("early-pages").addEventListener("change", (e) => { cfg.early_pages = e.target.checked; save(false); });
   $("mem-open").addEventListener("click", () => invoke("memory_open_folder").catch((e) => log({ error: String(e) })));
   $("mem-clear").addEventListener("click", async () => {
-    if (!confirm(t("Forget all remembered translations?"))) return;
+    if (!(await ask(t("Forget all remembered translations?"), t("Clear memory")))) return;
     await invoke("memory_clear");
     updateMemory();
   });
@@ -891,7 +945,7 @@ function log(ev) {
     el.innerHTML = `<div class="meta">${time} · ${AS.esc(ev.info)}</div>`;
   } else {
     const ar = AS.segHtml(ev.segments);
-    const where = area?.name ?? (ev.area === "__screen_reason" ? t("Mission Failed reason") : ev.area);
+    const where = area?.name ?? (ev.area === "__screen_reason" ? t("Game page text") : ev.area);
     el.innerHTML = `<div class="head"><span class="when" title="${AS.esc(when.toLocaleString(I18N.lang))}">${time}</span><span class="en" dir="ltr">${AS.esc(ev.en)}</span></div><div class="ar" dir="auto">${ar}</div><div class="meta">${AS.esc(where)}${ev.stats ? ` · ${AS.esc(ev.stats)}` : ""}</div>`;
   }
   const box = $("log");
@@ -1046,7 +1100,12 @@ async function pullPreview(url, run) {
     try {
       const r = await fetch(`${url}?after=${seq}`, { cache: "no-store" });
       if (run !== pullRun) break;
-      if (r.status !== 200) continue; // 204: no new frame for a second (still picture, or window hidden)
+      // 204: no new frame for a second (still picture, or window hidden); anything else is wrong
+      // (another program on the port?): wait a moment rather than asking again at once
+      if (r.status !== 200) {
+        if (r.status !== 204) await new Promise((res) => setTimeout(res, 1000));
+        continue;
+      }
       seq = Number(r.headers.get("X-Seq")) || 0;
       if (r.headers.get("Content-Type") === "application/x-yuy2") {
         const w = Number(r.headers.get("X-Width"));
@@ -1079,7 +1138,7 @@ async function pullPreview(url, run) {
   }
 }
 listen("frame", (e) => {
-  const f = e.payload;
+  const f = { ...e.payload, status: I18N.tMsg(e.payload.status) };
   const pill = $("status");
   $("status-text").textContent = f.status || "…";
   pill.title = f.status || "";
@@ -1111,6 +1170,7 @@ listen("frame", (e) => {
 });
 
 listen("translation", (e) => {
+  if (!cfg) return; // (before the settings are loaded: right after a reload)
   const ev = e.payload;
   if (ev.error) return log(ev);
   if (ev.area === "__screen_reason") {
@@ -1125,18 +1185,29 @@ listen("translation", (e) => {
   if (ev.segments.length && cfg.live_translations !== false) log(ev);
   drawLayer();
 });
-listen("status-msg", (e) => log({ info: e.payload }));
+listen("status-msg", (e) => log({ info: I18N.tMsg(e.payload) }));
+// A new pages script was saved (a layout update, test versions turned on or off): Game pages asks again.
+listen("pages", () => {
+  for (const k of Object.keys(pageScripts)) delete pageScripts[k];
+  if (cfg) renderPages();
+});
 // The app changed the built-in profiles (a layout update, a game the server added): take those
 // (the rest of the settings are the window's own, being edited here), and ask the pages again.
 listen("config", (e) => {
   if (!cfg) return;
   const now = e.payload;
   // (every save comes back here too: only a real change does anything)
-  if (JSON.stringify(now.layout_versions) !== JSON.stringify(cfg.layout_versions)) for (const k of Object.keys(pageScripts)) delete pageScripts[k];
+  const newLayout = JSON.stringify(now.layout_versions) !== JSON.stringify(cfg.layout_versions);
+  if (newLayout) for (const k of Object.keys(pageScripts)) delete pageScripts[k];
   const changed = JSON.stringify(now.builtins) !== JSON.stringify(cfg.builtins);
-  Object.assign(cfg, { builtins: now.builtins, server_games: now.server_games, games_version: now.games_version, layout_versions: now.layout_versions, game_profiles: now.game_profiles });
+  // (a switch the app made by itself is a newer profile_rev; any other differing profile is an older
+  // event, from before a change made here, and the window's own choice stays)
+  const appSwitched = now.profile_rev !== cfg.profile_rev;
+  // (only these: the event carries no secrets — the keys are blank in it — and the window's own
+  // settings stay as the window has them; taking the whole payload would wipe the keys at the next save)
+  Object.assign(cfg, { builtins: now.builtins, server_games: now.server_games, games_version: now.games_version, layout_versions: now.layout_versions, game_profiles: now.game_profiles, profile_rev: now.profile_rev });
   // the app switched games (the picture showed another one)
-  if (now.profile !== cfg.profile) {
+  if (appSwitched && now.profile !== cfg.profile) {
     syncProfile();
     Object.assign(cfg, { profile: now.profile, areas: now.areas, style: now.style, profile_opts: now.profile_opts });
     selected = cfg.areas[0]?.id ?? null;
@@ -1144,7 +1215,10 @@ listen("config", (e) => {
     renderAll();
     return;
   }
-  if (!changed) return;
+  if (!changed) {
+    if (newLayout) renderPages(); // (a layout update can bring a new pages script)
+    return;
+  }
   if (locked()) {
     const p = activeProfile();
     Object.assign(cfg, { areas: clone(p.areas), style: clone(p.style), profile_opts: clone(p.pages) });
@@ -1157,14 +1231,13 @@ listen("screen", (e) => {
   const was = !!screen.layout;
   screen.layout = e.payload;
   if (!screen.layout) screen.reason = [];
-  if (!!screen.layout !== was) log({ info: screen.layout ? t("GTA V: game page detected") : t("GTA V: game page closed") });
-  updateProfileStatus();
+  if (!!screen.layout !== was) log({ info: screen.layout ? t("Game page detected") : t("Game page closed") });
   drawLayer();
 });
 
 // ------------------------------------------------------------------------------------- game profile
 
-// A game profile holds the read areas, the text style and the game pages. Built-in ones (GTA VI, GTA V)
+// A game profile holds the read areas, the text style and the game pages. Built-in ones (GTA VI, and any game the server adds)
 // can't be changed: "Make a copy" gives the player one of their own. The settings the rest of the app
 // reads (cfg.areas, cfg.style, cfg.profile_opts) are the profile in use; with one of the player's
 // profiles, every save writes them back into it (see syncProfile).
@@ -1174,7 +1247,7 @@ const allProfiles = () => [...(cfg.builtins || []), ...(cfg.profiles || [])];
 const activeProfile = () => allProfiles().find((p) => p.id === cfg.profile) || (cfg.builtins || [])[0];
 const isBuiltin = (p) => (cfg.builtins || []).some((b) => b.id === p?.id);
 const locked = () => isBuiltin(activeProfile());
-const profileGame = () => activeProfile()?.game || "gta5";
+const profileGame = () => activeProfile()?.game || "gta6";
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 /** One of the player's profiles is in use: keep it equal to what is being edited. */
@@ -1208,8 +1281,8 @@ function copyProfile(from) {
   setTimeout(() => $("pf-name")?.select(), 0);
 }
 
-function deleteProfile(p) {
-  if (!confirm(t("Delete the profile “{name}”? This can't be undone.", { name: p.name }))) return;
+async function deleteProfile(p) {
+  if (!(await ask(t("Delete the profile “{name}”? This can't be undone.", { name: p.name }), t("Delete")))) return;
   cfg.profiles = cfg.profiles.filter((x) => x.id !== p.id);
   useProfile((cfg.builtins || []).some((b) => b.id === p.game) ? p.game : "gta6");
 }
@@ -1257,7 +1330,7 @@ function renderProfile() {
           ? `<div class="grow"><b>${AS.esc(p.name)}</b></div><span class="badge lock-badge">${t("Built-in")}</span>`
           : `<input type="text" id="pf-name" class="grow" value="${AS.esc(p.name)}" title="${AS.esc(t("Rename"))}" /><span class="badge">${t("Yours")}</span>`}
       </div>
-      <p class="muted small" style="margin:8px 0 0">${t("For {game} · {n} read area(s)", { game: gameName(p.game), n: p.areas.length })}</p>
+      <p class="muted small" style="margin:8px 0 0">${t("For {game} · {n} read area(s)", { game: AS.esc(gameName(p.game)), n: p.areas.length })}</p>
       <div class="row" style="margin-top:12px">
         <button id="pf-copy" class="btn">${t("Make a copy")}</button>
         ${isBuiltin(p) ? "" : `<button id="pf-delete" class="btn danger">${t("Delete")}</button>`}
@@ -1287,64 +1360,40 @@ async function pageScript(game) {
   return pageScripts[game];
 }
 
-/** Game pages of the profile in use: GTA V's own, plus any switches the game's pages script declares. */
+/** Game pages of the profile in use: the switches the game's pages script declares, and the fonts. */
 async function renderPages() {
   const f = $("pages-form");
   const o = cfg.profile_opts;
   const game = profileGame();
   const script = await pageScript(game);
   if (profileGame() !== game) return; // (another profile meanwhile: its own render runs)
-  const gta5 = game === "gta5";
-  if (!gta5 && !script.pages.length) {
-    f.innerHTML = `<div class="callout">${t("{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.", { game: gameName(game) })}</div>`;
+  if (!script.pages.length) {
+    f.innerHTML = `<div class="callout">${t("{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.", { game: AS.esc(gameName(game)) })}</div>`;
     return;
   }
   o.more = o.more || {};
   const isOn = (opt) => (opt.id in o.more ? o.more[opt.id] : opt.on);
-  const fonts = `
-      <div class="field"><label>${t("Title font")}</label><select id="pf-title">${fontOptions(o.title_font)}</select></div>
-      <div class="field" style="margin-top:10px"><label>${t("Reason and button font")}</label><select id="pf-text">${fontOptions(o.text_font)}</select></div>`;
-  const own = gta5 ? `
-    <div class="card">
-      <label class="check" style="font-weight:600"><input type="checkbox" id="pf-mf" ${o.mission_failed ? "checked" : ""}/> ${t("“Mission Failed” page")}</label>
-      <p class="muted small" style="margin:6px 0 10px">${t("Adds the title in the same colour and size above the red title, the reason under the English reason, and translated labels with the game's own button icons above Retry / Restart / Skip.")}</p>
-      <div id="pf-status" class="callout" style="margin:0 0 10px"></div>
-      ${fonts}
-    </div>
-    <div class="card">
-      <label class="check" style="font-weight:600"><input type="checkbox" id="pf-pause" ${o.pause_menu !== false ? "checked" : ""}/> ${t("Pause menu")}</label>
-      <p class="muted small" style="margin:6px 0 0">${t("Translates the tabs (Map, Brief, Stats …), the menus and the buttons at the bottom right, in the game's own colours. Subtitle reading pauses while the menu is open.")}</p>
-    </div>
-    <div class="card">
-      <label class="check" style="font-weight:600"><input type="checkbox" id="pf-cap" ${o.captions !== false ? "checked" : ""}/> ${t("Captions in the middle of a black screen")}</label>
-      <p class="muted small" style="margin:6px 0 0">${t("Place and time cards such as “Ludendorff, North Yankton, nine years ago.”: the translation appears centred just below the English, for as long as it is on screen.")}</p>
-    </div>` : "";
-  // switches the game's script declares (pages that come with layout updates)
+  // the switches the game's script declares (its pages come with layout updates)
   const declared = script.options.map((opt) => `
     <div class="card">
       <label class="check" style="font-weight:600"><input type="checkbox" data-more="${AS.esc(opt.id)}" ${isOn(opt) ? "checked" : ""}/> ${AS.esc(scriptText(opt.name) || opt.id)}</label>
       ${scriptText(opt.about) ? `<p class="muted small" style="margin:6px 0 0">${AS.esc(scriptText(opt.about))}</p>` : ""}
     </div>`).join("");
-  f.innerHTML = own + declared + (gta5 ? "" : `<div class="card">${fonts}</div>`);
-  $("pf-mf")?.addEventListener("change", (e) => { o.mission_failed = e.target.checked; save(); });
-  $("pf-pause")?.addEventListener("change", (e) => { o.pause_menu = e.target.checked; save(); });
-  $("pf-cap")?.addEventListener("change", (e) => { o.captions = e.target.checked; save(); });
+  f.innerHTML = declared + `
+    <div class="card">
+      <div class="field"><label>${t("Title font")}</label><select id="pf-title">${fontOptions(o.title_font)}</select></div>
+      <div class="field" style="margin-top:10px"><label>${t("Reason and button font")}</label><select id="pf-text">${fontOptions(o.text_font)}</select></div>
+    </div>`;
   f.querySelectorAll("[data-more]").forEach((el) => el.addEventListener("change", () => { o.more[el.dataset.more] = el.checked; save(); }));
   for (const [id, key] of [["pf-title", "title_font"], ["pf-text", "text_font"]]) {
     const sel = $(id);
-    sel.style.fontFamily = `'${sel.value}'`;
-    sel.addEventListener("change", () => { o[key] = sel.value; sel.style.fontFamily = `'${sel.value}'`; save(); });
+    paintFonts(sel);
+    sel.style.fontFamily = fontCss(sel.value);
+    sel.addEventListener("change", () => { o[key] = sel.value; sel.style.fontFamily = fontCss(sel.value); save(); });
   }
-  updateProfileStatus();
   lockControls();
 }
-function updateProfileStatus() {
-  const s = $("pf-status");
-  if (!s) return;
-  s.textContent = screen.layout
-    ? t("On screen now ✓ — {n} button(s) found", { n: screen.layout.buttons.length }) + (screen.layout.reason_en ? t(", reason: “{reason}”", { reason: screen.layout.reason_en }) : "")
-    : t("Waiting for the Mission Failed page…");
-}
+
 
 function applyTheme() {
   const dark = cfg.theme === "dark";
@@ -1413,7 +1462,6 @@ function lockControls() {
     const s = await invoke("get_screen");
     screen.layout = s.layout;
     screen.reason = s.reason || [];
-    updateProfileStatus();
   } catch {}
   document.fonts.ready.then(drawLayer); // re-measure once the bundled fonts have loaded
   renderObs();

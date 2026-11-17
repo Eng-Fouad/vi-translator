@@ -119,12 +119,12 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
         }
         let c = cfg.lock().unwrap().clone();
         let target = shared.hwnd.load(Ordering::Relaxed);
-        let client = capture::client_rect(target);
         // Only show the Arabic while the captured window is the one in front (not over other apps).
-        let visible = c.overlays_enabled && client.is_some() && capture::foreground_window() == target;
+        let client = if c.overlays_enabled { capture::focused_client_rect(target) } else { None };
+        let visible = client.is_some();
 
         // Every overlay window we want: one per enabled area, plus the full-window "screen" overlay
-        // used by game profiles (e.g. GTA V "Mission Failed"). Each gets a target rect when it should show.
+        // used by game profiles (a menu, a "mission failed" page …). Each gets a target rect when it should show.
         let screen_on = shared.screen_active.load(Ordering::Relaxed);
         let mut wanted: Vec<(String, String, String, Option<(i32, i32, i32, i32)>)> = Vec::new(); // label, id, placement, rect
         for a in c.areas.iter().filter(|a| a.enabled) {

@@ -11,7 +11,7 @@
 # "pages" is a list, newest first: the app takes the first entry it can use. To keep older apps
 # working when a script needs a newer app, put the previous entry after the new one. --test marks
 # the entry for testers only: installs with "Get test versions of game pages" on, and the install
-# ids given.
+# ids given (published as their SHA-256, never the ids themselves).
 set -euo pipefail
 channel=""; installs=()
 if [ "${1:-}" = "--test" ]; then
@@ -22,7 +22,8 @@ fi
 script="${1:?usage: sign-pages.sh [--test [install-id ...] --] <script.js> [key.pem]}"
 key="${2:-$HOME/.vi-translator-keys/update-signing.pem}"
 [ -f "$key" ] || { echo "no signing key at $key" >&2; exit 1; }
-head -1 "$script" | grep -q '^// pages-version: [0-9]\+' || { echo "the script's first line must be // pages-version: N" >&2; exit 1; }
+# (N from 1 to 999999999: the app reads it as a 32-bit number, and runs no script without one)
+head -1 "$script" | tr -d '\r' | grep -Eqx '// pages-version: [1-9][0-9]{0,8}' || { echo "the script's first line must be exactly // pages-version: N (N from 1 to 999999999)" >&2; exit 1; }
 # (on Windows "python3" may be only a Microsoft Store shortcut: take the first one that runs)
 py=""
 for c in python3 python; do if command -v "$c" >/dev/null && "$c" -c "" 2>/dev/null; then py=$c; break; fi; done
@@ -30,10 +31,12 @@ for c in python3 python; do if command -v "$c" >/dev/null && "$c" -c "" 2>/dev/n
 sig=$(openssl pkeyutl -sign -rawin -inkey "$key" -in "$script" | base64 | tr -d '\r\n')
 "$py" -c '
 import json, sys
+import hashlib
 e = {"script": open(sys.argv[1], encoding="utf8", newline="").read(), "sig": sys.argv[2]}
 if sys.argv[3]:
     e["channel"] = sys.argv[3]
     if sys.argv[4:]:
-        e["installs"] = sys.argv[4:]
+        # (listed by the SHA-256 of the id: the ids themselves are never published)
+        e["installs"] = [hashlib.sha256(i.strip().lower().encode()).hexdigest() for i in sys.argv[4:]]
 print(json.dumps({"pages": [e]}, ensure_ascii=False, indent=2))
-' "$script" "$sig" "$channel" "${installs[@]}"
+' "$script" "$sig" "$channel" ${installs[@]+"${installs[@]}"}

@@ -319,6 +319,11 @@ pub fn similar(a: &str, b: &str) -> bool {
     }
     let a: Vec<char> = a.to_lowercase().chars().collect();
     let b: Vec<char> = b.to_lowercase().chars().collect();
+    // (the edit distance is at least the difference in length: too different to be alike, without
+    // working it out — the same answer as below, for far less work)
+    if a.len().abs_diff(b.len()) * 20 >= a.len().max(b.len()) * 3 {
+        return false;
+    }
     let mut prev: Vec<usize> = (0..=b.len()).collect();
     let mut cur = vec![0; b.len() + 1];
     for i in 1..=a.len() {

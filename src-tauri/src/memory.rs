@@ -68,19 +68,22 @@ pub struct Memory {
     misses: u64,
     hit_ms: f64,
     miss_ms: f64,
-    /// translations downloaded in the background (kept through reload / clear)
-    shared: Vec<Entry>,
+    /// translations downloaded in the background, by language (the one in use is applied; the others
+    /// wait for a switch back): kept through reload, clear and language switches
+    packs: HashMap<String, Vec<Entry>>,
 }
 
-/// What lines logged now are, for sharing: (game, confirmed, held). Confirmed: one of the game's own
-/// pages has been on screen this session, so this is really that game. Held: another game the app
-/// knows is on screen (the player is playing something else with this profile): not shared.
-static SHARE: std::sync::RwLock<(String, bool, bool)> = std::sync::RwLock::new((String::new(), false, false));
+/// What lines logged now are, for sharing: (game, confirmed, held, sharing on). Confirmed: one of
+/// the game's own pages has been on screen this session, so this is really that game. Held: another
+/// game the app knows is on screen (the player is playing something else with this profile). Sharing
+/// on: "Help improve translations" is on now — a line seen while it's off is never sent, even if it's
+/// turned on again later.
+static SHARE: std::sync::RwLock<(String, bool, bool, bool)> = std::sync::RwLock::new((String::new(), false, false, false));
 
-pub fn set_share(game: &str, confirmed: bool, held: bool) {
+pub fn set_share(game: &str, confirmed: bool, held: bool, on: bool) {
     let mut s = SHARE.write().unwrap();
-    if s.0 != game || s.1 != confirmed || s.2 != held {
-        *s = (game.to_string(), confirmed, held);
+    if s.0 != game || s.1 != confirmed || s.2 != held || s.3 != on {
+        *s = (game.to_string(), confirmed, held, on);
     }
 }
 
@@ -109,7 +112,8 @@ pub fn key_of(line: &str) -> String {
             out.push(format!("{{{icon}}}"));
             continue;
         }
-        let w: String = tok.chars().filter(|c| c.is_alphanumeric() || *c == '\'').collect::<String>().to_lowercase();
+        // (lower case first, then only letters, numbers and apostrophes: so a key is its own key)
+        let w: String = tok.to_lowercase().chars().filter(|c| c.is_alphanumeric() || *c == '\'').collect();
         if !w.is_empty() {
             out.push(w);
         }
@@ -153,7 +157,7 @@ fn to_template(segs: &Segments) -> String {
 }
 
 /// Template -> segments with this frame's icons and highlight colours.
-fn fill(tpl: &str, icons: &[String], phrases: &[(String, String)]) -> Segments {
+pub(crate) fn fill(tpl: &str, icons: &[String], phrases: &[(String, String)]) -> Segments {
     let mut segs: Segments = Vec::new();
     let mut rest = tpl;
     loop {
@@ -235,11 +239,21 @@ impl Memory {
                 }
             }
         }
-        let mut m = Self { dir, lang: lang.to_string(), path, map: HashMap::new(), index: HashMap::new(), hits: 0, misses: 0, hit_ms: 0.0, miss_ms: 0.0, shared: Vec::new() };
+        let mut m = Self { dir, lang: lang.to_string(), path, map: HashMap::new(), index: HashMap::new(), hits: 0, misses: 0, hit_ms: 0.0, miss_ms: 0.0, packs: HashMap::new() };
         for (k, e) in map {
             m.insert(k, e);
         }
         m
+    }
+
+    fn remove(&mut self, key: &str) {
+        if self.map.remove(key).is_some() {
+            for w in key.split(' ') {
+                if let Some(keys) = self.index.get_mut(w) {
+                    keys.retain(|k| k != key);
+                }
+            }
+        }
     }
 
     fn insert(&mut self, key: String, e: Entry) {
@@ -313,8 +327,8 @@ impl Memory {
         if key.is_empty() {
             return;
         }
-        let (game, confirmed, held) = SHARE.read().unwrap().clone();
-        let row = serde_json::json!({ "area": area, "key": key, "en": en, "start": start_ms, "end": end_ms, "game": game, "confirmed": confirmed, "held": held });
+        let (game, confirmed, held, on) = SHARE.read().unwrap().clone();
+        let row = serde_json::json!({ "area": area, "key": key, "en": en, "start": start_ms, "end": end_ms, "game": game, "confirmed": confirmed, "held": held, "share": on });
         append_sealed(&self.dir.join(LOG_FILE), LOG_KIND, [row.to_string()]);
     }
 
@@ -327,6 +341,10 @@ impl Memory {
             return;
         }
         let e = Entry { en: key.clone(), ar: to_template(segs), source: source.into() };
+        // (the same again adds nothing: the file only grows with what's new)
+        if self.map.get(&key).is_some_and(|old| old.ar == e.ar && old.source == e.source) {
+            return;
+        }
         append_sealed(&self.path, &format!("memory/{}", self.lang), [serde_json::to_string(&e).unwrap_or_default()]);
         self.insert(key, e);
     }
@@ -358,23 +376,60 @@ impl Memory {
     /// Forget the live translations (the lines log stays).
     pub fn clear(&mut self) {
         let _ = std::fs::remove_file(&self.path);
-        let shared = std::mem::take(&mut self.shared);
+        let packs = std::mem::take(&mut self.packs);
         *self = Self::load(self.dir.clone(), &self.lang);
-        self.set_shared(shared);
+        self.take_packs(packs);
     }
 
-    /// Switch to another target language (its own memory; downloads come again for it).
+    /// Switch to another target language (its own memory, and what was downloaded for it).
     pub fn set_lang(&mut self, lang: &str) {
         if self.lang != lang {
             let (h, m, hm, mm) = (self.hits, self.misses, self.hit_ms, self.miss_ms);
+            let packs = std::mem::take(&mut self.packs);
             *self = Self::load(self.dir.clone(), lang);
             (self.hits, self.misses, self.hit_ms, self.miss_ms) = (h, m, hm, mm);
+            self.take_packs(packs);
+        }
+    }
+
+    /// The target language this memory is for.
+    pub fn lang(&self) -> &str {
+        &self.lang
+    }
+
+    /// The downloads kept from before a reload: the language in use's applied again.
+    fn take_packs(&mut self, mut packs: HashMap<String, Vec<Entry>>) {
+        let mine = packs.remove(&self.lang);
+        self.packs = packs;
+        if let Some(entries) = mine {
+            let lang = self.lang.clone();
+            self.set_shared(&lang, entries);
         }
     }
 
     /// Add translations downloaded in the background: they replace the player's own lines for the
     /// same English, here and in the memory file (which then keeps only what the pack doesn't have).
-    pub fn set_shared(&mut self, entries: Vec<Entry>) {
+    pub fn set_shared(&mut self, lang: &str, entries: Vec<Entry>) {
+        // (downloaded for another language: the player switched meanwhile; kept for a switch back)
+        if lang != self.lang {
+            self.packs.insert(lang.to_string(), entries);
+            return;
+        }
+        // lines the last pack had and this one doesn't (taken out on the server): not used any more
+        let gone: Vec<String> = {
+            let now: std::collections::HashSet<&str> = entries.iter().map(|e| e.en.as_str()).collect();
+            self.packs
+                .get(lang)
+                .into_iter()
+                .flatten()
+                .filter(|e| !now.contains(e.en.as_str()))
+                .filter(|e| self.map.get(&e.en).is_some_and(|m| m.source == e.source && m.ar == e.ar))
+                .map(|e| e.en.clone())
+                .collect()
+        };
+        for k in gone {
+            self.remove(&k);
+        }
         for e in &entries {
             if self.map.get(&e.en).is_none_or(|old| rank(&old.source) <= rank(&e.source)) {
                 self.insert(e.en.clone(), e.clone());
@@ -382,7 +437,7 @@ impl Memory {
         }
         let covered: std::collections::HashSet<&str> = entries.iter().map(|e| e.en.as_str()).collect();
         self.drop_from_file(&covered);
-        self.shared = entries;
+        self.packs.insert(lang.to_string(), entries);
     }
 
     /// Rewrite the memory file without the lines for these English keys (if it has any).
@@ -414,9 +469,9 @@ impl Memory {
     /// Re-read the files (e.g. after new reviewed translations); session counters are kept.
     pub fn reload(&mut self) {
         let (h, m, hm, mm) = (self.hits, self.misses, self.hit_ms, self.miss_ms);
-        let shared = std::mem::take(&mut self.shared);
+        let packs = std::mem::take(&mut self.packs);
         *self = Self::load(self.dir.clone(), &self.lang);
-        self.set_shared(shared);
+        self.take_packs(packs);
         (self.hits, self.misses, self.hit_ms, self.miss_ms) = (h, m, hm, mm);
     }
 }
@@ -484,21 +539,40 @@ mod tests {
         m.log_line("subtitles", "Get in the car.", 1, 2);
         assert!(!std::fs::read_to_string(path.join(LOG_FILE)).unwrap().contains("car"), "the log is sealed too");
         // each logged line says which game it was seen in, and whether it may be shared
-        set_share("rdr2", true, true);
+        set_share("rdr2", true, true, true);
         m.log_line("subtitles", "Saddle up.", 5, 9);
-        set_share("", false, false);
+        set_share("", false, false, false);
         let rows: Vec<serde_json::Value> = std::fs::read_to_string(path.join(LOG_FILE)).unwrap().lines().filter_map(open_log_line).filter_map(|l| serde_json::from_str(&l).ok()).collect();
         let last = rows.last().unwrap();
         assert_eq!((last["en"].as_str(), last["game"].as_str(), last["confirmed"].as_bool(), last["held"].as_bool()), (Some("Saddle up."), Some("rdr2"), Some(true), Some(true)));
+        assert_eq!(last["share"].as_bool(), Some(true), "seen while sharing was on");
         // after a restart: the same lines, read back from the encrypted file
         let mut m = Memory::load(path.clone(), "ar");
         assert_eq!(m.get("get in the car", &[], &[]).unwrap().0[0].0, "اركب السيارة.");
         // a shared pack with "take cover": it wins, and the local line leaves the file
-        m.set_shared(vec![Entry { en: "take cover".into(), ar: "احتمِ بساتر!".into(), source: "reviewed".into() }]);
+        m.set_shared("ar", vec![Entry { en: "take cover".into(), ar: "احتمِ بساتر!".into(), source: "reviewed".into() }]);
         assert_eq!(m.get("take cover", &[], &[]).unwrap().1, "reviewed");
         let m2 = Memory::load(path.clone(), "ar");
         assert!(m2.get("take cover", &[], &[]).is_none(), "the player's own line for it is gone");
         assert!(m2.get("follow me", &[], &[]).is_some(), "lines the pack doesn't have stay");
+        // a pack for another language (the player switched languages meanwhile): not taken
+        let mut m3 = Memory::load(path.clone(), "ar");
+        m3.set_shared("ar", vec![Entry { en: "take cover".into(), ar: "احتمِ بساتر!".into(), source: "reviewed".into() }]);
+        m3.set_shared("hi", vec![Entry { en: "follow me".into(), ar: "मेरे पीछे आओ".into(), source: "reviewed".into() }]);
+        assert_ne!(m3.get("follow me", &[], &[]).unwrap().1, "reviewed");
+        // a line taken out of the pack on the server: not used any more
+        m3.set_shared("ar", vec![]);
+        assert!(m3.get("take cover", &[], &[]).is_none());
+        // switching languages and back (before the next download): the download is used again
+        m3.set_shared("ar", vec![Entry { en: "take cover".into(), ar: "احتمِ بساتر!".into(), source: "reviewed".into() }]);
+        m3.set_lang("hi");
+        assert_eq!(m3.lang(), "hi");
+        assert_eq!(m3.get("follow me", &[], &[]).unwrap().1, "reviewed", "hi's own download, kept from before");
+        assert!(m3.get("take cover", &[], &[]).is_none());
+        m3.set_lang("ar");
+        assert_eq!(m3.get("take cover", &[], &[]).unwrap().1, "reviewed");
+        m3.reload();
+        assert_eq!(m3.get("take cover", &[], &[]).unwrap().1, "reviewed", "and through a reload");
         let _ = std::fs::remove_dir_all(&path);
     }
 
@@ -521,6 +595,15 @@ mod tests {
         let m2 = Memory::load(path.clone(), "ar");
         assert!(m2.knows("Go to the bank and press ⟦1⟧!"));
         assert_eq!(key_of(&key_of("Press ⟦1⟧ ⟦2⟧ to zoom.")), "press {1} {2} to zoom");
+        // (the server's KeyNormalizerTest has the same cases)
+        assert_eq!(key_of("Go\u{a0}to the car."), "go to the car");
+        assert_eq!(key_of("Press\u{a0}\u{27e6}1\u{27e7} to jump"), "press {1} to jump");
+        assert_eq!(key_of("1\u{bd} miles"), "1\u{bd} miles");
+        assert_eq!(key_of("E=mc\u{b2}"), "emc\u{b2}");
+        assert_eq!(key_of("Chapter \u{2165}"), "chapter \u{2175}");
+        assert_eq!(key_of("\u{2003}Lucia\u{2003}"), "lucia");
+        assert_eq!(key_of("\u{130}stanbul"), "istanbul");
+        assert_eq!(key_of(&key_of("\u{130}stanbul")), key_of("\u{130}stanbul"));
         let _ = std::fs::remove_dir_all(&path);
     }
 

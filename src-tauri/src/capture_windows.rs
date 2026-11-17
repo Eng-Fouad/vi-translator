@@ -178,6 +178,14 @@ pub fn foreground_window() -> isize {
     unsafe { GetForegroundWindow().0 as isize }
 }
 
+/// The window's client rect, only while it's the one in front.
+pub fn focused_client_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    if hwnd == 0 || foreground_window() != hwnd {
+        return None;
+    }
+    client_rect(hwnd)
+}
+
 
 /// Copy a region of the screen (physical pixels) as RGBA — what the user actually sees there,
 /// including our Arabic overlay windows on top of the game.

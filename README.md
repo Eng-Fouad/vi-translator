@@ -11,7 +11,8 @@
 ## What it does
 
 - Reads the game's **subtitles and instructions** and shows them translated, in an overlay or in OBS.
-- Translates **game screens** too: mission results, the pause menu, alerts and on-screen captions.
+- Translates **game screens** too (menus, mission results, captions), as support for each one arrives
+  through automatic updates.
 - Works with a **game window**, a **capture card**, or an **OBS source**. It never touches the game.
 - Keeps highlighted words in their **colours** and button **icons** in place.
 - Shows the live translations on a **phone or tablet** on your home network (Advanced tab, off by default).
@@ -58,7 +59,8 @@ and whether one of that game's own screens was seen while playing. Lines seen wh
 looks like a different game the app knows are not sent. Turn it off and nothing more is sent.
 
 The app also checks GitHub every hour for a new version. The
-phone page is only served on your home network, and only while you have it turned on.
+phone page is only served on your home network, and only while you have it turned on; open it by
+the address the app shows (the PC's IP address), not a name.
 
 ## Build
 

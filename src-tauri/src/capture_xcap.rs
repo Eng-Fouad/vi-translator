@@ -123,8 +123,26 @@ pub fn client_rect(id: isize) -> Option<(i32, i32, i32, i32)> {
     if id == 0 {
         return None;
     }
+    rect_of(&by_id(id)?)
+}
+
+/// The window's rect, only while it has the focus. Asks about this one window: here every xcap
+/// query is costly (a new X connection on Linux, a copy of the whole window list on macOS), so the
+/// overlays' 150 ms loop doesn't go through all the windows.
+pub fn focused_client_rect(id: isize) -> Option<(i32, i32, i32, i32)> {
+    if id == 0 {
+        return None;
+    }
     let w = by_id(id)?;
-    if w.is_minimized().unwrap_or(false) {
+    if !w.is_focused().unwrap_or(false) {
+        return None;
+    }
+    rect_of(&w)
+}
+
+fn rect_of(w: &Window) -> Option<(i32, i32, i32, i32)> {
+    // (macOS lists windows on screen only: a minimised one isn't found at all)
+    if cfg!(not(target_os = "macos")) && w.is_minimized().unwrap_or(false) {
         return None;
     }
     let (ww, hh) = (w.width().ok()? as i32, w.height().ok()? as i32);

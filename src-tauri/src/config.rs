@@ -4,6 +4,62 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+/// Write a file whole or not at all: to a temporary file next to it, then renamed over it. A crash
+/// or a full disk midway leaves the old file as it was (never a half-written one).
+pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = path.with_file_name(format!("{name}.{}-{}.tmp", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+    let result = (|| {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&tmp, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
+}
+
+/// Text to show (a name from the server or a settings file): no control characters, at most `max`
+/// characters. (The window escapes it too; this keeps it short and printable.)
+pub fn clean_text(s: &str, max: usize) -> String {
+    s.chars().filter(|c| !c.is_control()).take(max).collect::<String>().trim().to_string()
+}
+
+/// A colour as the style form and the overlays use it: "#rrggbb".
+pub fn is_hex_color(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s[1..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// A font family name: letters, digits, spaces and - _ . only (anything else: none, the default).
+pub fn clean_font(s: &str) -> String {
+    let s = s.trim();
+    if s.chars().count() <= 64 && s.chars().all(|c| c.is_alphanumeric() || " -_.".contains(c)) { s.to_string() } else { String::new() }
+}
+
+/// A setting's keyword ("under_text", "bottom-center" …): a-z, 0-9, _ and - only, else none.
+fn clean_word(s: &str) -> String {
+    if s.len() <= 32 && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-') { s.to_string() } else { String::new() }
+}
+
+/// An area id the server takes in line uploads: [A-Za-z0-9_-]{1,32}.
+pub fn valid_area_id(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 32 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// A number within a range (and a real number: NaN or infinity becomes the default).
+fn within(v: f64, lo: f64, hi: f64, default: f64) -> f64 {
+    if v.is_finite() { v.clamp(lo, hi) } else { default }
+}
+
 /// A rectangle of the captured window that is read with OCR. Coordinates are fractions (0..1)
 /// of the window's client area, so they survive window resizes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,6 +97,33 @@ pub struct Area {
     /// Only read text centred in the picture (game subtitles are): a word elsewhere in the area — a
     /// menu's "Browse" at the bottom right — is not a subtitle.
     pub centered_only: bool,
+}
+
+impl Area {
+    /// Keep its settings within what the app uses (they can come from the server's layouts and
+    /// games list, which aren't signed): places inside the picture, sizes in range, keywords and
+    /// fonts plain words, a short printable name.
+    pub fn sanitize(&mut self) {
+        let d = Area::default();
+        self.name = clean_text(&self.name, 60);
+        if self.name.is_empty() {
+            self.name = self.id.clone();
+        }
+        for v in [&mut self.x, &mut self.y, &mut self.out_x, &mut self.out_y] {
+            *v = within(*v, 0.0, 1.0, 0.0);
+        }
+        for v in [&mut self.w, &mut self.h, &mut self.out_w, &mut self.out_h] {
+            *v = within(*v, 0.005, 1.0, 0.1);
+        }
+        self.font_scale = within(self.font_scale, 0.3, 3.0, d.font_scale);
+        self.font_family = clean_font(&self.font_family);
+        for v in [&mut self.placement, &mut self.text_pos, &mut self.background, &mut self.out_valign, &mut self.out_halign] {
+            *v = clean_word(v);
+        }
+        if self.placement.is_empty() {
+            self.placement = d.placement;
+        }
+    }
 }
 
 impl Default for Area {
@@ -88,6 +171,28 @@ pub struct Style {
     pub line_height: f64,
     /// Colour Arabic words the same as highlighted English words.
     pub keep_colors: bool,
+}
+
+impl Style {
+    /// Keep it within what the style form offers (it can come from the server: see Area::sanitize).
+    pub fn sanitize(&mut self) {
+        let d = Style::default();
+        self.font_family = clean_font(&self.font_family);
+        if self.font_family.is_empty() {
+            self.font_family = d.font_family.clone();
+        }
+        for (v, dv) in [(&mut self.text_color, &d.text_color), (&mut self.bg_color, &d.bg_color), (&mut self.outline_color, &d.outline_color)] {
+            if !is_hex_color(v) {
+                *v = dv.clone();
+            }
+        }
+        self.font_size = within(self.font_size, 10.0, 96.0, d.font_size);
+        self.line_height = within(self.line_height, 1.0, 2.2, d.line_height);
+        self.bg_opacity = within(self.bg_opacity, 0.0, 1.0, d.bg_opacity);
+        self.padding = within(self.padding, 0.0, 30.0, d.padding);
+        self.radius = within(self.radius, 0.0, 30.0, d.radius);
+        self.outline_width = within(self.outline_width, 0.0, 6.0, d.outline_width);
+    }
 }
 
 impl Default for Style {
@@ -190,8 +295,15 @@ pub struct Config {
     pub debug_save_frames: bool,
     /// Debugging: minimum time between saved frames.
     pub debug_frame_interval_ms: u64,
-    /// The game profile in use: a built-in one ("gta5", "gta6") or one of `profiles` (a copy).
+    /// The game profile in use: a built-in one ("gta6", or a game the server added) or one of
+    /// `profiles` (a copy).
     pub profile: String,
+    /// Goes up each time the app switches games by itself: a window's save sent before it heard of
+    /// the switch can't undo it (see save_config).
+    pub profile_rev: u64,
+    /// The settings file was there but couldn't be read (nor kept aside) at start: it isn't saved over.
+    #[serde(skip)]
+    pub unreadable: bool,
     /// The player's own profiles (copies they can change); the built-in ones are in `builtins`.
     pub profiles: Vec<Profile>,
     /// The built-in profiles as they are now (the app's defaults, tuned by layout updates from the
@@ -207,13 +319,13 @@ pub struct Config {
 }
 
 /// A game profile: where the text is read and where its translation goes (read areas), how the
-/// translation looks (text style), and the game's own pages it translates (Mission Failed …).
+/// translation looks (text style), and the game's own pages it translates (menus …).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
     pub id: String,
     pub name: String,
-    /// The game it is for ("gta5" | "gta6"): which game pages it can recognise, and which shared
+    /// The game it is for ("gta6" | one the server added): which game pages it can recognise, and which shared
     /// translations and layout updates it gets. A copy keeps the game of the profile it came from.
     pub game: String,
     pub areas: Vec<Area>,
@@ -232,20 +344,50 @@ pub struct Timing {
     pub clear_after_ms: u64,
 }
 
-impl Default for Profile {
-    fn default() -> Self {
-        builtin_profile("gta5").expect("built-in")
+impl Timing {
+    /// Within the Advanced sliders' ranges (0 = the app's own value).
+    pub fn sanitize(&mut self) {
+        let fit = |v: u64, lo: u64, hi: u64| if v == 0 { 0 } else { v.clamp(lo, hi) };
+        self.interval_ms = fit(self.interval_ms, 100, 1000);
+        self.stable_ms = self.stable_ms.min(1500);
+        self.clear_after_ms = fit(self.clear_after_ms, 200, 3000);
     }
 }
 
-/// Equal when written out (for settings that don't compare directly).
-fn same_json<T: Serialize>(a: &T, b: &T) -> bool {
-    serde_json::to_value(a).ok() == serde_json::to_value(b).ok()
+impl Profile {
+    /// Keep a profile within what the app uses (see Area::sanitize): its areas (ids the server takes,
+    /// each once), style, page fonts and switches, timing, and a short printable name.
+    pub fn sanitize(&mut self) {
+        self.name = clean_text(&self.name, 60);
+        let mut seen = std::collections::HashSet::new();
+        self.areas.retain(|a| valid_area_id(&a.id) && seen.insert(a.id.clone()));
+        for a in self.areas.iter_mut() {
+            a.sanitize();
+        }
+        self.style.sanitize();
+        let d = ProfileOpts::default();
+        self.pages.title_font = clean_font(&self.pages.title_font);
+        if self.pages.title_font.is_empty() {
+            self.pages.title_font = d.title_font;
+        }
+        self.pages.text_font = clean_font(&self.pages.text_font);
+        if self.pages.text_font.is_empty() {
+            self.pages.text_font = d.text_font;
+        }
+        self.pages.more.retain(|k, _| !k.is_empty() && k.len() <= 32 && k.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'));
+        self.timing.sanitize();
+    }
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        builtin_profile("gta6").expect("built-in")
+    }
 }
 
 /// The app's own built-in profiles, in the order they are listed (the server can add more games:
 /// `Config::server_games`).
-pub const BUILTINS: [&str; 2] = ["gta6", "gta5"];
+pub const BUILTINS: [&str; 1] = ["gta6"];
 
 /// A built-in profile as the app ships it.
 pub fn builtin_profile(id: &str) -> Option<Profile> {
@@ -287,33 +429,26 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
         ]
     };
     match id {
-        "gta5" => Some(Profile { id: "gta5".into(), name: "Grand Theft Auto V".into(), game: "gta5".into(), areas: gta_areas(), style: Style::default(), pages: ProfileOpts::default(), timing: Timing::default() }),
-        // GTA VI starts from GTA V's areas; layout updates from the server tune it once the game is out.
-        // Its own pages aren't known yet: none are recognised.
+        // A starting guess (subtitles at the bottom, instructions top left): layout updates from the
+        // server set GTA VI's real places, and its pages come with its pages script.
         "gta6" => Some(Profile {
             id: "gta6".into(),
             name: "Grand Theft Auto VI".into(),
             game: "gta6".into(),
             areas: gta_areas(),
             style: Style::default(),
-            pages: ProfileOpts { mission_failed: false, pause_menu: false, captions: false, ..ProfileOpts::default() },
+            pages: ProfileOpts::default(),
             timing: Timing::default(),
         }),
         _ => None,
     }
 }
 
-/// Options for the game profile's special screens.
+/// The game profile's pages: which are translated, and in what fonts.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProfileOpts {
-    /// GTA V: translate the "MISSION FAILED" page (title, reason, buttons).
-    pub mission_failed: bool,
-    /// GTA V: translate the pause menu (tabs, buttons).
-    pub pause_menu: bool,
-    /// GTA V: translate captions shown in the middle of a black screen (place / time cards).
-    pub captions: bool,
-    /// Switches a game's pages script declares itself (`pages.option`), by name; one not set here
+    /// The switches the game's pages script declares (`pages.option`), by name; one not set here
     /// takes the script's default.
     pub more: std::collections::BTreeMap<String, bool>,
     /// Font for big titles such as "فشلت المهمة".
@@ -324,7 +459,7 @@ pub struct ProfileOpts {
 
 impl Default for ProfileOpts {
     fn default() -> Self {
-        Self { mission_failed: true, pause_menu: true, captions: true, more: Default::default(), title_font: "Lalezar".into(), text_font: "Tajawal".into() }
+        Self { more: Default::default(), title_font: "Lalezar".into(), text_font: "Tajawal".into() }
     }
 }
 
@@ -376,6 +511,8 @@ impl Default for Config {
             debug_save_frames: false,
             debug_frame_interval_ms: 1000,
             profile: "gta6".into(),
+            profile_rev: 0,
+            unreadable: false,
             profiles: Vec::new(),
             builtins: BUILTINS.iter().filter_map(|id| builtin_profile(id)).collect(),
             // 0 here too: a settings file from before profiles has no such field and takes this
@@ -390,7 +527,30 @@ impl Default for Config {
 
 impl Config {
     pub fn load(path: &PathBuf) -> Self {
-        let mut c: Self = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        // A settings file that's there but can't be used is never written over by the defaults: kept
+        // aside (config.broken-<time>.json), or — when even that fails (another program holds it) —
+        // left alone, and nothing is saved over it this time (`unreadable`).
+        let unusable = |why: String| -> Self {
+            let aside = path.with_extension(format!("broken-{}.json", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)));
+            let mut d = Self::default();
+            match std::fs::rename(path, &aside) {
+                Ok(()) => eprintln!("[config] {} could not be read ({why}); kept as {}", path.display(), aside.display()),
+                Err(e) => {
+                    eprintln!("[config] {} could not be read ({why}) nor kept aside ({e}): not saved over this time", path.display());
+                    d.unreadable = true;
+                }
+            }
+            d
+        };
+        let mut c: Self = match std::fs::read(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
+            // (a file saved with a byte-order mark by an editor reads as well)
+            Ok(bytes) => match std::str::from_utf8(&bytes).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str::<Self>(t.trim_start_matches('\u{feff}')).map_err(|e| e.to_string())) {
+                Ok(c) => c,
+                Err(e) => unusable(e),
+            },
+            Err(e) => unusable(e.to_string()),
+        };
         c.normalize();
         c
     }
@@ -401,7 +561,12 @@ impl Config {
         let d = Config::default();
         let t = self.builtins.iter().chain(self.profiles.iter()).find(|p| p.id == self.profile).map(|p| p.timing.clone()).unwrap_or_default();
         let pick = |own: u64, default: u64, game: u64| if own != default || game == 0 { own } else { game };
-        (pick(self.interval_ms, d.interval_ms, t.interval_ms), pick(self.stable_ms, d.stable_ms, t.stable_ms), pick(self.clear_after_ms, d.clear_after_ms, t.clear_after_ms))
+        // (within the Advanced sliders' ranges, whatever a settings file or a layout says)
+        (
+            pick(self.interval_ms, d.interval_ms, t.interval_ms).clamp(100, 1000),
+            pick(self.stable_ms, d.stable_ms, t.stable_ms).min(1500),
+            pick(self.clear_after_ms, d.clear_after_ms, t.clear_after_ms).clamp(200, 3000),
+        )
     }
 
     /// A built-in profile (the app's own, or a game the server added)?
@@ -409,18 +574,16 @@ impl Config {
         BUILTINS.contains(&id) || self.server_games.iter().any(|g| g == id)
     }
 
-    /// The game the profile in use is for ("gta5" | "gta6" | one the server added).
+    /// The game the profile in use is for ("gta6" | one the server added).
     pub fn game(&self) -> String {
         if self.is_builtin(&self.profile) {
             return self.profile.clone();
         }
-        self.profiles.iter().find(|p| p.id == self.profile).map(|p| p.game.clone()).unwrap_or_else(|| "gta5".into())
+        self.profiles.iter().find(|p| p.id == self.profile).map(|p| p.game.clone()).unwrap_or_else(|| "gta6".into())
     }
 
     /// Keep the profiles consistent (after loading, and after the window saves):
     ///  - every built-in profile is there;
-    ///  - the setup from before profiles becomes the player's own profile "My GTA V" if it differs
-    ///    from the built-in one (nothing they tuned is lost);
     ///  - the profile in use exists, and the settings the app reads (areas, style, game pages) are
     ///    that profile's: a built-in one exactly as it is (it can't be changed), one of the
     ///    player's as they last saved it.
@@ -443,36 +606,18 @@ impl Config {
                 p.name = d.name; // (built-in names aren't the player's to change)
             }
         }
-        // (only a file from before profiles: no profiles of the player's yet, a built-in or "none" in use)
-        let before_profiles = self.profiles.is_empty() && (BUILTINS.contains(&self.profile.as_str()) || self.profile == "none");
-        if self.profiles_version == 0 && !before_profiles {
-            self.profiles_version = 1;
+        // (settings from before profiles: their read areas were GTA V's, which the app no longer has)
+        self.profiles_version = 1;
+        // The single layout version from before per-game ones was GTA V's, which the app no longer
+        // has: it says nothing about GTA VI's layouts (an earlier build credited it to GTA VI, which
+        // would skip GTA VI's first layouts: forgotten once, so they apply).
+        if self.layout_version > 0 {
+            self.layout_version = 0;
+            self.layout_versions.clear();
         }
-        if self.profiles_version == 0 {
-            self.profiles_version = 1;
-            // compared with the built-in profile it was using (GTA V before profiles; a new install: GTA VI)
-            let base_id = if BUILTINS.contains(&self.profile.as_str()) { self.profile.clone() } else { "gta5".to_string() };
-            let base = self.builtins.iter().find(|p| p.id == base_id).cloned().expect("built-in");
-            let mine = Profile {
-                id: "custom-1".into(),
-                name: if base.id == "gta6" { "My GTA VI".into() } else { "My GTA V".into() },
-                game: base.id.clone(),
-                areas: self.areas.clone(),
-                style: self.style.clone(),
-                // "none" (no game pages) before profiles: keep them off
-                pages: if self.profile == "none" { ProfileOpts { mission_failed: false, pause_menu: false, captions: false, ..self.profile_opts.clone() } } else { self.profile_opts.clone() },
-                timing: base.timing.clone(),
-            };
-            if self.profile == "none" || !(same_json(&mine.areas, &base.areas) && same_json(&mine.style, &base.style) && same_json(&mine.pages, &base.pages)) {
-                self.profile = mine.id.clone();
-                self.profiles.push(mine);
-            } else {
-                self.profile = base.id;
-            }
-        }
-        // a single layout version from before per-game ones: it was the game in use's
-        if self.layout_versions.is_empty() && self.layout_version > 0 {
-            self.layout_versions.insert(self.game(), self.layout_version);
+        // what a settings file or the server says about built-in profiles stays within what the app uses
+        for p in self.builtins.iter_mut() {
+            p.sanitize();
         }
         // ids are unique; names are never empty
         let mut seen = std::collections::HashSet::new();
@@ -482,8 +627,9 @@ impl Config {
             if p.name.trim().is_empty() {
                 p.name = "My profile".into();
             }
+            // (a game the app no longer has, like GTA V: the copy is GTA VI's now)
             if !builtin_ids.contains(&p.game) {
-                p.game = "gta5".into();
+                p.game = "gta6".into();
             }
         }
         // the profile each game was last played with (where switching to that game goes)
@@ -512,7 +658,18 @@ impl Config {
         let mine = self.game_profiles.get(game).filter(|id| self.profiles.iter().any(|p| &p.id == *id && p.game == game)).cloned();
         self.profile = mine.unwrap_or_else(|| game.to_string());
         self.normalize();
+        self.profile_rev += 1;
         true
+    }
+
+    /// The settings without secrets (translator keys, the OBS password, the install id): what goes
+    /// to windows other than the main one, and in events (any window can listen to those).
+    pub fn redacted(&self) -> Config {
+        let mut c = self.clone();
+        for s in [&mut c.deepl_key, &mut c.azure_key, &mut c.google_key, &mut c.libre_key, &mut c.claude_key, &mut c.obs_password, &mut c.install_id] {
+            s.clear();
+        }
+        c
     }
 
     /// The server's list of games (the layout update named "games"):
@@ -529,7 +686,9 @@ impl Config {
         for g in list["games"].as_array().into_iter().flatten() {
             let Ok(mut p) = serde_json::from_value::<Profile>(g.clone()) else { continue };
             let ok_id = !p.id.is_empty() && p.id.len() <= 16 && p.id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
-            if !ok_id || BUILTINS.contains(&p.id.as_str()) || p.name.trim().is_empty() {
+            // (from the server, not signed: within what the app uses, a short printable name)
+            p.sanitize();
+            if !ok_id || BUILTINS.contains(&p.id.as_str()) || p.name.is_empty() {
                 continue;
             }
             // a profile of the player's with that id (unlikely: theirs are "custom-…") gives way
@@ -552,10 +711,11 @@ impl Config {
     }
 
     pub fn save(&self, path: &PathBuf) -> anyhow::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
+        if self.unreadable {
+            anyhow::bail!("the settings file couldn't be read when the app started: it isn't written over (restart the app)");
         }
-        std::fs::write(path, serde_json::to_string_pretty(self)?)?;
+        // (whole or not at all: a crash midway never leaves a half-written settings file)
+        write_atomic(path, serde_json::to_string_pretty(self)?.as_bytes())?;
         Ok(())
     }
 }
@@ -563,6 +723,75 @@ impl Config {
 #[cfg(test)]
 mod profile_tests {
     use super::*;
+
+    #[test]
+    fn what_the_server_sends_is_kept_to_what_the_app_uses() {
+        let mut c = Config::default();
+        c.normalize();
+        let list = serde_json::json!({"games": [{
+            "id": "rdr2", "name": "Red Dead\u{0007} <b>Redemption</b> 2",
+            "style": {"text_color": "#fff\"><img src=x onerror=alert(1)>", "bg_color": "#112233", "font_family": "x';background:url(//e)", "font_size": 9999.0},
+            "areas": [{"id": "phone texts", "x": 0.1}, {"id": "subtitles", "x": 5.0, "font_family": "Tajawal", "placement": "<script>"}, {"id": "subtitles", "x": 0.2}],
+            "pages": {"title_font": "Lalezar", "more": {"camp": false, "Bad Key": true}},
+            "timing": {"interval_ms": 1, "clear_after_ms": 999999}
+        }]});
+        assert_eq!(c.apply_games(&list, 1), vec!["rdr2".to_string()]);
+        let p = c.builtins.iter().find(|p| p.id == "rdr2").unwrap();
+        assert_eq!(p.name, "Red Dead <b>Redemption</b> 2", "printable (the window escapes it), no control characters");
+        assert_eq!(p.style.text_color, "#ffffff");
+        assert_eq!(p.style.bg_color, "#112233");
+        assert_eq!(p.style.font_family, "Segoe UI");
+        assert_eq!(p.style.font_size, 96.0);
+        assert_eq!(p.areas.len(), 1, "an id line uploads can't take, and a repeated one, go");
+        assert_eq!((p.areas[0].x, p.areas[0].font_family.as_str(), p.areas[0].placement.as_str()), (1.0, "Tajawal", "above"));
+        assert_eq!(p.pages.more.keys().collect::<Vec<_>>(), vec!["camp"]);
+        assert_eq!((p.timing.interval_ms, p.timing.clear_after_ms), (100, 3000));
+    }
+
+    #[test]
+    fn the_old_layout_number_is_not_gta_vis() {
+        // (an earlier build moved GTA V's single layout version to GTA VI)
+        let mut c: Config = serde_json::from_str(r#"{"layout_version": 7, "layout_versions": {"gta6": 7}}"#).unwrap();
+        c.normalize();
+        assert_eq!(c.layout_version, 0);
+        assert!(c.layout_versions.is_empty());
+        // and the per-game ones after that stay
+        c.layout_versions.insert("gta6".into(), 2);
+        c.normalize();
+        assert_eq!(c.layout_versions.get("gta6"), Some(&2));
+    }
+
+    #[test]
+    fn settings_are_written_whole() {
+        let dir = std::env::temp_dir().join(format!("vit-cfg-test-{}", std::process::id()));
+        let path = dir.join("config.json");
+        let mut c = Config::default();
+        c.deepl_key = "k".into();
+        c.save(&path).unwrap();
+        assert_eq!(Config::load(&path).deepl_key, "k");
+        assert!(std::fs::read_dir(&dir).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().ends_with(".tmp")), "no temporary file left");
+        // a file that can't be read is kept aside, not overwritten
+        std::fs::write(&path, "{ half a file").unwrap();
+        let fresh = Config::load(&path);
+        assert_eq!(fresh.deepl_key, "");
+        assert!(!fresh.unreadable, "kept aside: a new file may be written");
+        let broken = || std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains("broken")).count();
+        assert_eq!(broken(), 1);
+        // ...and so is one an editor saved in another encoding (not UTF-8)
+        std::thread::sleep(std::time::Duration::from_millis(1100)); // (a new name: one per second)
+        std::fs::write(&path, b"{\"deepl_key\": \"caf\xe9\"}").unwrap();
+        assert_eq!(Config::load(&path).deepl_key, "");
+        assert_eq!(broken(), 2);
+        assert!(!path.exists(), "moved aside, not left to be written over");
+        // a byte-order mark (Notepad's "UTF-8 with BOM") reads fine
+        std::fs::write(&path, "\u{feff}{\"deepl_key\": \"k2\"}").unwrap();
+        assert_eq!(Config::load(&path).deepl_key, "k2");
+        // settings that couldn't be read are never saved over the file
+        let stuck = Config { unreadable: true, ..Config::default() };
+        assert!(stuck.save(&path).is_err());
+        assert_eq!(Config::load(&path).deepl_key, "k2");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_games_timing_unless_the_player_set_their_own() {
@@ -580,14 +809,15 @@ mod profile_tests {
     fn switching_games_goes_to_the_profile_last_used_for_it() {
         let mut c = Config::default();
         c.normalize();
-        c.profiles.push(Profile { id: "custom-5".into(), name: "Mine".into(), game: "gta5".into(), ..Profile::default() });
+        c.apply_games(&serde_json::json!({"games": [{"id": "rdr2", "name": "Red Dead Redemption 2"}]}), 1);
+        c.profiles.push(Profile { id: "custom-5".into(), name: "Mine".into(), game: "rdr2".into(), ..Profile::default() });
         c.profile = "custom-5".into();
         c.normalize();
         assert!(c.switch_to_game("gta6"));
         assert_eq!(c.profile, "gta6");
         assert!(!c.switch_to_game("gta6"), "already");
         assert!(!c.switch_to_game("nope"));
-        assert!(c.switch_to_game("gta5"));
+        assert!(c.switch_to_game("rdr2"));
         assert_eq!(c.profile, "custom-5");
     }
 
@@ -597,12 +827,12 @@ mod profile_tests {
         c.normalize();
         let list = serde_json::json!({"games": [
             {"id": "rdr2", "name": "Red Dead Redemption 2", "areas": [], "pages": {"more": {"camp": false}}},
-            {"id": "gta5", "name": "Not this one"},
+            {"id": "gta6", "name": "Not this one"},
             {"id": "Bad Id", "name": "x"}
         ]});
         assert_eq!(c.apply_games(&list, 3), vec!["rdr2".to_string()]);
         assert!(c.is_builtin("rdr2") && !c.is_builtin("custom-1"));
-        assert_eq!(c.builtins.iter().find(|p| p.id == "gta5").unwrap().name, "Grand Theft Auto V");
+        assert_eq!(c.builtins.iter().find(|p| p.id == "gta6").unwrap().name, "Grand Theft Auto VI");
         assert!(c.apply_games(&list, 3).is_empty(), "same version: nothing new");
         c.profile = "rdr2".into();
         c.normalize();
@@ -621,18 +851,6 @@ mod profile_tests {
         assert!(back.is_builtin("rdr2"));
     }
 
-    /// A settings file from before profiles, with the given areas.
-    fn old_settings(areas: Vec<Area>, profile: &str) -> Config {
-        let mut c = Config::default();
-        c.profiles_version = 0;
-        c.profiles.clear();
-        c.builtins.clear();
-        c.profile = profile.into();
-        c.areas = areas;
-        c.profile_opts = ProfileOpts::default();
-        c
-    }
-
     #[test]
     fn a_new_install_starts_on_the_built_in_gta_vi() {
         let mut c = Config::default();
@@ -646,46 +864,32 @@ mod profile_tests {
     }
 
     #[test]
-    fn a_settings_file_from_before_profiles_is_moved_over() {
-        // (no "profiles_version" in it: it must count as 0)
-        let mut c: Config = serde_json::from_str(r#"{"profile":"gta5","areas":[{"id":"subtitles","name":"Subtitles","y":0.5}]}"#).unwrap();
+    fn gta_v_is_gone_and_its_settings_move_to_gta_vi() {
+        // GTA V in use, and a copy of it: GTA VI's built-in profile, and the copy becomes GTA VI's
+        let mut c: Config = serde_json::from_str(r#"{"profile":"gta5","profiles_version":1,
+            "builtins":[{"id":"gta5","name":"Grand Theft Auto V","game":"gta5"}],
+            "profiles":[{"id":"custom-1","name":"My GTA V","game":"gta5"}],
+            "profile_opts":{"mission_failed":true,"pause_menu":false}}"#).unwrap();
         c.normalize();
-        assert_eq!(c.profile, "custom-1");
-        assert_eq!(c.areas[0].y, 0.5);
-    }
-
-    #[test]
-    fn an_old_setup_that_was_changed_becomes_the_players_own_profile() {
-        let mut moved = builtin_profile("gta5").unwrap().areas;
-        moved[0].y = 0.5; // the player had moved the subtitles area
-        let mut c = old_settings(moved, "gta5");
-        c.normalize();
-        assert_eq!(c.profile, "custom-1");
-        assert_eq!(c.profiles[0].name, "My GTA V");
-        assert_eq!(c.profiles[0].game, "gta5");
-        assert_eq!(c.areas[0].y, 0.5, "nothing tuned is lost");
-        assert_eq!(c.game(), "gta5", "a copy keeps its game (pages, shared lines)");
-        assert_eq!(c.builtins.len(), BUILTINS.len());
-    }
-
-    #[test]
-    fn an_old_setup_like_the_built_in_one_just_uses_it() {
-        let mut c = old_settings(builtin_profile("gta5").unwrap().areas, "gta5");
-        c.normalize();
-        assert_eq!(c.profile, "gta5");
-        assert!(c.profiles.is_empty());
+        assert_eq!(c.profile, "gta6");
+        assert_eq!(c.builtins.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["gta6"]);
+        assert_eq!(c.profiles[0].game, "gta6");
+        // a file from before profiles
+        let mut old: Config = serde_json::from_str(r#"{"profile":"gta5","areas":[{"id":"subtitles","name":"Subtitles","y":0.5}]}"#).unwrap();
+        old.normalize();
+        assert_eq!((old.profile.as_str(), old.profiles_version), ("gta6", 1));
     }
 
     #[test]
     fn a_built_in_profile_cant_be_changed() {
         let mut c = Config::default();
-        c.profile = "gta5".into();
+        c.profile = "gta6".into();
         c.normalize();
         // the window sends changed areas while a built-in profile is in use: they don't stick
         c.areas[0].x = 0.9;
         c.style.font_size = 99.0;
         c.normalize();
-        assert_eq!(c.areas[0].x, builtin_profile("gta5").unwrap().areas[0].x);
+        assert_eq!(c.areas[0].x, builtin_profile("gta6").unwrap().areas[0].x);
         assert_eq!(c.style.font_size, Style::default().font_size);
         // the built-in itself can't be renamed or made another game's either
         c.builtins[0].name = "Mine".into();
@@ -697,7 +901,7 @@ mod profile_tests {
     #[test]
     fn the_players_profile_keeps_their_changes_and_a_missing_one_falls_back() {
         let mut c = Config::default();
-        let mut mine = builtin_profile("gta5").unwrap();
+        let mut mine = builtin_profile("gta6").unwrap();
         mine.id = "custom-x".into();
         mine.name = "Mine".into();
         mine.areas[0].h = 0.3;

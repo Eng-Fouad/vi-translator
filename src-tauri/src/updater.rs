@@ -69,6 +69,14 @@ pub fn newer_release(json: &serde_json::Value, current: &str) -> Option<Update> 
     })
 }
 
+/// What a release file's signature (`.sig`) signs: what it's for, the file's name (its system), the
+/// version and the file's SHA-256. So a signed file can't pass for another version (an older one)
+/// or another system's, and nothing else signed with the same key (a page script) for an update.
+pub fn signed_text(asset: &str, version: &str, data: &[u8]) -> String {
+    use sha2::Digest as _;
+    format!("vi-translator-update-v1\n{asset}\n{version}\n{:x}\n", sha2::Sha256::digest(data))
+}
+
 /// Does `sig_b64` (base64 Ed25519 signature) sign `data` with `pub_b64`?
 pub fn verify(data: &[u8], sig_b64: &str, pub_b64: &str) -> Result<()> {
     use base64::Engine;
@@ -102,7 +110,8 @@ pub fn install(u: &Update) -> Result<PathBuf> {
     let c = http();
     let data = c.get(&u.url).send()?.error_for_status()?.bytes().context("download")?;
     let sig = c.get(&u.sig_url).send()?.error_for_status()?.text().context("download signature")?;
-    verify(&data, &sig, PUBLIC_KEY).context("the downloaded update is not signed by VI Translator")?;
+    verify(signed_text(&asset_name(), &u.version, &data).as_bytes(), &sig, PUBLIC_KEY)
+        .context("the downloaded update is not signed by VI Translator for this version and system")?;
     let exe = std::env::current_exe()?;
     replace_exe(&exe, &data)?;
     Ok(exe)
@@ -220,17 +229,40 @@ mod tests {
 
 #[cfg(test)]
 mod openssl_signature {
-    /// A file signed the way the release workflow signs (openssl pkeyutl -sign -rawin, base64):
-    /// set VIT_SIGNED_FILE to its path (its signature is next to it, "<path>.sig").
+    /// A file signed the way the release workflow signs (`signed_text` of it, with openssl pkeyutl
+    /// -sign -rawin, base64): set VIT_SIGNED_FILE to its path (its signature is next to it,
+    /// "<path>.sig", and the file keeps its release name) and VIT_SIGNED_VERSION to its version.
     #[test]
     #[ignore]
     fn verifies_with_the_built_in_key() {
+        // VIT_SIGNED_FILE: a release file (its .sig next to it); VIT_SIGNED_VERSION: its version
         let path = std::env::var("VIT_SIGNED_FILE").expect("VIT_SIGNED_FILE");
+        let version = std::env::var("VIT_SIGNED_VERSION").expect("VIT_SIGNED_VERSION");
+        let name = std::path::Path::new(&path).file_name().unwrap().to_string_lossy().to_string();
         let data = std::fs::read(&path).unwrap();
         let sig = std::fs::read_to_string(format!("{path}.sig")).unwrap();
-        super::verify(&data, &sig, super::PUBLIC_KEY).unwrap();
+        super::verify(super::signed_text(&name, &version, &data).as_bytes(), &sig, super::PUBLIC_KEY).unwrap();
         let mut bad = data.clone();
         bad[0] ^= 1;
-        assert!(super::verify(&bad, &sig, super::PUBLIC_KEY).is_err());
+        assert!(super::verify(super::signed_text(&name, &version, &bad).as_bytes(), &sig, super::PUBLIC_KEY).is_err());
+    }
+
+    #[test]
+    fn a_signature_is_for_one_file_version_and_system() {
+        use base64::Engine as _;
+        use ed25519_dalek::Signer as _;
+        let b64 = base64::engine::general_purpose::STANDARD;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let public = b64.encode(key.verifying_key().to_bytes());
+        let data = b"the new version".to_vec();
+        let sig = b64.encode(key.sign(super::signed_text("vi-translator-windows-x64.exe", "1.2.0", &data).as_bytes()).to_bytes());
+        let ok = |asset: &str, version: &str, data: &[u8]| super::verify(super::signed_text(asset, version, data).as_bytes(), &sig, &public).is_ok();
+        assert!(ok("vi-translator-windows-x64.exe", "1.2.0", &data));
+        assert!(!ok("vi-translator-linux-x64", "1.2.0", &data), "another system's file");
+        assert!(!ok("vi-translator-windows-x64.exe", "1.1.0", &data), "another version");
+        assert!(!ok("vi-translator-windows-x64.exe", "1.2.0", b"something else"), "another file");
+        // a signature of the bare file (what a page script's is) doesn't do
+        let raw = b64.encode(key.sign(&data).to_bytes());
+        assert!(super::verify(super::signed_text("vi-translator-windows-x64.exe", "1.2.0", &data).as_bytes(), &raw, &public).is_err());
     }
 }

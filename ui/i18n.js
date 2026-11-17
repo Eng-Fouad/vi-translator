@@ -79,6 +79,42 @@ window.I18N = (() => {
     });
   }
 
-  return { UI_LANGS, add, t, setLang, apply, get lang() { return lang; } };
+  /**
+   * Messages the app itself writes (a capture status, a line in the activity log), by their English
+   * pattern: shown in this language when one matches, its parts (names, errors) as they are.
+   * (The more particular patterns first.)
+   */
+  const MSGS = [
+      "Connecting to OBS for \"{name}\" ...",
+      "Opening capture device \"{name}\" ...",
+      "Capturing \"{name}\"",
+      "Capturing device \"{name}\" ({size})",
+      "Capturing OBS source \"{name}\" ({size}, {ms} ms per frame)",
+      "Capture device \"{name}\" stopped sending frames ({error})",
+      "Capture device \"{name}\" changed its picture: opening it again",
+      "Capture device \"{name}\" stopped: {error}",
+      "Capture device \"{name}\": {error}",
+      "OBS source \"{name}\": {error}",
+      "Switched to {name}: the picture looks like it.",
+      "Downloading the free translation model: {file} ...",
+      "Loading the translation model ...",
+      "Free local translator ready.",
+      "OCR unavailable: {error}"
+  ];
+  const MSG_RE = MSGS.map((m) => {
+    const names = [];
+    const src = m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\{(\w+)\\\}/g, (_, n) => { names.push(n); return "(.+?)"; });
+    return [m, new RegExp(`^${src}$`, "s"), names];
+  });
+  function tMsg(s) {
+    if (lang === "en" || typeof s !== "string") return s;
+    for (const [m, re, names] of MSG_RE) {
+      const hit = re.exec(s);
+      if (hit) return t(m, Object.fromEntries(names.map((n, i) => [n, hit[i + 1]])));
+    }
+    return s;
+  }
+
+  return { UI_LANGS, add, t, tMsg, setLang, apply, get lang() { return lang; } };
 })();
 window.t = window.I18N.t;

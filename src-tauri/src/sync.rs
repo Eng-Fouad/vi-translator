@@ -24,7 +24,15 @@ const UPLOAD_EVERY: Duration = Duration::from_secs(10 * 60);
 // (an unchanged download is a short "304 Not Modified": checking often costs next to nothing)
 const DOWNLOAD_EVERY: Duration = Duration::from_secs(60 * 60);
 const MAX_LINES_PER_UPLOAD: usize = 500;
+/// (counted as the server counts: UTF-16 code units)
 const MAX_LINE_CHARS: usize = 400;
+/// Uploads per pass, at most (passes are 10 minutes apart; the server takes 30 an hour per install).
+const MAX_REQUESTS_PER_PASS: usize = 4;
+/// How long a line counts as on screen, at most (the server drops longer ones as stuck reads).
+const MAX_SHOWN_MS: u64 = 10 * 60_000;
+/// Once everything in the lines log has been shared and it is this big, it starts again (the old
+/// one is kept as lines-log.old.dat until the next time).
+const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -62,8 +70,7 @@ fn load_state(p: &Paths) -> State {
 }
 
 fn save_state(p: &Paths, s: &State) {
-    let _ = std::fs::create_dir_all(&p.data);
-    let _ = std::fs::write(p.state(), serde_json::to_string_pretty(s).unwrap_or_default());
+    let _ = crate::config::write_atomic(&p.state(), serde_json::to_string_pretty(s).unwrap_or_default().as_bytes());
 }
 
 fn server(c: &Config) -> Option<String> {
@@ -91,10 +98,12 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
         // what was downloaded before works offline; another game or language: its own downloads
         if let Some(g) = game(&c) {
             if last != (g.clone(), c.target_lang.clone(), c.early_pages) {
-                last = (g.clone(), c.target_lang.clone(), c.early_pages);
                 // (give the app a moment to switch its memory to the new language first)
                 std::thread::sleep(Duration::from_secs(2));
-                load_cached(&app, &cfg, &memory, &paths, &g, &c.target_lang);
+                // (the game or language as they are now: they may have changed again meanwhile)
+                let now = cfg.lock().unwrap().clone();
+                last = (now.game(), now.target_lang.clone(), now.early_pages);
+                load_cached(&app, &cfg, &memory, &paths, &last.0, &last.1);
                 next_download = Instant::now();
             }
         }
@@ -102,10 +111,12 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
             first = false;
             std::thread::sleep(Duration::from_secs(20)); // let the app start first
         }
+        // (the settings as they are after the waits: sharing turned off meanwhile is respected)
+        let c = cfg.lock().unwrap().clone();
         if let (Some(url), Some(g)) = (server(&c), game(&c)) {
             if Instant::now() >= next_upload {
                 next_upload = Instant::now() + UPLOAD_EVERY;
-                share_lines(&http, &url, &c, &g, &paths);
+                share_lines(&http, &url, &c, &paths);
             }
             if Instant::now() >= next_download {
                 next_download = Instant::now() + DOWNLOAD_EVERY;
@@ -132,6 +143,13 @@ struct LogRow {
     /// another game was on screen: never shared
     #[serde(default)]
     held: bool,
+    /// "Help improve translations" was on when it was seen (rows from before this was written: on)
+    #[serde(default = "yes")]
+    share: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Serialize)]
@@ -145,26 +163,47 @@ struct UploadLine<'a> {
 /// Send the lines logged since the last upload. With sharing off, nothing is sent and the
 /// lines seen meanwhile are skipped for good (turning it on later doesn't send old lines).
 /// A log from before encryption (lines-log.jsonl) is finished first, then removed.
-fn share_lines(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &str, paths: &Paths) {
+fn share_lines(http: &reqwest::blocking::Client, url: &str, c: &Config, paths: &Paths) {
     let mut st = load_state(paths);
+    // The plain log from before lines said which game they're from: none of it can be shared now
+    // (it was GTA V's), so it goes.
     let legacy = paths.db.join("lines-log.jsonl");
-    if legacy.exists() {
-        let done = share_file(http, url, c, game, &legacy, &mut st.log_offset, false);
-        if done && std::fs::remove_file(&legacy).is_ok() {
-            st.log_offset = 0;
-        }
-        save_state(paths, &st);
-        if !done {
-            return; // offline: try again next time, in order
-        }
+    if legacy.exists() && std::fs::remove_file(&legacy).is_ok() {
+        st.log_offset = 0;
     }
-    share_file(http, url, c, game, &paths.db.join(memory::LOG_FILE), &mut st.dat_offset, true);
+    let log = paths.db.join(memory::LOG_FILE);
+    let mut budget = MAX_REQUESTS_PER_PASS;
+    let done = share_file(http, url, c, &log, &mut st.dat_offset, true, &mut budget);
+    // all of it shared, and big: start a new one (the last one is kept aside until next time)
+    if done && std::fs::metadata(&log).is_ok_and(|m| m.len() >= LOG_ROTATE_BYTES && m.len() == st.dat_offset)
+        && std::fs::rename(&log, paths.db.join("lines-log.old.dat")).is_ok()
+    {
+        st.dat_offset = 0;
+    }
     save_state(paths, &st);
 }
 
-/// Share the whole lines of `path` after `offset` (moving it on). `sealed`: each line is an
-/// encrypted record. True when everything up to the end has been handled.
-fn share_file(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &str, path: &std::path::Path, offset: &mut u64, sealed: bool) -> bool {
+/// Can this logged line be shared? Only lines seen while sharing was on, not held back (another game
+/// on screen), with the game they were seen in, from the game's own read areas (the built-in
+/// profile's: subtitles and instructions — never an area the player added, which could be over a
+/// chat or a list of players) or a game page's reason line, and real text the server takes.
+fn shareable(c: &Config, r: &LogRow) -> bool {
+    let game_area = || c.builtins.iter().find(|p| p.id == r.game).is_some_and(|p| p.areas.iter().any(|a| a.id == r.area));
+    r.share
+        && !r.held
+        && !r.game.is_empty()
+        && crate::config::valid_area_id(&r.area)
+        && (r.area == crate::SCREEN_REASON || game_area())
+        && r.en.encode_utf16().count() <= MAX_LINE_CHARS
+        && looks_like_text(&r.en)
+}
+
+/// Share the whole lines of `path` after `offset`, in order, a batch at a time (each batch: lines
+/// of one game, confirmed or not, up to 500). The offset moves on after each batch the server took
+/// or refused for good, so a pass that stops (offline, busy, rate limited) goes on from there next
+/// time and sends nothing twice; at most `budget` batches a pass. `sealed`: each line is an encrypted
+/// record. True when everything up to the end has been handled.
+fn share_file(http: &reqwest::blocking::Client, url: &str, c: &Config, path: &std::path::Path, offset: &mut u64, sealed: bool, budget: &mut usize) -> bool {
     let Ok(mut f) = std::fs::File::open(path) else { return true };
     let len = f.metadata().map(|m| m.len()).unwrap_or(0);
     if *offset > len {
@@ -174,44 +213,69 @@ fn share_file(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &st
         *offset = len;
         return true;
     }
-    let mut text = String::new();
-    if f.seek(SeekFrom::Start(*offset)).is_err() || f.read_to_string(&mut text).is_err() {
+    // (bytes: one damaged character can't stop the rest)
+    let mut buf = Vec::new();
+    if f.seek(SeekFrom::Start(*offset)).is_err() || f.read_to_end(&mut buf).is_err() {
         return false;
     }
     // whole lines only (one may still be being written)
-    let complete = text.rfind('\n').map(|i| i + 1).unwrap_or(0);
-    let rows: Vec<LogRow> = text[..complete]
-        .lines()
-        .filter_map(|l| if sealed { memory::open_log_line(l) } else { Some(l.to_string()) })
-        .filter_map(|l| serde_json::from_str::<LogRow>(&l).ok())
-        // menus can hold player names: never shared
-        .filter(|r| !r.area.starts_with("__menu") && !r.area.starts_with("__free"))
-        .filter(|r| r.en.chars().count() <= MAX_LINE_CHARS && looks_like_text(&r.en))
-        .filter(|r| !r.held)
-        .collect();
-    // sent per game seen in, and confirmed or not (the server counts confirmed players apart)
-    let mut groups: Vec<((String, bool), Vec<&LogRow>)> = Vec::new();
-    for r in &rows {
-        let g = (if r.game.is_empty() { game.to_string() } else { r.game.clone() }, r.confirmed);
-        match groups.iter_mut().find(|(k, _)| *k == g) {
-            Some((_, list)) => list.push(r),
-            None => groups.push((g, vec![r])),
+    let complete = buf.iter().rposition(|b| *b == b'\n').map(|i| i + 1).unwrap_or(0);
+    let start = *offset;
+    let mut pos = start;
+    let mut batches: Vec<((String, bool), Vec<LogRow>, u64)> = Vec::new();
+    for raw in buf[..complete].split_inclusive(|b| *b == b'\n') {
+        pos += raw.len() as u64;
+        let line = String::from_utf8_lossy(raw);
+        let line = line.trim_end_matches(['\n', '\r']);
+        let row = (if sealed { memory::open_log_line(line) } else { Some(line.to_string()) })
+            .and_then(|l| serde_json::from_str::<LogRow>(&l).ok())
+            .filter(|r| shareable(c, r));
+        match row {
+            Some(r) => {
+                let k = (r.game.clone(), r.confirmed);
+                match batches.last_mut() {
+                    Some((bk, list, end)) if *bk == k && list.len() < MAX_LINES_PER_UPLOAD => {
+                        list.push(r);
+                        *end = pos;
+                    }
+                    _ => {
+                        if batches.len() == *budget {
+                            // (enough for this pass: this line, not sent, is where the next one starts)
+                            pos -= raw.len() as u64;
+                            break;
+                        }
+                        batches.push((k, vec![r], pos));
+                    }
+                }
+            }
+            // a line that isn't shared is passed over with the batch before it (or at once)
+            None => match batches.last_mut() {
+                Some((_, _, end)) => *end = pos,
+                None => *offset = pos,
+            },
         }
     }
-    for ((game, confirmed), chunk) in groups.iter().flat_map(|(k, list)| list.chunks(MAX_LINES_PER_UPLOAD).map(move |c| (k.clone(), c))) {
-        let lines: Vec<UploadLine> = chunk.iter().map(|r| UploadLine { en: &r.en, area: &r.area, start: r.start, end: r.end.max(r.start) }).collect();
+    let all_read = pos == start + complete as u64;
+    for ((game, confirmed), list, end) in batches {
+        *budget = budget.saturating_sub(1);
+        let lines: Vec<UploadLine> = list
+            .iter()
+            .map(|r| UploadLine { en: &r.en, area: &r.area, start: r.start, end: r.end.max(r.start).min(r.start + MAX_SHOWN_MS) })
+            .collect();
         let body = serde_json::json!({ "game": game, "confirmed": confirmed, "clientVersion": env!("CARGO_PKG_VERSION"), "lines": lines });
         let sent = http.post(format!("{url}/v1/lines")).header("X-Install-Id", &c.install_id).json(&body).send();
         match sent {
-            Ok(r) if r.status().is_success() => {}
-            // the server refused these lines (too long, malformed): don't send them again
-            Ok(r) if r.status().as_u16() == 400 || r.status().as_u16() == 413 => {}
-            // offline, busy or rate-limited: try again next time, from here
+            Ok(r) if r.status().is_success() => *offset = end,
+            // the server refused these lines (malformed): don't send them again
+            Ok(r) if r.status().as_u16() == 400 || r.status().as_u16() == 413 => *offset = end,
+            // offline, busy or rate-limited: on from here next time
             _ => return false,
         }
     }
-    *offset += complete as u64;
-    *offset >= len
+    if all_read {
+        *offset = start + complete as u64;
+    }
+    all_read && *offset >= len
 }
 
 /// Real words, not an OCR misread of icons ("bjlwg", "ulnJiJl hjluJ9"): a sentence ("Hi.",
@@ -248,36 +312,144 @@ fn download(
 ) {
     let mut st = load_state(paths);
     let _ = std::fs::create_dir_all(&paths.data);
-    // translations
-    let k = format!("data/{game}/{lang}");
-    if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), st.versions.get(&k)) {
-        if let Some(entries) = open_pack(&bytes, game, lang, &tag) {
-            let _ = std::fs::write(paths.shared(game, lang), &bytes);
-            st.versions.insert(k, tag);
-            memory.lock().unwrap().set_shared(entries);
-        }
+    // translations: only what changed since the version this app has
+    if let Some(entries) = download_pack(http, url, paths, &mut st, game, lang) {
+        memory.lock().unwrap().set_shared(lang, entries);
     }
     // the games the server adds (published like a layout, under the name "games")
     let k = "layout/games".to_string();
-    if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), st.versions.get(&k)) {
+    // (a "not modified" answer only helps when the kept copy is still there)
+    let have = st.versions.get(&k).filter(|_| paths.layout("games").exists());
+    if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), have) {
         if let Ok(list) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            let _ = std::fs::write(paths.layout("games"), &bytes);
-            st.versions.insert(k, tag.clone());
+            if crate::config::write_atomic(&paths.layout("games"), &bytes).is_ok() {
+                st.versions.insert(k, tag.clone());
+            }
             apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
         }
     }
     // layout
     let k = format!("layout/{game}");
-    if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), st.versions.get(&k)) {
+    let have = st.versions.get(&k).filter(|_| paths.layout(game).exists());
+    if let Some((bytes, tag)) = fetch(http, &format!("{url}/v1/{k}"), have) {
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            let _ = std::fs::write(paths.layout(game), &bytes);
-            st.versions.insert(k, tag.clone());
+            if crate::config::write_atomic(&paths.layout(game), &bytes).is_ok() {
+                st.versions.insert(k, tag.clone());
+            }
             let (id, early) = { let c = cfg.lock().unwrap(); (c.install_id.clone(), c.early_pages) };
-            crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early);
+            if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early) {
+                let _ = app.emit("pages", ());
+            }
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
     save_state(paths, &st);
+}
+
+/// The translations for a game and language, when there is a newer version than this app's: the
+/// server's version first (tiny), then only what changed since this app's version, merged into the
+/// pack it keeps; the whole pack when it has none, the series started again, or it's too far behind.
+/// The merged pack is kept sealed like the server's, with the new version. None: nothing new.
+fn download_pack(http: &reqwest::blocking::Client, url: &str, paths: &Paths, st: &mut State, game: &str, lang: &str) -> Option<Vec<memory::Entry>> {
+    download_pack_with(&key(), http, url, paths, st, game, lang)
+}
+
+fn download_pack_with(key: &[u8; 32], http: &reqwest::blocking::Client, url: &str, paths: &Paths, st: &mut State, game: &str, lang: &str) -> Option<Vec<memory::Entry>> {
+    let k = format!("pack/{game}/{lang}");
+    let info: serde_json::Value = get(http, &format!("{url}/v1/data/{game}/{lang}/version")).and_then(|b| serde_json::from_slice(&b).ok())?;
+    let (series, version) = (info["series"].as_str()?.to_string(), info["version"].as_u64()? as u32);
+    let have = st.versions.get(&k).and_then(|v| v.split_once('/')).map(|(s, v)| (s.to_string(), v.parse::<u32>().unwrap_or(0)));
+    // (the same version, and the kept pack still opens: nothing to do; lost or damaged: downloaded again)
+    let kept_ok = || std::fs::read(paths.shared(game, lang)).ok().and_then(|b| open_pack_with(key, &b, game, lang, &version.to_string())).is_some();
+    if have.as_ref() == Some(&(series.clone(), version)) && kept_ok() {
+        return None;
+    }
+    let base = format!("{url}/v1/data/{game}/{lang}/{series}");
+    let changed = have.filter(|(s, v)| *s == series && *v > 0 && *v < version).and_then(|(_, from)| {
+        let mine = std::fs::read(paths.shared(game, lang)).ok().and_then(|b| open_pack_with(key, &b, game, lang, &from.to_string()))?;
+        let file = get(http, &format!("{base}/changes-{from}-{version}.bin"))?;
+        let changes = open_changes(key, &file, &format!("{game}/{lang}/{from}-{version}"))?;
+        Some(apply_changes(mine, changes))
+    });
+    let entries = match changed {
+        Some(e) => e,
+        None => {
+            let file = get(http, &format!("{base}/full-{version}.bin"))?;
+            open_pack_with(key, &file, game, lang, &version.to_string())?
+        }
+    };
+    // (the version is recorded only once the pack is kept: else the next check downloads it again)
+    if crate::config::write_atomic(&paths.shared(game, lang), &seal_pack(key, &entries, game, lang, version)).is_ok() {
+        st.versions.insert(k, format!("{series}/{version}"));
+        st.versions.remove(&format!("data/{game}/{lang}"));
+    }
+    Some(entries)
+}
+
+/// A plain GET: the body when the answer is 200.
+fn get(http: &reqwest::blocking::Client, url: &str) -> Option<Vec<u8>> {
+    let r = http.get(url).send().ok()?;
+    r.status().is_success().then(|| r.bytes().ok().map(|b| b.to_vec())).flatten()
+}
+
+/// A pack's changes: each line as it is now, or (key, None) for a line taken out.
+fn open_changes(key: &[u8; 32], file: &[u8], aad: &str) -> Option<Vec<(String, Option<memory::Entry>)>> {
+    let text = open_sealed(key, file, aad)?;
+    Some(
+        text.lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| {
+                let k = memory::key_of(v["en"].as_str()?);
+                if k.is_empty() {
+                    return None;
+                }
+                if v["deleted"].as_bool() == Some(true) {
+                    return Some((k, None));
+                }
+                let ar = v["ar"].as_str().filter(|a| !a.trim().is_empty())?.to_string();
+                Some((k.clone(), Some(memory::Entry { en: k, ar, source: "reviewed".into() })))
+            })
+            .collect(),
+    )
+}
+
+/// The pack with the changes in (same English: replaced; taken out: gone).
+fn apply_changes(pack: Vec<memory::Entry>, changes: Vec<(String, Option<memory::Entry>)>) -> Vec<memory::Entry> {
+    let mut by_key: std::collections::BTreeMap<String, memory::Entry> = pack.into_iter().map(|e| (e.en.clone(), e)).collect();
+    for (k, e) in changes {
+        match e {
+            Some(e) => {
+                by_key.insert(k, e);
+            }
+            None => {
+                by_key.remove(&k);
+            }
+        }
+    }
+    by_key.into_values().collect()
+}
+
+/// Seal a pack like the server does ("G6T1" | nonce | AES-256-GCM(gzip(JSON lines)), associated data
+/// "game/lang/version"), to keep it on disk.
+fn seal_pack(key: &[u8; 32], entries: &[memory::Entry], game: &str, lang: &str, version: u32) -> Vec<u8> {
+    use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng, Payload};
+    use std::io::Write as _;
+    let mut text = String::new();
+    for e in entries {
+        text.push_str(&serde_json::to_string(e).unwrap_or_default());
+        text.push('\n');
+    }
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    let _ = gz.write_all(text.as_bytes());
+    let zipped = gz.finish().unwrap_or_default();
+    let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).expect("32-byte key");
+    let nonce = aes_gcm::Aes256Gcm::generate_nonce(&mut OsRng);
+    let aad = format!("{game}/{lang}/{version}");
+    let ct = cipher.encrypt(&nonce, Payload { msg: &zipped, aad: aad.as_bytes() }).expect("encrypts");
+    let mut out = b"G6T1".to_vec();
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&ct);
+    out
 }
 
 /// GET with If-None-Match: Some((body, version)) when there is something new.
@@ -301,20 +473,25 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
             apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
         }
     }
-    if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.shared(game, lang)), st.versions.get(&format!("data/{game}/{lang}"))) {
-        if let Some(entries) = open_pack(&bytes, game, lang, tag) {
-            memory.lock().unwrap().set_shared(entries);
+    // the pack kept from the last download ("series/version"; before change downloads: the version)
+    let version = st.versions.get(&format!("pack/{game}/{lang}")).and_then(|v| v.split_once('/')).map(|(_, v)| v.to_string())
+        .or_else(|| st.versions.get(&format!("data/{game}/{lang}")).cloned());
+    if let (Ok(bytes), Some(version)) = (std::fs::read(paths.shared(game, lang)), version) {
+        if let Some(entries) = open_pack(&bytes, game, lang, &version) {
+            memory.lock().unwrap().set_shared(lang, entries);
         }
     }
     // (another game: the last one's extra words, phrases and OCR fixes no longer apply)
-    crate::screens::set_layout_words(Vec::new(), Vec::new(), Vec::new());
+    crate::screens::set_layout_words(game, lang, Vec::new(), Vec::new(), Vec::new());
     crate::phrasebook::set_extra(game, lang, Vec::new());
     crate::ocr::set_fixes(Default::default());
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout(game)), st.versions.get(&format!("layout/{game}"))) {
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
             // (test versions turned on or off: the script that's for this install now)
             let (id, early) = { let c = cfg.lock().unwrap(); (c.install_id.clone(), c.early_pages) };
-            crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early);
+            if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early) {
+                let _ = app.emit("pages", ());
+            }
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
@@ -329,7 +506,7 @@ fn apply_games(app: &AppHandle, cfg: &Arc<Mutex<Config>>, paths: &Paths, st: &St
             return;
         }
         let _ = c.save(&crate::config_path());
-        let _ = app.emit("config", &*c);
+        let _ = app.emit("config", &c.redacted());
         changed
     };
     for g in changed {
@@ -369,18 +546,23 @@ pub fn open_pack(file: &[u8], game: &str, lang: &str, version: &str) -> Option<V
     open_pack_with(&key(), file, game, lang, version)
 }
 
-fn open_pack_with(key: &[u8; 32], file: &[u8], game: &str, lang: &str, version: &str) -> Option<Vec<memory::Entry>> {
+/// The JSON lines inside a sealed pack file (None if it isn't one, or was sealed for something else).
+fn open_sealed(key: &[u8; 32], file: &[u8], aad: &str) -> Option<String> {
     use aes_gcm::aead::{Aead, KeyInit, Payload};
     if file.len() < 4 + 12 + 16 || &file[..4] != b"G6T1" {
         return None;
     }
     let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).ok()?;
-    let aad = format!("{game}/{lang}/{version}");
     let plain = cipher
         .decrypt(aes_gcm::Nonce::from_slice(&file[4..16]), Payload { msg: &file[16..], aad: aad.as_bytes() })
         .ok()?;
     let mut text = String::new();
     flate2::read::GzDecoder::new(&plain[..]).read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
+fn open_pack_with(key: &[u8; 32], file: &[u8], game: &str, lang: &str, version: &str) -> Option<Vec<memory::Entry>> {
+    let text = open_sealed(key, file, &format!("{game}/{lang}/{version}"))?;
     Some(
         text.lines()
             .filter_map(|l| serde_json::from_str::<memory::Entry>(l).ok())
@@ -426,8 +608,9 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
             .unwrap_or_default()
     };
     let mut c = cfg.lock().unwrap();
-    if game == c.game() {
-        crate::screens::set_layout_words(words("menu"), words("buttons"), words("tabs"));
+    // (the game and language in use: a download that began before the player switched doesn't count)
+    if game == c.game() && lang == c.target_lang {
+        crate::screens::set_layout_words(game, lang, words("menu"), words("buttons"), words("tabs"));
         // hand-written translations of the game's lines, and OCR fixes for its fonts
         let phrases = layout["phrases"][lang].as_object().map(|m| m.iter().filter_map(|(en, t)| Some((en.clone(), t.as_str()?.to_string()))).collect()).unwrap_or_default();
         crate::phrasebook::set_extra(game, lang, phrases);
@@ -483,15 +666,186 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
     if let Some(f) = layout["fonts"]["text_font"].as_str() {
         p.pages.text_font = f.to_string();
     }
+    // (from the server, not signed: colours, fonts, ids, names and numbers kept to what the app uses)
+    p.sanitize();
     c.layout_versions.insert(game.to_string(), version);
     c.normalize(); // (if that built-in profile is in use, its new layout applies now)
     let _ = c.save(&crate::config_path());
-    let _ = app.emit("config", &*c);
+    let _ = app.emit("config", &c.redacted());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Against a running backend in dev mode (its test pack key): the first download is the whole pack,
+    /// later ones only the changes. `VIT_TEST_SERVER=http://localhost:8080 cargo test -- --ignored`
+    #[test]
+    #[ignore]
+    fn downloads_from_a_dev_server() {
+        let Ok(url) = std::env::var("VIT_TEST_SERVER") else { return };
+        let dev_key: [u8; 32] = core::array::from_fn(|i| i as u8);
+        let dir = std::env::temp_dir().join(format!("vit-pack-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let paths = Paths { data: dir.clone(), db: dir.clone() };
+        let http = reqwest::blocking::Client::new();
+        let mut st = State::default();
+        let game = std::env::var("VIT_TEST_GAME").unwrap_or_else(|_| "gta6".into());
+        let first = download_pack_with(&dev_key, &http, &url, &paths, &mut st, &game, "ar").expect("the whole pack");
+        println!("whole pack: {} lines, now {:?}", first.len(), st.versions.get(&format!("pack/{game}/ar")));
+        assert!(download_pack_with(&dev_key, &http, &url, &paths, &mut st, &game, "ar").is_none(), "nothing new");
+        // pretend to have the version before: only the changes come, merged into the kept pack
+        let (series, v) = st.versions[&format!("pack/{game}/ar")].split_once('/').map(|(s, v)| (s.to_string(), v.parse::<u32>().unwrap())).unwrap();
+        if v > 1 {
+            let older: Vec<memory::Entry> = first.iter().filter(|e| e.en != "get in the car lucia").cloned().collect();
+            std::fs::write(paths.shared(&game, "ar"), seal_pack(&dev_key, &older, &game, "ar", v - 1)).unwrap();
+            st.versions.insert(format!("pack/{game}/ar"), format!("{series}/{}", v - 1));
+            let again = download_pack_with(&dev_key, &http, &url, &paths, &mut st, &game, "ar").expect("the changes");
+            assert_eq!(again.len(), first.len());
+            assert_eq!(again.iter().find(|e| e.en == "get in the car lucia").map(|e| e.ar.clone()), first.iter().find(|e| e.en == "get in the car lucia").map(|e| e.ar.clone()));
+            println!("changes {}-{v}: merged, {} lines", v - 1, again.len());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A server on this PC answering with these statuses in turn (then 200), and what it was sent.
+    fn fake_server(statuses: Vec<u16>) -> (String, std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = got.clone();
+        std::thread::spawn(move || {
+            let mut statuses = statuses.into_iter();
+            for s in l.incoming().flatten() {
+                let mut r = BufReader::new(s.try_clone().unwrap());
+                let mut len = 0usize;
+                loop {
+                    let mut h = String::new();
+                    if r.read_line(&mut h).unwrap_or(0) == 0 || h.trim().is_empty() {
+                        break;
+                    }
+                    if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0; len];
+                let _ = r.read_exact(&mut body);
+                let status = statuses.next().unwrap_or(200);
+                if status == 200 {
+                    seen.lock().unwrap().push(serde_json::from_slice(&body).unwrap_or_default());
+                }
+                let mut s = s;
+                let _ = s.write_all(format!("HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes());
+            }
+        });
+        (url, got)
+    }
+
+    #[test]
+    fn uploads_go_in_order_and_go_on_where_they_stopped() {
+        let dir = std::env::temp_dir().join(format!("vit-share-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let log = dir.join("log.jsonl");
+        let row = |en: &str, area: &str, game: &str, share: bool, held: bool| {
+            serde_json::json!({ "area": area, "en": en, "start": 1_000, "end": 9_999_999, "game": game, "confirmed": false, "held": held, "share": share }).to_string() + "\n"
+        };
+        let mut text = String::new();
+        for i in 0..1200 {
+            text += &row(&format!("Get in the car number {i}."), "subtitles", "gta6", true, false);
+        }
+        text += &row("Seen while sharing was off.", "subtitles", "gta6", false, false);
+        text += &row("Another game on screen.", "subtitles", "gta6", true, true);
+        text += &row("A player's own area over the chat.", "area_17", "gta6", true, false);
+        text += &row("No game: an old row.", "subtitles", "", true, false);
+        text += &row("The mission failed reason.", crate::SCREEN_REASON, "gta6", true, false);
+        std::fs::write(&log, &text).unwrap();
+        let c = Config { install_id: "11111111-2222-4333-8444-555555555555".into(), share_lines: true, ..Config::default() };
+        let mut c = c;
+        c.normalize();
+        let http = reqwest::blocking::Client::new();
+        // the second batch is rate-limited: the first is kept, the pass stops there
+        let (url, got) = fake_server(vec![200, 429]);
+        let mut offset = 0;
+        let mut budget = 4;
+        assert!(!share_file(&http, &url, &c, &log, &mut offset, false, &mut budget));
+        assert_eq!(got.lock().unwrap().len(), 1);
+        let first_end = offset;
+        assert!(first_end > 0 && first_end < text.len() as u64);
+        // next pass: from there, nothing sent twice; at most `budget` batches
+        let (url, got) = fake_server(vec![]);
+        let mut budget = 4;
+        assert!(share_file(&http, &url, &c, &log, &mut offset, false, &mut budget), "all handled");
+        assert_eq!(offset, text.len() as u64);
+        let sent = got.lock().unwrap();
+        let lines: Vec<String> = sent.iter().flat_map(|b| b["lines"].as_array().unwrap().iter().map(|l| l["en"].as_str().unwrap().to_string()).collect::<Vec<_>>()).collect();
+        assert_eq!(lines.len(), 1200 - 500 + 1, "the rest of the lines, and the page reason");
+        assert!(lines.contains(&"The mission failed reason.".to_string()));
+        for never in ["Seen while sharing was off.", "Another game on screen.", "A player's own area over the chat.", "No game: an old row."] {
+            assert!(!lines.contains(&never.to_string()), "{never}");
+        }
+        assert!(sent.iter().all(|b| b["lines"].as_array().unwrap().iter().all(|l| l["end"].as_u64().unwrap() - l["start"].as_u64().unwrap() <= MAX_SHOWN_MS)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_line_a_pass_stops_at_is_sent_by_the_next() {
+        let dir = std::env::temp_dir().join(format!("vit-share-budget-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let log = dir.join("log.jsonl");
+        // exactly four batches' worth, and one line more, the last in the log
+        let text: String = (0..2001)
+            .map(|i| serde_json::json!({ "area": "subtitles", "en": format!("Get in the car number {i}."), "start": 1_000, "end": 2_000, "game": "gta6", "confirmed": false, "held": false, "share": true }).to_string() + "\n")
+            .collect();
+        std::fs::write(&log, &text).unwrap();
+        let mut c = Config { install_id: "11111111-2222-4333-8444-555555555555".into(), share_lines: true, ..Config::default() };
+        c.normalize();
+        let http = reqwest::blocking::Client::new();
+        let (url, got) = fake_server(vec![]);
+        let mut offset = 0;
+        let mut budget = 4;
+        assert!(!share_file(&http, &url, &c, &log, &mut offset, false, &mut budget), "not all sent this pass");
+        assert_eq!(got.lock().unwrap().len(), 4);
+        assert!(offset < text.len() as u64, "the last line is still to send");
+        let (url, got) = fake_server(vec![]);
+        let mut budget = 4;
+        assert!(share_file(&http, &url, &c, &log, &mut offset, false, &mut budget));
+        let sent = got.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0]["lines"][0]["en"], "Get in the car number 2000.");
+        assert_eq!(offset, text.len() as u64);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn changes_are_merged_and_the_pack_kept_sealed() {
+        let k = [5u8; 32];
+        let e = |en: &str, ar: &str| memory::Entry { en: en.into(), ar: ar.into(), source: "reviewed".into() };
+        let pack = vec![e("get in the car", "Monte"), e("lose the cops", "Sème")];
+        let changes = vec![("get in the car".to_string(), Some(e("get in the car", "Monte dans la bagnole"))), ("lose the cops".to_string(), None), ("follow lucia".to_string(), Some(e("follow lucia", "Suis Lucia")))];
+        let merged = apply_changes(pack, changes);
+        assert_eq!(merged.iter().map(|e| (e.en.as_str(), e.ar.as_str())).collect::<Vec<_>>(), vec![("follow lucia", "Suis Lucia"), ("get in the car", "Monte dans la bagnole")]);
+        let file = seal_pack(&k, &merged, "gta6", "fr", 7);
+        assert_eq!(open_pack_with(&k, &file, "gta6", "fr", "7").unwrap().len(), 2);
+        assert!(open_pack_with(&k, &file, "gta6", "fr", "6").is_none(), "sealed for its version");
+        // the server's changes file: a line, and one taken out
+        let text = "{\"en\":\"Follow Lucia.\",\"ar\":\"Suis Lucia\",\"source\":\"reviewed\"}\n{\"en\":\"lose the cops\",\"deleted\":true}\n";
+        let sealed = {
+            use aes_gcm::aead::{Aead, KeyInit, Payload};
+            use std::io::Write as _;
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            gz.write_all(text.as_bytes()).unwrap();
+            let zipped = gz.finish().unwrap();
+            let nonce = [3u8; 12];
+            let ct = aes_gcm::Aes256Gcm::new_from_slice(&k).unwrap().encrypt(aes_gcm::Nonce::from_slice(&nonce), Payload { msg: &zipped, aad: b"gta6/fr/6-7" }).unwrap();
+            [b"G6T1".to_vec(), nonce.to_vec(), ct].concat()
+        };
+        let ch = open_changes(&k, &sealed, "gta6/fr/6-7").unwrap();
+        assert_eq!(ch.len(), 2);
+        assert_eq!((ch[0].0.as_str(), ch[0].1.as_ref().map(|e| e.ar.as_str())), ("follow lucia", Some("Suis Lucia")));
+        assert_eq!((ch[1].0.as_str(), ch[1].1.is_none()), ("lose the cops", true));
+        assert!(open_changes(&k, &sealed, "gta6/fr/5-7").is_none(), "only for those two versions");
+    }
 
     #[test]
     fn layouts_change_only_what_they_name() {

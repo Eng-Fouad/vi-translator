@@ -58,11 +58,15 @@
       $("en").onclick = () => setEn(document.body.classList.contains("no-en"));
 
       let last = 0;
+      let run = null;
       const atBottom = () => { const m = $("list"); return m.scrollHeight - m.scrollTop - m.clientHeight < 80; };
       async function poll() {
         try {
           const r = await fetch(`live.json?after=${last}`, { cache: "no-store" });
           const d = await r.json();
+          // the app started again: its line ids start again too
+          if (run !== null && d.run !== run) last = 0;
+          run = d.run;
           $("dot").classList.add("on");
           $("paused").hidden = d.live !== false;
           const rtl = !!(d.lang && d.lang.rtl);

@@ -179,7 +179,7 @@ window.AS = (() => {
     }
   }
 
-  // ---- Game-profile screens (e.g. GTA V "Mission Failed") --------------------------------------
+  // ---- Game pages (a menu, a "mission failed" page …) ------------------------------------------
   // L: layout from the backend (all rects are fractions of the game frame).
   // reasonSegs: Arabic segments for the reason line. opts: { title_font, text_font }.
   // root: element covering exactly the game picture (overlay window or preview layer).

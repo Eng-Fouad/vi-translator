@@ -5,8 +5,9 @@
 //! card in an OBS scene it lands on the game picture. It polls /state ~10 times a second.
 //! Listens on 127.0.0.1 only: nothing outside this PC can reach it.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -16,17 +17,82 @@ use crate::capture::Shared;
 use crate::config::Config;
 
 pub(crate) fn respond(mut s: TcpStream, status: &str, mime: &str, body: &[u8]) {
+    // (no CORS header: the pages are same-origin, and other websites must not read these answers)
     let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
         body.len()
     );
     let _ = s.write_all(head.as_bytes());
     let _ = s.write_all(body);
 }
 
+/// A request's target and the headers that matter here.
+pub(crate) struct Request {
+    pub path: String,
+    pub query: String,
+    pub host: String,
+    pub origin: String,
+}
+
+/// Read a request's first line and headers: at most 8 KB, 3 s per read (a client that sends more,
+/// or nothing, is dropped).
+pub(crate) fn read_request(s: &TcpStream) -> Option<Request> {
+    let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
+    let mut r = BufReader::new(s).take(8192);
+    let mut line = String::new();
+    if r.read_line(&mut line).ok()? == 0 {
+        return None;
+    }
+    // "GET /path?query HTTP/1.1"
+    let target = line.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let (path, query) = target.split_once('?').map(|(p, q)| (p.to_string(), q.to_string())).unwrap_or((target, String::new()));
+    let (mut host, mut origin) = (String::new(), String::new());
+    loop {
+        let mut h = String::new();
+        if r.read_line(&mut h).ok()? == 0 || h.trim().is_empty() {
+            break;
+        }
+        if let Some((name, value)) = h.split_once(':') {
+            match name.trim().to_ascii_lowercase().as_str() {
+                "host" => host = value.trim().to_string(),
+                "origin" => origin = value.trim().to_string(),
+                _ => {}
+            }
+        }
+    }
+    Some(Request { path, query, host, origin })
+}
+
+/// Connections being served at once, at most (each has its own thread).
+const MAX_CONNECTIONS: usize = 64;
+
+/// Counts a connection while it's served (see `MAX_CONNECTIONS`).
+pub(crate) struct Slot(&'static AtomicUsize);
+
+impl Slot {
+    pub(crate) fn take(count: &'static AtomicUsize) -> Option<Slot> {
+        if count.fetch_add(1, Ordering::AcqRel) >= MAX_CONNECTIONS {
+            count.fetch_sub(1, Ordering::AcqRel);
+            return None;
+        }
+        Some(Slot(count))
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// The app's own window, as the origin of its requests (Windows; macOS and Linux).
+fn app_origin(origin: &str) -> bool {
+    matches!(origin, "http://tauri.localhost" | "https://tauri.localhost" | "tauri://localhost")
+}
+
 /// Changes every time the app starts: the page reloads itself when it sees a new one, so an OBS
 /// Browser Source always runs the current drawing code (it otherwise keeps the code it first loaded).
-fn build_id() -> u64 {
+pub(crate) fn build_id() -> u64 {
     static ID: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *ID.get_or_init(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0))
 }
@@ -58,19 +124,17 @@ fn state_json(cfg: &Mutex<Config>, shared: &Shared) -> Vec<u8> {
     serde_json::to_vec(&v).unwrap_or_default()
 }
 
-fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
-    let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
-    let mut line = String::new();
-    if BufReader::new(&s).read_line(&mut line).is_err() {
-        return;
+fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream, port: u16) {
+    let Some(req) = read_request(&s) else { return };
+    // Only requests addressed to this PC by its own name (OBS, the app's window): a website that
+    // points its own domain name here (DNS rebinding) gets nothing.
+    if ![format!("127.0.0.1:{port}"), format!("localhost:{port}"), format!("[::1]:{port}")].contains(&req.host) {
+        return respond(s, "403 Forbidden", "text/plain", b"not allowed");
     }
-    // "GET /path?query HTTP/1.1"
-    let target = line.split_whitespace().nth(1).unwrap_or("/");
-    let (path, query) = target.split_once('?').unwrap_or((target, ""));
-    let path = path.to_string();
-    match path.as_str() {
+    let (path, query) = (req.path.as_str(), req.query.as_str());
+    match path {
         "/state" => respond(s, "200 OK", "application/json; charset=utf-8", &state_json(cfg, shared)),
-        "/preview" | "/preview.jpg" => preview_frame(shared, s, query),
+        "/preview" | "/preview.jpg" => preview_frame(shared, s, query, app_origin(&req.origin).then_some(req.origin.as_str())),
         "/preview.mjpg" => stream_preview(shared, s),
         "/" | "/obs" => serve_asset(app, s, "obs.html"),
         p if !p.contains("..") => serve_asset(app, s, p.trim_start_matches('/')),
@@ -87,8 +151,13 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
 /// The frame is either a JPEG, or — from a capture card sending YUY2 — the card's own frame, raw
 /// (`application/x-yuy2`, size and colour standard in headers), which the window turns into colour
 /// on the GPU like OBS does: no encoding or decoding on the way.
-fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str) {
+fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str, origin: Option<&str>) {
     let after: u64 = query.split('&').find_map(|kv| kv.strip_prefix("after=")).and_then(|v| v.parse().ok()).unwrap_or(0);
+    // (the picture is for the app's own window: no other website may read it)
+    let expose = match origin {
+        Some(o) => format!("Access-Control-Allow-Origin: {o}\r\nVary: Origin\r\nAccess-Control-Expose-Headers: X-Seq, X-Width, X-Height, X-Matrix, X-Range\r\n"),
+        None => String::new(),
+    };
     let start = std::time::Instant::now();
     loop {
         shared.mark_preview_pulled();
@@ -100,11 +169,10 @@ fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str) {
             (None, Some(_)) => true,
             _ => false,
         };
-        let expose = "Access-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: X-Seq, X-Width, X-Height, X-Matrix, X-Range";
         if yuv_newer {
             if let Some((seq, f)) = yuv.filter(|(seq, _)| *seq != after) {
                 let head = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/x-yuy2\r\nContent-Length: {}\r\nX-Seq: {seq}\r\nX-Width: {}\r\nX-Height: {}\r\nX-Matrix: {}\r\nX-Range: {}\r\nCache-Control: no-store\r\n{expose}\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/x-yuy2\r\nContent-Length: {}\r\nX-Seq: {seq}\r\nX-Width: {}\r\nX-Height: {}\r\nX-Matrix: {}\r\nX-Range: {}\r\nCache-Control: no-store\r\n{expose}Connection: close\r\n\r\n",
                     f.data.len(),
                     f.w,
                     f.h,
@@ -117,7 +185,7 @@ fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str) {
             }
         } else if let Some((seq, jpeg)) = jpeg.filter(|(seq, _)| *seq != after) {
             let head = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nX-Seq: {seq}\r\nCache-Control: no-store\r\n{expose}\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nX-Seq: {seq}\r\nCache-Control: no-store\r\n{expose}Connection: close\r\n\r\n",
                 jpeg.len()
             );
             let _ = s.set_nodelay(true);
@@ -125,7 +193,9 @@ fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str) {
             return;
         }
         if start.elapsed() >= Duration::from_secs(1) {
-            return respond(s, "204 No Content", "text/plain", b"");
+            let head = format!("HTTP/1.1 204 No Content\r\nCache-Control: no-store\r\n{expose}Content-Length: 0\r\nConnection: close\r\n\r\n");
+            let _ = s.write_all(head.as_bytes());
+            return;
         }
         std::thread::sleep(Duration::from_millis(3));
     }
@@ -138,7 +208,6 @@ fn stream_preview(shared: &Shared, mut s: TcpStream) {
     let head = "HTTP/1.1 200 OK
 Content-Type: multipart/x-mixed-replace; boundary=frame
 Cache-Control: no-store
-Access-Control-Allow-Origin: *
 Connection: close
 
 ";
@@ -195,8 +264,68 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
             return;
         }
     };
+    static ACTIVE: AtomicUsize = AtomicUsize::new(0);
     for s in listener.incoming().flatten() {
+        // (too many at once: the newest waits for nothing, it's closed)
+        let Some(slot) = Slot::take(&ACTIVE) else { continue };
         let (app, cfg, shared) = (app.clone(), cfg.clone(), shared.clone());
-        std::thread::spawn(move || handle(&app, &cfg, &shared, s));
+        std::thread::spawn(move || {
+            let _slot = slot;
+            handle(&app, &cfg, &shared, s, port);
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(raw: &[u8]) -> Option<Request> {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut c = TcpStream::connect(l.local_addr().unwrap()).unwrap();
+        c.write_all(raw).unwrap();
+        let (s, _) = l.accept().unwrap();
+        read_request(&s)
+    }
+
+    #[test]
+    fn reads_the_target_host_and_origin() {
+        let r = request(b"GET /preview?after=7 HTTP/1.1
+Host: 127.0.0.1:8790
+ORIGIN: http://tauri.localhost
+X-Other: y
+
+").unwrap();
+        assert_eq!((r.path.as_str(), r.query.as_str(), r.host.as_str(), r.origin.as_str()), ("/preview", "after=7", "127.0.0.1:8790", "http://tauri.localhost"));
+        assert!(app_origin(&r.origin));
+        assert!(!app_origin("http://evil.example") && !app_origin("null") && !app_origin(""));
+    }
+
+    #[test]
+    fn a_huge_request_is_cut_short() {
+        // a header with no end: read up to 8 KB, then given up (no unbounded memory)
+        let mut raw = b"GET / HTTP/1.1
+Host: 127.0.0.1:1
+X: ".to_vec();
+        raw.extend(std::iter::repeat_n(b'a', 64 * 1024));
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap();
+        let t = std::thread::spawn(move || {
+            let mut c = TcpStream::connect(addr).unwrap();
+            let _ = c.write_all(&raw);
+        });
+        let (s, _) = l.accept().unwrap();
+        let r = read_request(&s);
+        assert!(r.is_some_and(|r| r.path == "/"), "the first line is read, the endless header isn't");
+        let _ = t.join();
+    }
+
+    #[test]
+    fn connections_are_capped() {
+        static COUNT: AtomicUsize = AtomicUsize::new(0);
+        let slots: Vec<Slot> = (0..MAX_CONNECTIONS).map(|_| Slot::take(&COUNT).unwrap()).collect();
+        assert!(Slot::take(&COUNT).is_none());
+        drop(slots);
+        assert!(Slot::take(&COUNT).is_some());
     }
 }

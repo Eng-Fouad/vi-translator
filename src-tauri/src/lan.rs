@@ -5,7 +5,6 @@
 //! its fonts and the list of recent translations: never settings, the picture or the OBS page
 //! (those stay on the 127.0.0.1-only server in obs_page.rs).
 
-use std::io::{BufRead, BufReader};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -15,7 +14,7 @@ use tauri::AppHandle;
 
 use crate::capture::Shared;
 use crate::config::Config;
-use crate::obs_page::{respond, serve_asset};
+use crate::obs_page::{read_request, respond, serve_asset, Slot};
 
 /// How many recent lines the page can fetch.
 const KEEP: usize = 200;
@@ -56,6 +55,8 @@ pub struct LanInfo {
     pub url: Option<String>,
     /// QR code of the address, as SVG
     pub qr: Option<String>,
+    /// why the page isn't running although it's on (the port is taken …)
+    pub error: Option<String>,
 }
 
 pub fn info(c: &Config, shared: &Shared) -> LanInfo {
@@ -65,7 +66,8 @@ pub fn info(c: &Config, shared: &Shared) -> LanInfo {
         let code = qrcode::QrCode::new(u.as_bytes()).ok()?;
         Some(code.render::<qrcode::render::svg::Color>().min_dimensions(180, 180).quiet_zone(true).build())
     });
-    LanInfo { enabled: c.lan_page, running, url, qr }
+    let error = (c.lan_page && !running).then(|| shared.lan_error.lock().unwrap().clone()).flatten();
+    LanInfo { enabled: c.lan_page, running, url, qr, error }
 }
 
 /// Runs for the app's lifetime: starts and stops the listener as the setting changes.
@@ -81,10 +83,18 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
         match (&listener, on) {
             (Some((_, p)), true) if *p == port => {}
             (_, true) => {
-                listener = TcpListener::bind(("0.0.0.0", port)).ok().map(|l| {
-                    let _ = l.set_nonblocking(true);
-                    (l, port)
-                });
+                listener = match TcpListener::bind(("0.0.0.0", port)) {
+                    Ok(l) => {
+                        let _ = l.set_nonblocking(true);
+                        *shared.lan_error.lock().unwrap() = None;
+                        Some((l, port))
+                    }
+                    // (shown in the window: "Starting…" forever would hide it)
+                    Err(e) => {
+                        *shared.lan_error.lock().unwrap() = Some(format!("port {port}: {e}"));
+                        None
+                    }
+                };
             }
             (Some(_), false) => listener = None,
             (None, false) => {}
@@ -93,10 +103,16 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
         match &listener {
             Some((l, _)) => {
                 // accept everything waiting, then look at the setting again
+                static ACTIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
                 while let Ok((s, _)) = l.accept() {
+                    // (too many at once: closed)
+                    let Some(slot) = Slot::take(&ACTIVE) else { continue };
                     let _ = s.set_nonblocking(false);
                     let (a, sh) = (app.clone(), shared.clone());
-                    std::thread::spawn(move || handle(&a, &sh, s));
+                    std::thread::spawn(move || {
+                        let _slot = slot;
+                        handle(&a, &sh, s);
+                    });
                 }
                 std::thread::sleep(Duration::from_millis(60));
             }
@@ -106,13 +122,13 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
 }
 
 fn handle(app: &AppHandle, shared: &Shared, s: TcpStream) {
-    let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
-    let mut line = String::new();
-    if BufReader::new(&s).read_line(&mut line).is_err() {
-        return;
+    let Some(req) = read_request(&s) else { return };
+    // Asked for by an address (this PC's, as the phone opens it), not a name: a website can't point a
+    // name of its own at this PC and read the page from the browser ("DNS rebinding").
+    if !host_is_address(&req.host) {
+        return respond(s, "403 Forbidden", "text/plain", b"not allowed");
     }
-    let target = line.split_whitespace().nth(1).unwrap_or("/");
-    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    let (path, query) = (req.path.as_str(), req.query.as_str());
     match path {
         "/" | "/live" => serve_asset(app, s, "live.html"),
         "/live.json" => {
@@ -120,12 +136,36 @@ fn handle(app: &AppHandle, shared: &Shared, s: TcpStream) {
             let lines: Vec<serde_json::Value> =
                 shared.live_log.lock().unwrap().iter().filter(|l| l["id"].as_u64().unwrap_or(0) > after).cloned().collect();
             let live = !shared.live_off.load(std::sync::atomic::Ordering::Relaxed);
-            let body = serde_json::json!({ "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live });
+            // ("run": new each time the app starts; line ids start again then, and the page with it)
+            let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live });
             respond(s, "200 OK", "application/json; charset=utf-8", body.to_string().as_bytes());
         }
         // the page's fonts and nothing else
         p if p.starts_with("/fonts/") && !p.contains("..") || p == "/fonts.css" => serve_asset(app, s, p.trim_start_matches('/')),
         _ => respond(s, "404 Not Found", "text/plain", b"not found"),
+    }
+}
+
+/// A Host header that is an IP address or "localhost" (with or without a port).
+fn host_is_address(host: &str) -> bool {
+    let name = if let Some(rest) = host.strip_prefix('[') {
+        rest.split_once(']').map(|(ip, _)| ip).unwrap_or("")
+    } else {
+        host.rsplit_once(':').map(|(h, _)| h).unwrap_or(host)
+    };
+    name.eq_ignore_ascii_case("localhost") || name.parse::<std::net::IpAddr>().is_ok()
+}
+
+#[cfg(test)]
+mod host_tests {
+    #[test]
+    fn the_phone_page_answers_addresses_only() {
+        for ok in ["192.168.1.20:8791", "192.168.1.20", "127.0.0.1:8791", "localhost:8791", "[::1]:8791", "[fe80::1]:8791"] {
+            assert!(super::host_is_address(ok), "{ok}");
+        }
+        for bad in ["evil.example:8791", "evil.example", "", "192.168.1.20.evil.example:8791", "[evil]:8791"] {
+            assert!(!super::host_is_address(bad), "{bad}");
+        }
     }
 }
 

@@ -13,7 +13,7 @@ use crate::config::Config;
 #[cfg_attr(windows, path = "capture_windows.rs")]
 #[cfg_attr(not(windows), path = "capture_xcap.rs")]
 mod platform;
-pub use platform::{client_rect, find_window, foreground_window, grab_once, grab_screen_region, list_windows};
+pub use platform::{client_rect, find_window, focused_client_rect, foreground_window, grab_once, grab_screen_region, list_windows};
 
 /// One captured frame of the window's client area, RGBA.
 pub struct FrameData {
@@ -23,6 +23,13 @@ pub struct FrameData {
     pub seq: u64,
 }
 
+/// Menu text translations, for one target language (the translator's answers in another are dropped).
+#[derive(Default)]
+pub struct MenuCache {
+    pub lang: String,
+    pub map: std::collections::HashMap<String, String>,
+}
+
 #[derive(Default)]
 pub struct Shared {
     pub frame: Mutex<Option<Arc<FrameData>>>,
@@ -30,7 +37,7 @@ pub struct Shared {
     pub hwnd: AtomicIsize,
     pub seq: AtomicU64,
     pub status: Mutex<String>,
-    /// A profile screen (e.g. GTA V "Mission Failed") is on screen; the full-window overlay shows it.
+    /// A game page (a menu, a "mission failed" page …) is on screen; the full-window overlay shows it.
     pub screen_active: std::sync::atomic::AtomicBool,
     /// The profile screen currently shown (layout JSON) and its translated reason line, for windows
     /// that open after the screen appeared.
@@ -40,8 +47,10 @@ pub struct Shared {
     pub on_screen: Mutex<std::collections::HashMap<String, serde_json::Value>>,
     /// Area id -> the full translation event now shown (segments, size, place), for the OBS page.
     pub shown: Mutex<std::collections::HashMap<String, serde_json::Value>>,
-    /// Pause-menu text translated by the translator this session: English -> Arabic.
-    pub menu_cache: Mutex<std::collections::HashMap<String, String>>,
+    /// Pause-menu text translated by the translator this session: English -> translation, in one language.
+    pub menu_cache: Mutex<MenuCache>,
+    /// …and the menu text it couldn't translate (asked again later).
+    pub menu_failed: Mutex<Vec<String>>,
     /// Set by the UI: measure the text sizes again.
     pub reset_sizes: std::sync::atomic::AtomicBool,
     /// Live preview, separate from the full frames read for text: a frame (≤ PREVIEW_W wide) at
@@ -64,6 +73,8 @@ pub struct Shared {
     pub live_lang: Mutex<serde_json::Value>,
     /// the home-network page is being served
     pub lan_running: std::sync::atomic::AtomicBool,
+    /// why the phone page couldn't start listening (shown in the window)
+    pub lan_error: Mutex<Option<String>>,
     /// the header's "Live translations" switch is off: the home-network page gets no lines meanwhile
     pub live_off: std::sync::atomic::AtomicBool,
     /// ms between full frames (for reading text) and between preview frames (0 = default)
@@ -90,6 +101,7 @@ pub struct YuvFrame {
 }
 
 /// YUY2 → RGBA (for reading text; the preview does the same on the GPU).
+#[cfg_attr(not(windows), allow(dead_code))] // (the Windows capture card reader's)
 pub fn yuy2_to_rgba(src: &[u8], w: u32, h: u32, c: YuvColor) -> Vec<u8> {
     // R = Y + kr·V, G = Y − kgu·U − kgv·V, B = Y + kb·U, in fixed point (×1024)
     let (kr, kgu, kgv, kb) = if c.bt709 { (1.5748, 0.1873, 0.4681, 1.8556) } else { (1.402, 0.3441, 0.7141, 1.772) };
@@ -152,6 +164,10 @@ impl Shared {
     }
     /// Store a full frame.
     pub fn put_full(&self, w: u32, h: u32, rgba: Vec<u8>) {
+        // (every reader of a frame takes its size from w and h: an empty or short one is no frame)
+        if w == 0 || h == 0 || rgba.len() < w as usize * h as usize * 4 {
+            return;
+        }
         let seq = self.seq.fetch_add(1, Ordering::Relaxed) + 1;
         *self.frame.lock().unwrap() = Some(Arc::new(FrameData { w, h, rgba, seq }));
     }
@@ -160,6 +176,7 @@ impl Shared {
         *self.preview_raw.lock().unwrap() = Some(Arc::new(f));
     }
     /// Store a raw YUY2 preview frame (a capture card's own picture).
+    #[cfg_attr(not(windows), allow(dead_code))] // (the Windows capture card reader's)
     pub fn put_preview_yuv(&self, f: YuvFrame) {
         let seq = self.preview_seq.fetch_add(1, Ordering::Relaxed) + 1;
         *self.preview_yuv.lock().unwrap() = Some((seq, Arc::new(f)));

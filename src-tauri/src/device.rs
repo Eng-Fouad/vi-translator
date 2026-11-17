@@ -156,7 +156,25 @@ fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32, Out)> {
     }
 }
 
-/// Copy one sample out as top-down rows of `w × bpp` bytes (RGB32: 4, YUY2: 2).
+/// The reader's output now: its size and kind, or None if it's one this reader doesn't take.
+fn current(r: &IMFSourceReader) -> Option<(u32, u32, Out)> {
+    let cur = unsafe { r.GetCurrentMediaType(STREAM) }.ok()?;
+    let (w, h) = size_of(&cur);
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let g = unsafe { cur.GetGUID(&MF_MT_SUBTYPE) }.ok()?;
+    if g == MFVideoFormat_YUY2 && w % 2 == 0 {
+        Some((w, h, Out::Yuy2(unsafe { yuv_color(&cur, h) })))
+    } else if g == MFVideoFormat_RGB32 {
+        Some((w, h, Out::Rgb32))
+    } else {
+        None
+    }
+}
+
+/// Copy one sample out as top-down rows of `w × bpp` bytes (RGB32: 4, YUY2: 2). A sample that
+/// doesn't hold that many rows (the card changed its picture meanwhile) is an error, never read past.
 fn copy_rows(sample: &IMFSample, w: u32, h: u32, bpp: u32) -> Result<Vec<u8>> {
     unsafe {
         let buf = sample.ConvertToContiguousBuffer()?;
@@ -168,10 +186,18 @@ fn copy_rows(sample: &IMFSample, w: u32, h: u32, bpp: u32) -> Result<Vec<u8>> {
                 out[y * row..(y + 1) * row].copy_from_slice(src);
             }
         };
-        if let Ok(b2) = buf.cast::<IMF2DBuffer>() {
-            let (mut scan0, mut pitch) = (std::ptr::null_mut(), 0i32);
-            b2.Lock2D(&mut scan0, &mut pitch)?;
-            copy_rows(scan0, pitch as isize, &mut out);
+        if let Ok(b2) = buf.cast::<IMF2DBuffer2>() {
+            let (mut scan0, mut pitch, mut start, mut len) = (std::ptr::null_mut(), 0i32, std::ptr::null_mut(), 0u32);
+            b2.Lock2DSize(MF2DBuffer_LockFlags_Read, &mut scan0, &mut pitch, &mut start, &mut len)?;
+            let p = pitch as isize;
+            // the top row's place in the buffer, and the bottom row's (a negative pitch: bottom-up)
+            let first = scan0 as isize - start as isize;
+            let last = first + p * (h as isize - 1);
+            if h == 0 || p.unsigned_abs() < row || first.min(last) < 0 || first.max(last) as usize + row > len as usize {
+                let _ = b2.Unlock2D();
+                return Err(anyhow!("the frame is not {w}×{h}"));
+            }
+            copy_rows(scan0, p, &mut out);
             let _ = b2.Unlock2D();
         } else {
             let (mut p, mut len) = (std::ptr::null_mut(), 0u32);
@@ -230,7 +256,7 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
                 Err(e) => why = format!("{e:#}"),
             }
         }
-        let Some((reader, w, h, out)) = opened else {
+        let Some((reader, mut w, mut h, mut out)) = opened else {
             if why.contains("0xC00D3704") {
                 why = "another app is using it (OBS's Video Capture Device keeps it to itself) — pick the card's OBS source (📺) instead".into();
             }
@@ -264,6 +290,20 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
                 };
                 *status.lock().unwrap() = format!("Capture device \"{name}\" stopped sending frames ({why})");
                 break;
+            }
+            // The card changed its picture (the console switched resolution): follow it, or open the
+            // card again if it's now in a form this reader doesn't take.
+            if flags & (MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED.0 | MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED.0) as u32 != 0 {
+                match current(&reader) {
+                    Some(now) => {
+                        (w, h, out) = now;
+                        *status.lock().unwrap() = format!("Capturing device \"{name}\" ({w}×{h})");
+                    }
+                    None => {
+                        *status.lock().unwrap() = format!("Capture device \"{name}\" changed its picture: opening it again");
+                        break;
+                    }
+                }
             }
             let Some(sample) = sample else { continue };
             let (full, preview) = (shared.full_due(last), shared.preview_due(last_preview));

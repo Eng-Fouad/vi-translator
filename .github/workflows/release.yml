@@ -124,17 +124,21 @@ jobs:
           path: out
           merge-multiple: true
 
+      # Each .sig signs "vi-translator-update-v1", the file's name, the version and the file's SHA-256
+      # (updater::signed_text): a signed file can't pass for another version or system.
       - name: Sign
         env:
           KEY: ${{ secrets.UPDATE_SIGNING_KEY_PEM }}
+          V: ${{ needs.check.outputs.version }}
         run: |
           [ -n "$KEY" ] || { echo "::error::secret UPDATE_SIGNING_KEY_PEM is not set"; exit 1; }
           umask 077
           printf '%s\n' "$KEY" > "$RUNNER_TEMP/key.pem"
           for f in out/vi-translator-*; do
-            openssl pkeyutl -sign -inkey "$RUNNER_TEMP/key.pem" -rawin -in "$f" | base64 -w0 > "$f.sig"
+            printf 'vi-translator-update-v1\n%s\n%s\n%s\n' "$(basename "$f")" "$V" "$(sha256sum "$f" | cut -d' ' -f1)" > "$RUNNER_TEMP/msg"
+            openssl pkeyutl -sign -inkey "$RUNNER_TEMP/key.pem" -rawin -in "$RUNNER_TEMP/msg" | base64 -w0 > "$f.sig"
           done
-          rm -f "$RUNNER_TEMP/key.pem"
+          rm -f "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/msg"
           ls -l out
 
       - name: Create the release
