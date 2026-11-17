@@ -73,10 +73,32 @@ fn fps_of(t: &IMFMediaType) -> f64 {
     if d > 0.0 { n / d } else { 0.0 }
 }
 
-/// Open the device and set it up to hand us RGB32 frames. Prefers 1920×1080 (plenty for reading
-/// text, and what most cards stream), then the highest frame rate, then uncompressed formats.
+/// What the reader hands us: the card's own YUY2 frames as they are (like OBS: the preview turns
+/// them into colour on the GPU), or RGB32 that Media Foundation converts for us (other formats).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Out {
+    Rgb32,
+    Yuy2(crate::capture::YuvColor),
+}
+
+/// The card's colour standard (BT.709 for HD unless it says otherwise) and range (16–235 unless 0–255).
+unsafe fn yuv_color(t: &IMFMediaType, h: u32) -> crate::capture::YuvColor {
+    let matrix = unsafe { t.GetUINT32(&MF_MT_YUV_MATRIX) }.unwrap_or(0);
+    let range = unsafe { t.GetUINT32(&MF_MT_VIDEO_NOMINAL_RANGE) }.unwrap_or(0);
+    crate::capture::YuvColor {
+        bt709: match matrix {
+            m if m == MFVideoTransferMatrix_BT709.0 as u32 => true,
+            m if m == MFVideoTransferMatrix_BT601.0 as u32 => false,
+            _ => h >= 720,
+        },
+        full_range: range == MFNominalRange_0_255.0 as u32,
+    }
+}
+
+/// Open the device: YUY2 frames as the card sends them, or else RGB32. Prefers 1920×1080 (plenty for
+/// reading text, and what most cards stream), then the highest frame rate, then uncompressed formats.
 /// `pick = false` keeps the card's current format (needed while another app is streaming it).
-fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32)> {
+fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32, Out)> {
     let act = devices()?
         .into_iter()
         .find(|(n, _)| n == name)
@@ -85,10 +107,12 @@ fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32)> {
     unsafe {
         let source: IMFMediaSource = act.ActivateObject().context("could not open the device (in use by another app?)")?;
         let mut attrs: Option<IMFAttributes> = None;
-        MFCreateAttributes(&mut attrs, 2)?;
+        MFCreateAttributes(&mut attrs, 3)?;
         let attrs = attrs.context("no attributes")?;
         // let the reader decode MJPG / convert NV12, YUY2 … to RGB32 for us
         attrs.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)?;
+        // hold as few frames as possible on the way (live picture, not a video file)
+        let _ = attrs.SetUINT32(&MF_LOW_LATENCY, 1);
         let reader = MFCreateSourceReaderFromMediaSource(&source, &attrs)?;
 
         let mut best: Option<(i64, IMFMediaType)> = None;
@@ -115,6 +139,9 @@ fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32)> {
         }
         let cur = reader.GetCurrentMediaType(STREAM)?;
         let (w, h) = size_of(&cur);
+        if cur.GetGUID(&MF_MT_SUBTYPE).is_ok_and(|g| g == MFVideoFormat_YUY2) && w > 0 && h > 0 && w % 2 == 0 {
+            return Ok((reader, w, h, Out::Yuy2(yuv_color(&cur, h))));
+        }
         let out = MFCreateMediaType()?;
         out.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
         out.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)?;
@@ -125,16 +152,16 @@ fn open(name: &str, pick: bool) -> Result<(IMFSourceReader, u32, u32)> {
         if w == 0 || h == 0 {
             return Err(anyhow!("the device reports no picture size"));
         }
-        Ok((reader, w, h))
+        Ok((reader, w, h, Out::Rgb32))
     }
 }
 
-/// Copy one RGB32 sample out as top-down BGRX rows (w × 4 bytes each).
-fn to_bgrx(sample: &IMFSample, w: u32, h: u32) -> Result<Vec<u8>> {
+/// Copy one sample out as top-down rows of `w × bpp` bytes (RGB32: 4, YUY2: 2).
+fn copy_rows(sample: &IMFSample, w: u32, h: u32, bpp: u32) -> Result<Vec<u8>> {
     unsafe {
         let buf = sample.ConvertToContiguousBuffer()?;
-        let mut out = vec![0u8; (w * h * 4) as usize];
-        let row = (w * 4) as usize;
+        let mut out = vec![0u8; (w * h * bpp) as usize];
+        let row = (w * bpp) as usize;
         let copy_rows = |scan0: *const u8, pitch: isize, out: &mut [u8]| {
             for y in 0..h as usize {
                 let src = std::slice::from_raw_parts(scan0.offset(pitch * y as isize), row);
@@ -189,11 +216,11 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
         let mut why = String::new();
         for pick in [true, false] {
             match open(&name, pick) {
-                Ok((reader, w, h)) => {
+                Ok((reader, w, h, out)) => {
                     let (mut flags, mut sample) = (0u32, None);
                     match unsafe { reader.ReadSample(STREAM, 0, None, Some(&mut flags), None, Some(&mut sample)) } {
                         Ok(()) if flags & MF_SOURCE_READERF_ERROR.0 as u32 == 0 => {
-                            opened = Some((reader, w, h));
+                            opened = Some((reader, w, h, out));
                             break;
                         }
                         Ok(()) => why = format!("flags {flags:#x}"),
@@ -203,7 +230,7 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
                 Err(e) => why = format!("{e:#}"),
             }
         }
-        let Some((reader, w, h)) = opened else {
+        let Some((reader, w, h, out)) = opened else {
             if why.contains("0xC00D3704") {
                 why = "another app is using it (OBS's Video Capture Device keeps it to itself) — pick the card's OBS source (📺) instead".into();
             }
@@ -212,13 +239,24 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
             return;
         };
         *status.lock().unwrap() = format!("Capturing device \"{name}\" ({w}×{h})");
+        if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
+            eprintln!("[device] reading {w}x{h} as {out:?}");
+        }
         let ago = Instant::now() - Duration::from_secs(1);
         let (mut last, mut last_preview) = (ago, ago);
+        // VI_TRANSLATOR_DEBUG: once a second, how fast frames come and where the time goes
+        let debug = std::env::var_os("VI_TRANSLATOR_DEBUG").is_some();
+        let mut st = DebugStats::new();
         while !s2.load(Ordering::Relaxed) {
             let (mut flags, mut sample) = (0u32, None);
             // Read every frame the card sends (so the newest one is never stale); keep full frames at
             // the capture rate and small ones at the preview rate.
-            let r = unsafe { reader.ReadSample(STREAM, 0, None, Some(&mut flags), None, Some(&mut sample)) };
+            let t_read = Instant::now();
+            let mut stamp = 0i64;
+            let r = unsafe { reader.ReadSample(STREAM, 0, None, Some(&mut flags), Some(&mut stamp), Some(&mut sample)) };
+            if debug {
+                st.frame(t_read.elapsed(), stamp);
+            }
             if r.is_err() || flags & (MF_SOURCE_READERF_ERROR.0 | MF_SOURCE_READERF_ENDOFSTREAM.0) as u32 != 0 {
                 let why = match &r {
                     Err(e) => format!("{e}"),
@@ -232,22 +270,100 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
             if !full && !preview {
                 continue;
             }
-            let Ok(mut px) = to_bgrx(&sample, w, h) else { continue };
-            if preview {
-                last_preview = Instant::now();
-                shared.put_preview(crate::capture::shrink(&px, w, h, (w * 4) as usize, true));
-            }
-            if full {
-                last = Instant::now();
-                for p in px.chunks_exact_mut(4) {
-                    p.swap(0, 2); // BGRX -> RGBA
-                    p[3] = 255;
+            let t_work = Instant::now();
+            match out {
+                Out::Yuy2(color) => {
+                    let Ok(px) = copy_rows(&sample, w, h, 2) else { continue };
+                    if full {
+                        last = Instant::now();
+                        shared.put_full(w, h, crate::capture::yuy2_to_rgba(&px, w, h, color));
+                    }
+                    if preview {
+                        // A game running slower than the console's 60 Hz output (30 fps) arrives as
+                        // each frame twice: an exact copy of the last one sent isn't sent again (the
+                        // window has it already). The next frame is looked at right away.
+                        let copy = shared.preview_yuv.lock().unwrap().as_ref().is_some_and(|(_, f)| f.w == w && f.h == h && f.data == px);
+                        if copy {
+                            if debug {
+                                st.copy();
+                            }
+                        } else {
+                            // the card's frame as it is: the window converts it on the GPU
+                            last_preview = Instant::now();
+                            shared.put_preview_yuv(crate::capture::YuvFrame { w, h, color, data: px });
+                        }
+                    }
                 }
-                shared.put_full(w, h, px);
+                Out::Rgb32 => {
+                    let Ok(mut px) = copy_rows(&sample, w, h, 4) else { continue };
+                    if preview {
+                        last_preview = Instant::now();
+                        shared.put_preview(crate::capture::shrink(&px, w, h, (w * 4) as usize, true));
+                    }
+                    if full {
+                        last = Instant::now();
+                        for p in px.chunks_exact_mut(4) {
+                            p.swap(0, 2); // BGRX -> RGBA
+                            p[3] = 255;
+                        }
+                        shared.put_full(w, h, px);
+                    }
+                }
+            }
+            if debug {
+                st.work(t_work.elapsed());
             }
         }
     });
     DeviceCapture { stop, handle }
+}
+
+/// Debugging numbers for the device loop, printed once a second.
+struct DebugStats {
+    since: Instant,
+    frames: u32,
+    read: Duration,
+    read_max: Duration,
+    work: Duration,
+    work_max: Duration,
+    /// preview frames not sent: exact copies of the one before
+    copies: u32,
+    /// (wall clock, frame time stamp) of the first frame: how far the frames drift behind real time
+    first: Option<(Instant, i64)>,
+}
+
+impl DebugStats {
+    fn new() -> Self {
+        Self { since: Instant::now(), frames: 0, read: Duration::ZERO, read_max: Duration::ZERO, work: Duration::ZERO, work_max: Duration::ZERO, copies: 0, first: None }
+    }
+    fn frame(&mut self, read: Duration, stamp: i64) {
+        self.frames += 1;
+        self.read += read;
+        self.read_max = self.read_max.max(read);
+        let (t0, s0) = *self.first.get_or_insert((Instant::now(), stamp));
+        if self.since.elapsed() >= Duration::from_secs(1) {
+            // > 0 and growing: frames reach us later and later (a queue builds up somewhere)
+            let behind_ms = t0.elapsed().as_millis() as i64 - (stamp - s0) / 10_000;
+            let n = self.frames.max(1);
+            eprintln!(
+                "[device] {:.1} fps | wait for frame avg {:.1} ms max {:.1} | our work avg {:.1} ms max {:.1} | drift {behind_ms} ms | copies skipped {}",
+                self.frames as f64 / self.since.elapsed().as_secs_f64(),
+                self.read.as_secs_f64() * 1000.0 / n as f64,
+                self.read_max.as_secs_f64() * 1000.0,
+                self.work.as_secs_f64() * 1000.0 / n as f64,
+                self.work_max.as_secs_f64() * 1000.0,
+                self.copies,
+            );
+            *self = Self { first: self.first, ..Self::new() };
+        }
+    }
+    fn copy(&mut self) {
+        self.copies += 1;
+    }
+    fn work(&mut self, d: Duration) {
+        self.work += d;
+        self.work_max = self.work_max.max(d);
+    }
 }
 
 /// One frame from a device (for `--grab-device`).

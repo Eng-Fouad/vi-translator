@@ -140,6 +140,13 @@ pub struct Config {
     pub stable_ms: u64,
     pub clear_after_ms: u64,
     pub overlays_enabled: bool,
+    /// The list of live translations (in the app and on the home-network page) keeps filling,
+    /// whether or not the overlays are on.
+    pub live_translations: bool,
+    /// The preview's "NN fps" badge: shown or not, and in which corner of the picture
+    /// (top-left | top-right | bottom-left | bottom-right).
+    pub fps_badge: bool,
+    pub fps_corner: String,
     /// App window theme: light | dark
     pub theme: String,
     /// Experiment: remember translated lines and reuse them instantly (translation memory).
@@ -218,7 +225,10 @@ impl Default for Config {
             stable_ms: 300,
             clear_after_ms: 800,
             overlays_enabled: true,
-            theme: "light".into(),
+            live_translations: true,
+            fps_badge: false,
+            fps_corner: "top-right".into(),
+            theme: "dark".into(),
             memory_enabled: false,
             memory_tint: true,
             target_lang: "ar".into(),

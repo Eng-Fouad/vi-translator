@@ -137,9 +137,21 @@ impl Obs {
     }
 }
 
-/// OBS sources for the Source list (empty when OBS isn't reachable).
-pub fn list(port: u16, password: &str) -> Result<Vec<(String, String)>> {
-    Obs::connect(port, password)?.inputs()
+impl Obs {
+    /// OBS's canvas size (Settings → Video → Base (Canvas) Resolution).
+    pub fn canvas(&mut self) -> Result<(u32, u32)> {
+        let r = self.request("GetVideoSettings", json!({}))?;
+        let w = r["baseWidth"].as_u64().context("no canvas width from OBS")? as u32;
+        let h = r["baseHeight"].as_u64().context("no canvas height from OBS")? as u32;
+        Ok((w, h))
+    }
+}
+
+/// OBS sources for the Source list, and the canvas size if OBS gives it.
+pub fn list(port: u16, password: &str) -> Result<(Vec<(String, String)>, Option<(u32, u32)>)> {
+    let mut obs = Obs::connect(port, password)?;
+    let inputs = obs.inputs()?;
+    Ok((inputs, obs.canvas().ok()))
 }
 
 pub struct ObsCapture {

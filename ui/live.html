@@ -28,6 +28,10 @@
       .text { font-size: var(--size); line-height: 1.45; margin-top: 2px; unicode-bidi: plaintext; text-align: start; }
       body.no-en .en { display: none; }
       .empty { color: var(--muted); text-align: center; margin-top: 30vh; font-size: 16px; direction: ltr; }
+      /* "Live translations" switched off in the app */
+      .paused { padding: 10px 14px; background: #2a2147; color: var(--accent); font-size: 14px; text-align: center;
+        border-bottom: 1px solid #3a3063; direction: ltr; font-family: "Segoe UI", system-ui, sans-serif; }
+      .paused[hidden] { display: none; }
     </style>
   </head>
   <body>
@@ -38,6 +42,7 @@
       <button id="smaller" title="Smaller text">A−</button>
       <button id="bigger" title="Bigger text">A+</button>
     </header>
+    <div class="paused" id="paused" hidden>Paused: Live translations are switched off in VI Translator.</div>
     <main id="list"><div class="empty" id="empty">Waiting for translations…</div></main>
     <script>
       const $ = (id) => document.getElementById(id);
@@ -59,6 +64,7 @@
           const r = await fetch(`live.json?after=${last}`, { cache: "no-store" });
           const d = await r.json();
           $("dot").classList.add("on");
+          $("paused").hidden = d.live !== false;
           const rtl = !!(d.lang && d.lang.rtl);
           if (d.lang && d.lang.code) document.documentElement.lang = d.lang.code;
           if (d.lines.length) {

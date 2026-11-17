@@ -258,7 +258,7 @@ impl SizeLock {
 
 #[derive(Serialize, Clone)]
 struct FrameEvent {
-    /// a picture is coming in (the preview itself streams from /preview.mjpg)
+    /// a picture is coming in (the preview itself comes from /preview)
     live: bool,
     /// full frame size (what areas are fractions of)
     w: u32,
@@ -303,6 +303,31 @@ fn lan_info(state: tauri::State<AppState>) -> lan::LanInfo {
     lan::info(&c, &state.shared)
 }
 
+/// Opens the home-network page in the default browser (only that address: the page passes none).
+#[tauri::command]
+fn open_lan_page(state: tauri::State<AppState>) -> Result<(), String> {
+    let c = state.cfg.lock().unwrap().clone();
+    let url = lan::info(&c, &state.shared).url.ok_or("The page is not running")?;
+    // Windows: the shell's own "open" (the default browser), as Explorer does for a link
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::{HSTRING, w};
+        let r = unsafe { ShellExecuteW(None, w!("open"), &HSTRING::from(url.as_str()), None, None, SW_SHOWNORMAL) };
+        // (a value above 32 means it worked)
+        if r.0 as isize > 32 { Ok(()) } else { Err(format!("could not open {url}")) }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
+}
+
 #[tauri::command]
 fn get_config(state: tauri::State<AppState>) -> Config {
     state.cfg.lock().unwrap().clone()
@@ -329,7 +354,11 @@ async fn list_sources(state: tauri::State<'_, AppState>) -> Result<serde_json::V
     };
     let (windows, devices, obs) = tauri::async_runtime::spawn_blocking(move || {
         let obs = match obs::list(port, &password) {
-            Ok(list) => serde_json::json!({ "ok": true, "sources": list.into_iter().map(|(n, k)| serde_json::json!({ "name": n, "kind": k })).collect::<Vec<_>>() }),
+            Ok((list, canvas)) => serde_json::json!({
+                "ok": true,
+                "sources": list.into_iter().map(|(n, k)| serde_json::json!({ "name": n, "kind": k })).collect::<Vec<_>>(),
+                "canvas": canvas.map(|(w, h)| serde_json::json!({ "w": w, "h": h })),
+            }),
             Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
         };
         (capture::list_windows(APP_TITLE), device::list(), obs)
@@ -372,7 +401,7 @@ fn list_fonts() -> Vec<fonts::FontInfo> {
 // ------------------------------------------------------------------------------------- workers
 
 /// The live preview: turns small preview frames into JPEG (only while the preview is watched; the
-/// app's picture streams them from http://127.0.0.1:<port>/preview.mjpg), and tells the main window
+/// app's picture asks for them one by one at http://127.0.0.1:<port>/preview), and tells the main window
 /// twice a second whether a picture is coming in, its size and the capture status.
 fn preview_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
     let mut last_raw: Option<Arc<capture::FrameData>> = None;
@@ -381,9 +410,9 @@ fn preview_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
         std::thread::sleep(Duration::from_millis(5));
         let raw = shared.preview_raw.lock().unwrap().clone();
         // someone started watching, but the picture hasn't changed since: start from the last full frame
-        let watching = shared.preview_clients.load(std::sync::atomic::Ordering::Relaxed) > 0;
+        let watching = shared.watching();
         let raw = match raw {
-            None if watching && shared.preview_jpeg.lock().unwrap().is_none() => shared.latest().map(|f| {
+            None if watching && shared.preview_jpeg.lock().unwrap().is_none() && shared.preview_yuv.lock().unwrap().is_none() => shared.latest().map(|f| {
                 let small = Arc::new(capture::shrink(&f.rgba, f.w, f.h, (f.w * 4) as usize, false));
                 *shared.preview_raw.lock().unwrap() = Some(small.clone());
                 small
@@ -392,12 +421,16 @@ fn preview_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
         };
         if let Some(f) = raw.filter(|f| last_raw.as_ref().is_none_or(|l| !Arc::ptr_eq(l, f))) {
             last_raw = Some(f.clone());
-            if let Some(view) = image::RgbaImage::from_raw(f.w, f.h, f.rgba.clone()) {
-                let rgb = image::DynamicImage::ImageRgba8(view).to_rgb8();
-                let mut jpeg = Vec::new();
-                if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 80).encode_image(&rgb).is_ok() {
-                    shared.put_preview_jpeg(jpeg);
-                }
+            let t = Instant::now();
+            // a fast (SIMD) encoder straight from RGBA: a full 1080p picture in a few ms, so the
+            // preview can be full size without falling behind
+            let mut jpeg = Vec::with_capacity(f.rgba.len() / 10);
+            let enc = jpeg_encoder::Encoder::new(&mut jpeg, 85);
+            if enc.encode(&f.rgba, f.w as u16, f.h as u16, jpeg_encoder::ColorType::Rgba).is_ok() {
+                shared.put_preview_jpeg(jpeg);
+            }
+            if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
+                eprintln!("[preview] {}x{} JPEG in {:.1} ms", f.w, f.h, t.elapsed().as_secs_f64() * 1000.0);
             }
         }
         if last_status.elapsed() >= Duration::from_millis(500) {
@@ -413,11 +446,12 @@ fn preview_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
             let _ = app.emit_to(
                 "main",
                 "frame",
-                FrameEvent { live: frame.is_some(), w, h, status, preview_url: format!("http://127.0.0.1:{port}/preview.mjpg") },
+                FrameEvent { live: frame.is_some(), w, h, status, preview_url: format!("http://127.0.0.1:{port}/preview") },
             );
             if frame.is_none() {
                 *shared.preview_raw.lock().unwrap() = None;
                 *shared.preview_jpeg.lock().unwrap() = None;
+                *shared.preview_yuv.lock().unwrap() = None;
             }
         }
     }
@@ -1096,6 +1130,10 @@ fn ocr_loop(
                         text.clear();
                     }
                 }
+                // Not English at all (another script, icons, a map read as letters): no text here.
+                if !ocr::looks_like_words(&text) {
+                    text.clear();
+                }
                 if !text.is_empty() {
                     st.last_seen = Some(now);
                     let mut is_new = false;
@@ -1544,7 +1582,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, open_lan_page, list_langs, list_sources, get_config, save_config, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

@@ -16,6 +16,7 @@ const lastTextBox = {}; // area id -> English text block [x, y, w, h] (fractions
 let saveTimer = null;
 function save(redraw = true) {
   if (redraw) drawLayer();
+  updateGlance();
   clearTimeout(saveTimer);
   $("saved").textContent = "…";
   saveTimer = setTimeout(async () => {
@@ -31,23 +32,77 @@ function save(redraw = true) {
 
 // ------------------------------------------------------------------------------------- tabs
 
-document.querySelectorAll(".tabs button").forEach((b) =>
-  b.addEventListener("click", () => {
-    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
-    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== `tab-${b.dataset.tab}`));
-  }),
-);
+function openTab(name) {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== `tab-${name}`));
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => openTab(b.dataset.tab)));
+
+// ------------------------------------------------------------------------------------- Play / Setup
+
+// Play: the live translations big, a small preview and what is running. Setup: the area editor
+// and every setting. Remembered on this PC; the first start opens Setup.
+function setMode(mode) {
+  document.body.dataset.mode = mode;
+  document.querySelectorAll(".modes button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+    b.setAttribute("aria-selected", b.dataset.mode === mode);
+  });
+  try { localStorage.setItem("mode", mode); } catch {}
+  if (mode === "play") updateGlance();
+  requestAnimationFrame(fitFrame);
+}
+document.querySelectorAll(".modes button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+// "Change" on a Play card: open that part of Setup
+document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => { setMode("setup"); openTab(b.dataset.go); }));
+
+// Play: the preview full screen — the window goes full screen and the picture fills it. Back with the
+// button, Esc, or a double-click on the picture.
+const isFullscreen = () => document.documentElement.classList.contains("fullscreen");
+async function setFullscreen(on) {
+  document.documentElement.classList.toggle("fullscreen", on);
+  $("fullscreen").title = on ? t("Exit full screen (Esc)") : t("Full screen");
+  try {
+    await window.__TAURI__.window.getCurrentWindow().setFullscreen(on);
+  } catch (e) {
+    log({ error: String(e) });
+  }
+  requestAnimationFrame(fitFrame); // the window's resize event fits it again once the size settles
+}
+$("fullscreen").addEventListener("click", () => setFullscreen(!isFullscreen()));
+$("viewport").addEventListener("dblclick", (e) => {
+  if (document.body.dataset.mode === "play" && !e.target.closest("#fullscreen")) setFullscreen(!isFullscreen());
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && isFullscreen()) setFullscreen(false);
+});
+
+/** The Play cards: source, language + service, read areas. */
+function updateGlance() {
+  if (!cfg) return;
+  const src = $("window_title");
+  $("ps-source").textContent = src.selectedOptions[0]?.textContent || cfg.window_title || "—";
+  const l = LANGS.find((x) => x.code === cfg.target_lang);
+  $("ps-lang").textContent = l ? `${l.name} — ${l.native}` : cfg.target_lang;
+  const e = ENGINES.find((x) => x.id === cfg.engine);
+  $("ps-engine").textContent = e ? t(e.name) : "";
+  const on = cfg.areas.filter((a) => a.enabled);
+  $("ps-areas").textContent = on.map((a) => a.name).join(", ") || "—";
+  const p = PROFILES.find(([v]) => v === cfg.profile);
+  $("ps-profile").textContent = p && cfg.profile !== "none" ? t(p[1]) : "";
+}
 
 // ------------------------------------------------------------------------------------- preview
 
 function fitFrame() {
-  const img = $("frame");
   if (!frameSize.w) return;
   const vp = $("viewport").getBoundingClientRect();
   const s = Math.min((vp.width - 16) / frameSize.w, (vp.height - 16) / frameSize.h);
   shown = { w: Math.floor(frameSize.w * s), h: Math.floor(frameSize.h * s) };
-  img.style.width = `${shown.w}px`;
-  img.style.height = `${shown.h}px`;
+  for (const el of [$("frame"), $("frame-gl")]) {
+    el.style.width = `${shown.w}px`;
+    el.style.height = `${shown.h}px`;
+  }
   drawLayer();
 }
 window.addEventListener("resize", fitFrame);
@@ -68,8 +123,11 @@ function drawLayer() {
   layer.innerHTML = "";
   const sl = $("screen-layer");
   if (!cfg || !shown.w) { sl.innerHTML = ""; return; }
+  // Overlays off (header switch): no translations on the game, so none on its picture here either
+  // (the regions stay in Setup, to place them).
+  const overlays = cfg.overlays_enabled !== false;
   // The profile page replaces the normal subtitles while it is up, exactly like the real overlay.
-  AS.renderScreen(sl, cfg.profile === "gta5" ? screen.layout : null, screen.reason, cfg.profile_opts);
+  AS.renderScreen(sl, overlays && cfg.profile === "gta5" ? screen.layout : null, screen.reason, cfg.profile_opts);
   if (screen.layout && cfg.profile === "gta5") {
     for (const a of cfg.areas) layer.appendChild(areaBox(a));
     return;
@@ -79,7 +137,7 @@ function drawLayer() {
     const px = { x: a.x * shown.w, y: a.y * shown.h, w: a.w * shown.w, h: a.h * shown.h };
     // Arabic region (same placement maths as the real overlay). Drag it to place the Arabic anywhere.
     if (a.enabled) {
-      const segs = lastSegs[a.id]?.length ? lastSegs[a.id] : $("show-sample").checked ? sampleSegments() : [];
+      const segs = !overlays ? [] : lastSegs[a.id]?.length ? lastSegs[a.id] : $("show-sample").checked && document.body.dataset.mode !== "play" ? sampleSegments() : [];
       const r = AS.rectFor(a.placement, px, shown.w, shown.h, a);
       const band = document.createElement("div");
       band.className = `band${a.id === selected ? " selected" : ""}`;
@@ -177,7 +235,6 @@ function startDrag(e, area, mode, kind = "read") {
 }
 const round = (v) => Math.round(v * 10000) / 10000;
 
-$("frame").addEventListener("load", fitFrame);
 $("show-sample").addEventListener("change", drawLayer);
 $("sample-text").addEventListener("input", () => { drawLayer(); drawStyleSample(); });
 
@@ -197,21 +254,41 @@ async function loadWindows() {
     return g;
   };
   const values = [];
-  const add = (g, text, value) => { g.appendChild(new Option(text, value)); values.push(value); };
+  // The open list is as wide as its longest line: long window titles (a browser tab, a file path)
+  // are shortened in the middle, and the whole text is kept as the tooltip.
+  const short = (s, n = 46) => (s.length > n ? `${s.slice(0, n - 16).trimEnd()}…${s.slice(-15).trimStart()}` : s);
+  // The list follows the interface's direction; each name (usually English) is isolated so it keeps
+  // its own left-to-right order inside a right-to-left list.
+  const iso = (s) => `⁨${s}⁩`;
+  const opt = (text, value, full = text) => Object.assign(new Option(text, value), { title: full });
+  const add = (g, text, value, full) => { g.appendChild(opt(text, value, full)); values.push(value); };
   if (devices.length) {
     const g = group(t("Capture cards and cameras"));
-    for (const d of devices) add(g, `🎥 ${d}`, `device:${d}`);
+    for (const d of devices) add(g, `🎥 ${iso(short(d))}`, `device:${d}`, d);
   }
   const st = $("obs-status");
-  st.textContent = obs.ok ? t("Connected to OBS ✓ — {n} source(s). Pick one marked 📺 above.", { n: obs.sources.length }) : t("Not connected: {error}", { error: obs.error });
+  st.textContent = obs.ok ? t("Connected to OBS — {n} source(s). Pick one marked 📺 above.", { n: obs.sources.length }) : t("Not connected: {error}", { error: obs.error });
   st.style.color = obs.ok ? "var(--ok, #1a7f37)" : "var(--warn, #b45309)";
+  // the Browser Source's width and height: OBS's canvas size, read from OBS
+  const cv = $("obs-canvas");
+  if (obs.ok && obs.canvas) {
+    cv.innerHTML = `<span>${AS.esc(t("Your OBS canvas (width × height):"))}</span>
+      <b dir="ltr">${obs.canvas.w} × ${obs.canvas.h}</b>
+      <span class="muted small">${AS.esc(t("Set in OBS: Settings → Video → Base (Canvas) Resolution"))}</span>`;
+  } else {
+    cv.innerHTML = `<span class="muted small">${AS.esc(t("Connect to OBS above to see your canvas size here."))}</span>`;
+  }
   const og = group(obs.ok ? t("OBS sources") : t("OBS sources (not connected)"));
-  if (obs.ok) for (const s of obs.sources) add(og, `📺 ${s.name}  —  ${s.kind}`, `obs:${s.name}`);
-  else og.appendChild(Object.assign(new Option(obs.error, ""), { disabled: true }));
+  if (obs.ok) for (const s of obs.sources) add(og, `📺 ${iso(`${short(s.name, 36)}  —  ${s.kind}`)}`, `obs:${s.name}`, `${s.name}  —  ${s.kind}`);
+  else og.appendChild(Object.assign(opt(short(String(obs.error), 56), "", obs.error), { disabled: true }));
   const wg = group(t("Windows"));
-  for (const w of windows) add(wg, w.process ? `${w.title}  —  ${w.process}` : w.title, w.title);
+  for (const w of windows) {
+    const full = w.process ? `${w.title}  —  ${w.process}` : w.title;
+    add(wg, iso(w.process ? `${short(w.title)}  —  ${short(w.process, 24)}` : short(w.title)), w.title, full);
+  }
   if (cfg.window_title && !values.includes(cfg.window_title)) {
-    sel.insertBefore(new Option(t("{title}  (not available now)", { title: cfg.window_title }), cfg.window_title), sel.firstChild);
+    sel.insertBefore(opt(t("{title}  (not available now)", { title: iso(short(cfg.window_title)) }), cfg.window_title,
+                         t("{title}  (not available now)", { title: cfg.window_title })), sel.firstChild);
   }
   sel.value = cfg.window_title;
 }
@@ -259,12 +336,18 @@ async function updateLan() {
     const i = await invoke("lan_info");
     if (!i.url) { box.textContent = t("Starting… If Windows asks, allow the app on private networks."); return; }
     box.innerHTML = `<div>${AS.esc(t("Open this address on a phone, tablet or computer on the same Wi-Fi:"))}</div>
-      <div style="display:flex;gap:12px;align-items:center;margin-top:8px"><div style="background:#fff;border-radius:8px;line-height:0;width:132px">${i.qr || ""}</div>
-      <b dir="ltr" style="user-select:text;font-size:15px">${AS.esc(i.url)}</b></div>`;
+      <a href="#" class="lan-url" dir="ltr" title="${AS.esc(t("Open in your browser"))}">${AS.esc(i.url)}</a>
+      <div class="lan-qr">${i.qr || ""}</div>`;
     const svg = box.querySelector("svg");
     if (svg) Object.assign(svg.style, { width: "132px", height: "132px" });
   } catch (e) { box.textContent = String(e); }
 }
+// the address: opens the page in the default browser (the box is redrawn every few seconds, so listen on the box)
+$("lan-info").addEventListener("click", (e) => {
+  if (!e.target.closest(".lan-url")) return;
+  e.preventDefault();
+  invoke("open_lan_page").catch((err) => log({ error: String(err) }));
+});
 $("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
 setInterval(() => { if (cfg && !$("tab-source").classList.contains("hidden")) updateLan(); }, 3000);
 
@@ -278,6 +361,7 @@ $("window_title").addEventListener("change", (e) => {
   cfg.window_title = e.target.value;
   for (const k of Object.keys(lastSegs)) delete lastSegs[k];
   save();
+  updateGlance();
 });
 
 // ------------------------------------------------------------------------------------- translator
@@ -410,38 +494,38 @@ function renderAreas() {
       <div class="row">
         <input type="checkbox" class="en" ${a.enabled ? "checked" : ""} title="${t("Read this area")}" />
         <input type="text" class="nm grow" value="${AS.esc(a.name)}" />
-        <button class="btn danger del" title="${t("Delete")}">✕</button>
+        <button class="btn icon danger del" title="${t("Delete")}"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>
       </div>
       <div class="row">
         <select class="pl grow">${PLACEMENTS.map(([v, txt]) => `<option value="${v}" ${a.placement === v ? "selected" : ""}>${t("Translation: {where}", { where: t(txt) })}</option>`).join("")}</select>
       </div>
-      <div class="row field" style="margin-top:8px">
-        <label style="margin:0;min-width:70px">${t("Font")}</label>
+      <div class="row field inline-label">
+        <label>${t("Font")}</label>
         <select class="ff grow" style="font-family:'${AS.esc(a.font_family || cfg.style.font_family)}'">${fontOptions(a.font_family, t("Main font ({font})", { font: cfg.style.font_family }))}</select>
       </div>
-      <div class="row field" style="margin-top:8px">
-        <label style="margin:0;min-width:70px">${t("Background")}</label>
+      <div class="row field inline-label">
+        <label>${t("Background")}</label>
         <select class="bgm grow">${[["", "Main style (Translation text tab)"], ["none", "None — outlined text, like game subtitles"], ["game", "Game-style dark box"]]
           .map(([v, txt]) => `<option value="${v}" ${(a.background || "") === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select>
       </div>
-      <label class="check" style="margin-top:8px;color:var(--text)"><input type="checkbox" class="ms" ${a.match_size !== false ? "checked" : ""}/> ${t("Match the game's text size")}</label>
-      <label class="check" style="margin-top:4px;color:var(--text)"><input type="checkbox" class="co" ${a.centered_only ? "checked" : ""}/> ${t("Only text centred in the picture (subtitles)")}</label>
-      <div class="row field" style="margin-top:8px">
-        <label style="margin:0;min-width:70px">${a.match_size !== false ? t("Fine-tune") : t("Text size")}</label>
+      <label class="check"><input type="checkbox" class="ms" ${a.match_size !== false ? "checked" : ""}/> ${t("Match the game's text size")}</label>
+      <label class="check"><input type="checkbox" class="co" ${a.centered_only ? "checked" : ""}/> ${t("Only text centred in the picture (subtitles)")}</label>
+      <div class="row field inline-label">
+        <label>${a.match_size !== false ? t("Fine-tune") : t("Text size")}</label>
         <input type="range" class="fs" min="0.5" max="2" step="0.05" value="${a.font_scale}" />
         <span class="val fsv">${Math.round(a.font_scale * 100)}%</span>
       </div>
       <div class="sub">${t("Read area")}</div>
       ${posGrid(a, { x: "x", y: "y", w: "w", h: "h" }, "n")}
       ${a.placement !== "custom" ? `
-        <div class="row field" style="margin-top:8px">
-          <label style="margin:0;min-width:70px">${t("Text sits")}</label>
+        <div class="row field inline-label">
+          <label>${t("Text sits")}</label>
           <select class="tp grow">${TEXT_POS.map(([v, txt]) => `<option value="${v}" ${(a.text_pos || "") === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select>
         </div>` : ""}
       ${a.placement === "custom" ? `
         <div class="sub">${t("Translation region")}</div>
         ${posGrid(a, OUT_KEYS, "o")}
-        <div class="row" style="margin-top:8px">
+        <div class="row">
           <select class="va grow">${[["top", "Text at the top"], ["middle", "Text in the middle"], ["bottom", "Text at the bottom"]]
             .map(([v, txt]) => `<option value="${v}" ${a.out_valign === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select>
           <select class="ha grow">${[["right", "Right"], ["center", "Centre"], ["left", "Left"]]
@@ -627,6 +711,27 @@ function drawStyleSample() {
 
 // ------------------------------------------------------------------------------------- timing
 
+// The preview's fps badge: shown or not, and which corner (Advanced → Preview).
+const FPS_CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]];
+function applyFpsBadge() {
+  const corner = FPS_CORNERS.some(([v]) => v === cfg.fps_corner) ? cfg.fps_corner : "top-right";
+  $("fps").dataset.corner = corner;
+  document.body.classList.toggle("no-fps", cfg.fps_badge !== true);
+}
+function renderPreviewForm() {
+  const form = $("preview-form");
+  form.innerHTML = `
+    <label class="check"><input type="checkbox" id="fps-on" ${cfg.fps_badge === true ? "checked" : ""}/> ${t("Show frames per second (fps) on the preview")}</label>
+    <div class="field"><label for="fps-corner">${t("Where it shows")}</label>
+      <select id="fps-corner">${FPS_CORNERS.map(([v, txt]) => `<option value="${v}" ${cfg.fps_corner === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select></div>`;
+  const corner = $("fps-corner");
+  corner.disabled = cfg.fps_badge !== true;
+  $("fps-on").addEventListener("change", (e) => { cfg.fps_badge = e.target.checked; corner.disabled = !e.target.checked; applyFpsBadge(); save(false); });
+  corner.addEventListener("change", () => { cfg.fps_corner = corner.value; applyFpsBadge(); save(false); });
+  applyFpsBadge();
+  corner.value = $("fps").dataset.corner; // the corner actually used (an unknown value falls back to top right)
+}
+
 function renderTiming() {
   const form = $("timing-form");
   form.innerHTML = "";
@@ -810,30 +915,180 @@ $("clear-log").addEventListener("click", () => ($("log").innerHTML = ""));
 
 // ------------------------------------------------------------------------------------- events + init
 
-// The live picture streams as MJPEG from the app's local server (smooth, no per-frame events);
-// this event only says whether a picture is coming in, its size and the status, twice a second.
+// A capture card's own YUY2 frames, drawn on the GPU the way OBS does: the frame goes up as a texture
+// as it is (each texel = two pixels: Y0 U Y1 V) and a shader turns it into colour per pixel. No JPEG
+// encoding or decoding on the way, full quality.
+const YUV = { gl: null, prog: null, tex: null, w: 0, h: 0, u: {} };
+function yuvInit() {
+  const canvas = $("frame-gl");
+  // desynchronized: the canvas goes to the screen without waiting for the rest of the page
+  const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, desynchronized: true, preserveDrawingBuffer: false });
+  if (!gl) return false;
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const prog = gl.createProgram();
+  // one triangle that covers the canvas
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
+    void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
+    precision highp float;
+    uniform highp sampler2D tex;
+    uniform int height;
+    uniform float yOff, yScale, cScale, kr, kgu, kgv, kb;
+    out vec4 color;
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      vec4 s = texelFetch(tex, ivec2(p.x >> 1, height - 1 - p.y), 0) * 255.0; // Y0 U Y1 V
+      float y = ((p.x & 1) == 0 ? s.r : s.b);
+      y = (y - yOff) * yScale;
+      float u = (s.g - 128.0) * cScale, v = (s.a - 128.0) * cScale;
+      color = vec4(clamp(vec3(y + kr * v, y - kgu * u - kgv * v, y + kb * u) / 255.0, 0.0, 1.0), 1.0);
+    }`));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  for (const n of ["tex", "height", "yOff", "yScale", "cScale", "kr", "kgu", "kgv", "kb"]) YUV.u[n] = gl.getUniformLocation(prog, n);
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+  Object.assign(YUV, { gl, prog, tex, w: 0, h: 0 });
+  return true;
+}
+/** Draw one YUY2 frame (`data`: w × h × 2 bytes). */
+function yuvDraw(data, w, h, bt709, fullRange) {
+  if (!YUV.gl && !yuvInit()) return false;
+  const gl = YUV.gl;
+  const canvas = $("frame-gl");
+  if (YUV.w !== w || YUV.h !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w / 2, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    Object.assign(YUV, { w, h });
+  } else {
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w / 2, h, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  }
+  const [kr, kgu, kgv, kb] = bt709 ? [1.5748, 0.1873, 0.4681, 1.8556] : [1.402, 0.3441, 0.7141, 1.772];
+  const u = YUV.u;
+  gl.uniform1i(u.tex, 0);
+  gl.uniform1i(u.height, h);
+  gl.uniform1f(u.yOff, fullRange ? 0 : 16);
+  gl.uniform1f(u.yScale, fullRange ? 1 : 255 / 219);
+  gl.uniform1f(u.cScale, fullRange ? 1 : 255 / 224);
+  for (const [n, v] of [["kr", kr], ["kgu", kgu], ["kgv", kgv], ["kb", kb]]) gl.uniform1f(u[n], v);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  return true;
+}
+
+// The live picture: ask for the newest frame, show it, then ask for the next one. Never more than one
+// frame is on the way, so the picture can't fall behind the game (a stream that keeps pushing frames
+// piles them up whenever the window draws a little slower than they come). This event only says
+// whether a picture is coming in, its size and the status, twice a second.
 let streaming = "";
+let pullRun = 0;
+
+// The header's "Preview" switch (remembered on this PC). Off: the window stops asking for frames, so
+// the app stops making them too (less CPU); reading and translating carry on as before.
+let previewOn = true;
+try { previewOn = localStorage.getItem("preview") !== "off"; } catch {}
+function setPreview(on) {
+  previewOn = on;
+  $("preview-on").checked = on;
+  document.body.classList.toggle("no-preview", !on);
+  try { localStorage.setItem("preview", on ? "on" : "off"); } catch {}
+  pullRun++; // stops the picture loop; when on, the next "frame" event (twice a second) starts it again
+  streaming = "";
+}
+$("preview-on").addEventListener("change", (e) => setPreview(e.target.checked));
+$("preview-on-2").addEventListener("click", () => setPreview(true));
+setPreview(previewOn);
+
+// Frames shown per second, in the corner of the preview (counted where frames are actually drawn).
+let shownTimes = [];
+function frameShown() {
+  shownTimes.push(performance.now());
+}
+setInterval(() => {
+  const now = performance.now();
+  shownTimes = shownTimes.filter((t) => now - t <= 1000);
+  const badge = $("fps");
+  badge.hidden = !streaming || !shownTimes.length;
+  badge.textContent = `${shownTimes.length} fps`;
+}, 500);
+async function pullPreview(url, run) {
+  const img = $("frame");
+  const canvas = $("frame-gl");
+  let seq = 0;
+  let shownUrl = null;
+  let first = true;
+  while (run === pullRun) {
+    try {
+      const r = await fetch(`${url}?after=${seq}`, { cache: "no-store" });
+      if (run !== pullRun) break;
+      if (r.status !== 200) continue; // 204: no new frame for a second (still picture, or window hidden)
+      seq = Number(r.headers.get("X-Seq")) || 0;
+      if (r.headers.get("Content-Type") === "application/x-yuy2") {
+        const w = Number(r.headers.get("X-Width"));
+        const h = Number(r.headers.get("X-Height"));
+        const data = new Uint8Array(await r.arrayBuffer());
+        if (run !== pullRun) break;
+        if (yuvDraw(data, w, h, r.headers.get("X-Matrix") !== "601", r.headers.get("X-Range") === "full")) {
+          frameShown();
+          canvas.hidden = false;
+          img.hidden = true;
+          if (first) { first = false; fitFrame(); }
+        }
+        continue;
+      }
+      const blobUrl = URL.createObjectURL(await r.blob());
+      const next = new Image();
+      next.src = blobUrl;
+      await next.decode().catch(() => {}); // decoded off-screen first: no flicker when it's swapped in
+      if (run !== pullRun) { URL.revokeObjectURL(blobUrl); break; }
+      img.src = blobUrl;
+      frameShown();
+      img.hidden = false;
+      canvas.hidden = true;
+      if (shownUrl) URL.revokeObjectURL(shownUrl);
+      shownUrl = blobUrl;
+      if (first) { first = false; fitFrame(); }
+    } catch {
+      await new Promise((res) => setTimeout(res, 500)); // the app's local server isn't up yet
+    }
+  }
+}
 listen("frame", (e) => {
   const f = e.payload;
   const pill = $("status");
-  pill.textContent = f.status || "…";
+  $("status-text").textContent = f.status || "…";
+  pill.title = f.status || "";
   pill.className = `pill ${f.live ? "ok" : "warn"}`;
   $("source-status").textContent = f.status || "";
+  $("ps-status").textContent = f.status || "";
+  $("ps-status").className = `s ${f.live ? "ok" : "warn"}`;
   if (f.live) {
     const changed = f.w !== frameSize.w || f.h !== frameSize.h;
     frameSize = { w: f.w, h: f.h };
-    if (streaming !== f.preview_url) {
+    if (previewOn && streaming !== f.preview_url) {
       streaming = f.preview_url;
-      $("frame").src = `${f.preview_url}?t=${Date.now()}`;
+      pullPreview(f.preview_url, ++pullRun);
     }
     $("empty").style.display = "none";
     if (changed) fitFrame();
   } else {
     streaming = "";
+    pullRun++; // stops the picture loop
     frameSize = { w: 0, h: 0 };
     shown = { w: 0, h: 0 };
     $("frame").removeAttribute("src");
     $("frame").style.width = $("frame").style.height = "0";
+    $("frame-gl").hidden = true; // no picture: hide the card's last frame too
     $("layer").innerHTML = "";
     $("empty").style.display = "";
     $("empty-msg").textContent = f.status || t("Pick the window to capture in Source.");
@@ -851,7 +1106,8 @@ listen("translation", (e) => {
     if (ev.line_h) lastLineH[ev.area] = ev.line_h;
     if (ev.text_box) lastTextBox[ev.area] = ev.text_box;
   }
-  if (ev.segments.length) log(ev);
+  // the list keeps filling while "Live translations" is on, whether or not the overlays are
+  if (ev.segments.length && cfg.live_translations !== false) log(ev);
   drawLayer();
 });
 listen("status-msg", (e) => log({ info: e.payload }));
@@ -927,13 +1183,13 @@ function updateProfileStatus() {
 function applyTheme() {
   const dark = cfg.theme === "dark";
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  $("theme").textContent = dark ? t("☀ Light") : t("🌙 Dark");
+  // the icon shows where a click takes you (sun: to light, moon: to dark)
+  $("theme").title = `${t("Switch between light and dark")} — ${dark ? t("☀ Light") : t("🌙 Dark")}`;
 }
 
 (async function init() {
   cfg = await invoke("get_config");
-  I18N.setLang(cfg.ui_lang || "en");
-  const uiSel = $("ui-lang");
+  I18N.setLang(cfg.ui_lang || "en");  const uiSel = $("ui-lang");
   for (const l of I18N.UI_LANGS) uiSel.add(new Option(l.name, l.code));
   uiSel.value = I18N.lang;
   uiSel.addEventListener("change", async () => {
@@ -953,7 +1209,12 @@ function applyTheme() {
     save(false);
   });
   $("overlays_enabled").checked = cfg.overlays_enabled;
-  $("overlays_enabled").addEventListener("change", (e) => { cfg.overlays_enabled = e.target.checked; save(false); });
+  const showLive = () => { $("log-paused").hidden = cfg.live_translations !== false; };
+  $("live_translations").checked = cfg.live_translations !== false;
+  showLive();
+  $("live_translations").addEventListener("change", (e) => { cfg.live_translations = e.target.checked; showLive(); save(false); });
+  // (save(): redraws the preview, which hides or shows the translations on it too)
+  $("overlays_enabled").addEventListener("change", (e) => { cfg.overlays_enabled = e.target.checked; save(); });
   try {
     FONT_LIST = await invoke("list_fonts");
   } catch (e) {
@@ -964,6 +1225,7 @@ function applyTheme() {
   renderAreas();
   renderStyleForm();
   renderTiming();
+  renderPreviewForm();
   renderMemory();
   renderDebug();
   try {
@@ -981,5 +1243,10 @@ function applyTheme() {
   updateLan();
   invoke("app_version").then((v) => { $("app-version").textContent = "v" + v; document.title = "VI Translator " + v; }).catch(() => {});
   invoke("update_status").then(showUpdate).catch(() => {});
+  $("log").dataset.empty = t("Translations appear here as the game shows text.");
+  let mode = "setup";
+  try { mode = localStorage.getItem("mode") || "setup"; } catch {}
+  setMode(mode === "play" ? "play" : "setup");
   await loadWindows();
+  updateGlance();
 })();

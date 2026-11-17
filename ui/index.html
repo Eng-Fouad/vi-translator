@@ -10,16 +10,49 @@
   </head>
   <body>
     <header>
-      <div class="brand"><img class="logo" src="logo.png" alt="" /> VI Translator <span id="app-version" class="version"></span></div>
-      <div id="status" class="pill" data-i18n>Starting…</div>
-      <div class="spacer"></div>
-      <button id="rec" class="rec hidden" data-i18n-title title="Saving frames to disk — click to stop and open the folder">● Saving frames</button>
-      <select id="ui-lang" class="ui-lang" data-i18n-title title="App language"></select>
-      <button id="theme" class="theme-btn" data-i18n-title title="Switch between light and dark">🌙 Dark</button>
-      <label class="switch" data-i18n-title title="Show the translation on top of the game window">
-        <input type="checkbox" id="overlays_enabled" /> <span data-i18n>Overlays on</span>
-      </label>
-      <span id="saved" class="saved"></span>
+      <!-- left: who we are, and Play / Setup -->
+      <div class="hd-start">
+        <div class="brand">
+          <img class="logo" src="logo.png" alt="" />
+          <div class="brand-text"><span class="name">VI Translator</span><span id="app-version" class="version"></span></div>
+        </div>
+        <div class="modes" role="tablist">
+          <button data-mode="play" role="tab"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg><span data-i18n>Play</span></button>
+          <button data-mode="setup" role="tab"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n>Setup</span></button>
+        </div>
+      </div>
+      <!-- middle: what's happening -->
+      <div class="hd-mid">
+        <div id="status" class="pill"><span class="dot"></span><span id="status-text" data-i18n>Starting…</span></div>
+      </div>
+      <!-- right: quick switches, then the app's own settings -->
+      <div class="hd-end">
+        <button id="rec" class="rec hidden" data-i18n-title title="Saving frames to disk — click to stop and open the folder">● Saving frames</button>
+        <span id="saved" class="saved"></span>
+        <div class="chips">
+          <label class="switch" data-i18n-title title="Show the translation on top of the game window">
+            <span data-i18n>Overlays</span>
+            <input type="checkbox" id="overlays_enabled" /><span class="track"></span>
+          </label>
+          <label class="switch" data-i18n-title title="Keep listing every translation here and on the home-network page, even with the overlays off">
+            <span data-i18n>Live translations</span>
+            <input type="checkbox" id="live_translations" /><span class="track"></span>
+          </label>
+          <label class="switch" data-i18n-title title="Show the live picture in this window">
+            <span data-i18n>Preview</span>
+            <input type="checkbox" id="preview-on" /><span class="track"></span>
+          </label>
+        </div>
+        <span class="hd-sep"></span>
+        <label class="lang-pick" data-i18n-title title="App language">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9S14.5 18.3 12 21c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z"/></svg>
+          <select id="ui-lang" class="ui-lang"></select>
+        </label>
+        <button id="theme" class="icon-btn" data-i18n-title title="Switch between light and dark">
+          <svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+      </div>
     </header>
     <div id="update-bar" class="update-bar hidden">
       <span id="update-text"></span>
@@ -32,12 +65,14 @@
         <div class="toolbar">
           <button id="add-area" class="btn" data-i18n>＋ Add read area</button>
           <label class="check"><input type="checkbox" id="show-sample" checked /> <span data-i18n>Show sample text</span></label>
-          <input id="sample-text" class="sample" dir="auto" value="هذا نص تجريبي لمعاينة شكل *الترجمة* على الشاشة" />
+          <input type="text" id="sample-text" class="sample" dir="auto" value="هذا نص تجريبي لمعاينة شكل *الترجمة* على الشاشة" />
           <span class="hint" data-i18n>Drag a box to move it, drag its corners to resize.</span>
         </div>
         <div id="viewport" class="viewport">
           <div id="frame-wrap" class="frame-wrap">
             <img id="frame" alt="" draggable="false" />
+            <canvas id="frame-gl" hidden></canvas>
+            <div id="fps" class="fps-badge" hidden></div>
             <div id="screen-layer" class="layer" style="pointer-events: none; line-height: normal"></div>
             <div id="layer" class="layer"></div>
           </div>
@@ -45,49 +80,94 @@
             <div class="empty-title" data-i18n>No picture yet</div>
             <div id="empty-msg" data-i18n-html>Pick the window to capture in <b>Source</b>.</div>
           </div>
+          <!-- the live picture switched off (header "Preview" chip) -->
+          <div id="preview-off" class="preview-off">
+            <svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+            <div class="empty-title" data-i18n>Preview is off</div>
+            <div data-i18n>Translations keep working. Turn it on to see the game here.</div>
+            <button id="preview-on-2" class="btn" data-i18n>Turn on preview</button>
+          </div>
+          <!-- Play: the preview full screen (and back) -->
+          <button id="fullscreen" class="fs-btn" data-i18n-title title="Full screen">
+            <svg class="fs-on" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            <svg class="fs-off" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+          </button>
         </div>
         <div id="split" class="split" data-i18n-title title="Drag to resize the live translations"></div>
         <div class="log-wrap" id="log-wrap">
-          <div class="log-head"><span data-i18n>Live translations</span> <button id="clear-log" class="link" data-i18n>clear</button></div>
+          <div class="log-head"><span data-i18n>Live translations</span> <span id="log-paused" class="badge" data-i18n hidden>Paused</span> <button id="clear-log" class="link" data-i18n>clear</button></div>
           <div id="log" class="log"></div>
         </div>
       </section>
 
+      <!-- Play: what is running, at a glance -->
+      <section class="play-side" id="play-side">
+        <div class="glance">
+          <div class="glance-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+          <div class="glance-body">
+            <div class="k" data-i18n>Picture source</div>
+            <div class="v" id="ps-source">—</div>
+            <div class="s" id="ps-status"></div>
+          </div>
+          <button class="link" data-go="source" data-i18n>Change</button>
+        </div>
+        <div class="glance">
+          <div class="glance-icon"><svg viewBox="0 0 24 24"><path d="M4 5h9M8.5 3v2M6 5c1 4 4 7 7 8M11 5c-1 4-4 7-7 8"/><path d="M13 21l4-9 4 9M14.5 18h5"/></svg></div>
+          <div class="glance-body">
+            <div class="k" data-i18n>Language</div>
+            <div class="v" id="ps-lang">—</div>
+            <div class="s" id="ps-engine"></div>
+          </div>
+          <button class="link" data-go="translator" data-i18n>Change</button>
+        </div>
+        <div class="glance">
+          <div class="glance-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke-dasharray="3 2"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke-dasharray="3 2"/></svg></div>
+          <div class="glance-body">
+            <div class="k" data-i18n>Read areas</div>
+            <div class="v" id="ps-areas">—</div>
+            <div class="s" id="ps-profile"></div>
+          </div>
+          <button class="link" data-go="areas" data-i18n>Change</button>
+        </div>
+      </section>
+
+      <nav class="rail tabs">
+        <button data-tab="source" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n>Source</span></button>
+        <button data-tab="profile"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 10.5v4M5 12.5h4"/><circle cx="16" cy="11" r="1"/><circle cx="18" cy="14" r="1"/></svg><span data-i18n>Game profile</span></button>
+        <button data-tab="translator"><svg viewBox="0 0 24 24"><path d="M4 5h9M8.5 3v2M6 5c1 4 4 7 7 8M11 5c-1 4-4 7-7 8"/><path d="M13 21l4-9 4 9M14.5 18h5"/></svg><span data-i18n>Translator</span></button>
+        <button data-tab="areas"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke-dasharray="3 2"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke-dasharray="3 2"/></svg><span data-i18n>Read areas</span></button>
+        <button data-tab="style"><svg viewBox="0 0 24 24"><path d="M5 20l5-15h4l5 15M7.5 13h9"/></svg><span data-i18n>Translation text</span></button>
+        <button data-tab="advanced"><svg viewBox="0 0 24 24"><path d="M10.3 2.6a1.7 1.7 0 0 1 3.4 0l.2 1.4a7.8 7.8 0 0 1 1.9.8l1.1-.9a1.7 1.7 0 0 1 2.4 2.4l-.9 1.1c.3.6.6 1.2.8 1.9l1.4.2a1.7 1.7 0 0 1 0 3.4l-1.4.2a7.8 7.8 0 0 1-.8 1.9l.9 1.1a1.7 1.7 0 0 1-2.4 2.4l-1.1-.9a7.8 7.8 0 0 1-1.9.8l-.2 1.4a1.7 1.7 0 0 1-3.4 0l-.2-1.4a7.8 7.8 0 0 1-1.9-.8l-1.1.9a1.7 1.7 0 0 1-2.4-2.4l.9-1.1a7.8 7.8 0 0 1-.8-1.9l-1.4-.2a1.7 1.7 0 0 1 0-3.4l1.4-.2c.2-.7.5-1.3.8-1.9l-.9-1.1a1.7 1.7 0 0 1 2.4-2.4l1.1.9a7.8 7.8 0 0 1 1.9-.8z"/><circle cx="12" cy="12" r="3"/></svg><span data-i18n>Advanced</span></button>
+      </nav>
+
       <aside>
-        <nav class="tabs">
-          <button data-tab="source" class="active" data-i18n>Source</button>
-          <button data-tab="profile" data-i18n>Game profile</button>
-          <button data-tab="translator" data-i18n>Translator</button>
-          <button data-tab="areas" data-i18n>Read areas</button>
-          <button data-tab="style" data-i18n>Translation text</button>
-          <button data-tab="advanced" data-i18n>Advanced</button>
-        </nav>
 
         <div class="tab" id="tab-source">
           <h3 data-i18n>Picture source</h3>
           <p class="muted" data-i18n>A window (only that window is read, even when covered), a capture card, or a source in OBS.</p>
           <div class="row">
             <select id="window_title" class="grow"></select>
-            <button id="refresh-windows" class="btn" data-i18n-title title="Refresh the list">↻</button>
+            <button id="refresh-windows" class="btn icon" data-i18n-title title="Refresh the list"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4.4M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 4.4M20 19v-4h-4"/></svg></button>
           </div>
           <p class="muted small" data-i18n-html>Capture card already used by OBS? OBS keeps it to itself — pick the card's <b>OBS source</b> instead.</p>
           <div id="source-status" class="callout"></div>
 
-          <h3 style="margin-top:22px">OBS</h3>
-          <p class="muted small" data-i18n-html>To read OBS sources, turn on <b>Tools → WebSocket Server Settings → Enable WebSocket server</b> in OBS, then enter its port and password here and press ↻ above.</p>
-          <div class="row">
-            <label class="grow"><span data-i18n>Port</span> <input type="number" id="obs_port" min="1" max="65535" /></label>
-            <label class="grow"><span data-i18n>Password</span> <input type="password" id="obs_password" autocomplete="off" /></label>
+          <h3>OBS</h3>
+          <p class="muted small" data-i18n-html>To read OBS sources, turn on <b>Tools → WebSocket Server Settings → Enable WebSocket server</b> in OBS, then enter its port and password below and press <b>Connect</b>.</p>
+          <div class="row bottom">
+            <div class="field port"><label for="obs_port" data-i18n>Port</label><input type="number" id="obs_port" min="1" max="65535" /></div>
+            <div class="field grow"><label for="obs_password" data-i18n>Password</label><input type="password" id="obs_password" autocomplete="off" /></div>
             <button id="obs-connect" class="btn" data-i18n>Connect</button>
           </div>
-          <div id="obs-status" class="callout" style="margin-top:8px" data-i18n>Not connected yet.</div>
-          <p class="muted small" style="margin-top:14px" data-i18n-html>Show the translation in OBS: add a <b>Browser Source</b> above your capture card source with this URL, width and height the same as your canvas (e.g. 1920 × 1080):</p>
+          <div id="obs-status" class="callout" data-i18n>Not connected yet.</div>
+          <p class="muted small gap-top" data-i18n-html>Show the translation in OBS: add a <b>Browser Source</b> above your capture card source with this URL, width and height the same as your canvas (e.g. 1920 × 1080):</p>
           <div class="row">
-            <input id="obs-url" class="grow" readonly dir="ltr" />
+            <input type="text" id="obs-url" class="grow" readonly dir="ltr" />
             <button id="obs-url-copy" class="btn" data-i18n>Copy</button>
           </div>
+          <div id="obs-canvas" class="canvas-size"></div>
 
-          <h3 style="margin-top:22px" data-i18n>Live translations on other devices</h3>
+          <h3 data-i18n>Live translations on other devices</h3>
           <label class="check"><input type="checkbox" id="lan-on" /> <span data-i18n>Share on my home network</span></label>
           <div id="lan-info" class="callout"></div>
         </div>
@@ -124,10 +204,12 @@
         <div class="tab hidden" id="tab-advanced">
           <h3 data-i18n>Timing</h3>
           <div class="form" id="timing-form"></div>
-          <h3 style="margin-top:22px"><span data-i18n>Translation memory</span> <span class="badge" data-i18n>experiment</span></h3>
+          <h3 data-i18n>Preview</h3>
+          <div class="form" id="preview-form"></div>
+          <h3><span data-i18n>Translation memory</span> <span class="badge" data-i18n>experiment</span></h3>
           <p class="muted small" data-i18n>Remembers every translated line and reuses it instantly the next time it appears — no translator call, and no waiting for the line to settle.</p>
           <div class="form" id="memory-form"></div>
-          <h3 style="margin-top:22px" data-i18n>Debugging</h3>
+          <h3 data-i18n>Debugging</h3>
           <p class="muted small" data-i18n>Tools for developing the app.</p>
           <div class="form" id="debug-form"></div>
         </div>

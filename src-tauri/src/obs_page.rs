@@ -39,6 +39,8 @@ fn state_json(cfg: &Mutex<Config>, shared: &Shared) -> Vec<u8> {
         "style": c.style,
         "profile_opts": c.profile_opts,
         "memory_tint": c.memory_tint,
+        // the header's Overlays switch: off = draw nothing
+        "overlays": c.overlays_enabled,
         "lang": c.target_lang,
         "shown": shared.shown.lock().unwrap().clone(),
         "screen": shared.screen.lock().unwrap().clone(),
@@ -63,13 +65,69 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
         return;
     }
     // "GET /path?query HTTP/1.1"
-    let path = line.split_whitespace().nth(1).unwrap_or("/").split('?').next().unwrap_or("/").to_string();
+    let target = line.split_whitespace().nth(1).unwrap_or("/");
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    let path = path.to_string();
     match path.as_str() {
         "/state" => respond(s, "200 OK", "application/json; charset=utf-8", &state_json(cfg, shared)),
+        "/preview" | "/preview.jpg" => preview_frame(shared, s, query),
         "/preview.mjpg" => stream_preview(shared, s),
         "/" | "/obs" => serve_asset(app, s, "obs.html"),
         p if !p.contains("..") => serve_asset(app, s, p.trim_start_matches('/')),
         _ => respond(s, "404 Not Found", "text/plain", b"not found"),
+    }
+}
+
+/// The app's live preview, one frame per request: `/preview?after=<seq>` answers with the newest
+/// preview frame once there is one other than `seq` (waiting up to a second; 204 if none came), its
+/// number in `X-Seq`. The window asks for the next frame only after showing this one, so frames can
+/// never queue up on the way and the picture is never behind (an MJPEG stream, by contrast, keeps
+/// sending, and if the window draws a little slower the extra frames pile up in the connection).
+///
+/// The frame is either a JPEG, or — from a capture card sending YUY2 — the card's own frame, raw
+/// (`application/x-yuy2`, size and colour standard in headers), which the window turns into colour
+/// on the GPU like OBS does: no encoding or decoding on the way.
+fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str) {
+    let after: u64 = query.split('&').find_map(|kv| kv.strip_prefix("after=")).and_then(|v| v.parse().ok()).unwrap_or(0);
+    let start = std::time::Instant::now();
+    loop {
+        shared.mark_preview_pulled();
+        let jpeg = shared.preview_jpeg.lock().unwrap().clone();
+        let yuv = shared.preview_yuv.lock().unwrap().clone();
+        // the newer of the two (the source may have changed from one kind to the other)
+        let yuv_newer = match (&jpeg, &yuv) {
+            (Some((j, _)), Some((y, _))) => y > j,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        let expose = "Access-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: X-Seq, X-Width, X-Height, X-Matrix, X-Range";
+        if yuv_newer {
+            if let Some((seq, f)) = yuv.filter(|(seq, _)| *seq != after) {
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/x-yuy2\r\nContent-Length: {}\r\nX-Seq: {seq}\r\nX-Width: {}\r\nX-Height: {}\r\nX-Matrix: {}\r\nX-Range: {}\r\nCache-Control: no-store\r\n{expose}\r\nConnection: close\r\n\r\n",
+                    f.data.len(),
+                    f.w,
+                    f.h,
+                    if f.color.bt709 { "709" } else { "601" },
+                    if f.color.full_range { "full" } else { "limited" },
+                );
+                let _ = s.set_nodelay(true);
+                let _ = s.write_all(head.as_bytes()).and_then(|_| s.write_all(&f.data));
+                return;
+            }
+        } else if let Some((seq, jpeg)) = jpeg.filter(|(seq, _)| *seq != after) {
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nX-Seq: {seq}\r\nCache-Control: no-store\r\n{expose}\r\nConnection: close\r\n\r\n",
+                jpeg.len()
+            );
+            let _ = s.set_nodelay(true);
+            let _ = s.write_all(head.as_bytes()).and_then(|_| s.write_all(&jpeg));
+            return;
+        }
+        if start.elapsed() >= Duration::from_secs(1) {
+            return respond(s, "204 No Content", "text/plain", b"");
+        }
+        std::thread::sleep(Duration::from_millis(3));
     }
 }
 

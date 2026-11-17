@@ -2,5 +2,5 @@
   "identifier": "default",
   "description": "Main window and Arabic overlay windows",
   "windows": ["main", "ov-*"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-set-fullscreen", "core:window:allow-is-fullscreen"]
 }

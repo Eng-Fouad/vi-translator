@@ -44,12 +44,17 @@ pub struct Shared {
     pub menu_cache: Mutex<std::collections::HashMap<String, String>>,
     /// Set by the UI: measure the text sizes again.
     pub reset_sizes: std::sync::atomic::AtomicBool,
-    /// Live preview, separate from the full frames read for text: a small frame (≤ 1280 wide) at
-    /// the preview rate, made only while someone watches (`preview_clients`), and its JPEG.
+    /// Live preview, separate from the full frames read for text: a frame (≤ PREVIEW_W wide) at
+    /// the preview rate, made only while someone watches (see `watching`), and its JPEG.
     pub preview_raw: Mutex<Option<Arc<FrameData>>>,
     pub preview_jpeg: Mutex<Option<(u64, Arc<Vec<u8>>)>>,
+    /// Or, from a capture card that sends YUY2: the card's own frame as it came, no conversion or
+    /// JPEG (the window turns it into colour on the GPU, the way OBS does). Numbered with `preview_seq`.
+    pub preview_yuv: Mutex<Option<(u64, Arc<YuvFrame>)>>,
     pub preview_seq: AtomicU64,
     pub preview_clients: AtomicUsize,
+    /// when the app's window last asked for a preview frame (ms since the app started)
+    pub preview_pulled_ms: AtomicU64,
     /// the app window is minimised or hidden: no preview frames
     pub preview_paused: std::sync::atomic::AtomicBool,
     /// Recent translations for the home-network page (see lan.rs), newest last, and their ids.
@@ -59,13 +64,61 @@ pub struct Shared {
     pub live_lang: Mutex<serde_json::Value>,
     /// the home-network page is being served
     pub lan_running: std::sync::atomic::AtomicBool,
+    /// the header's "Live translations" switch is off: the home-network page gets no lines meanwhile
+    pub live_off: std::sync::atomic::AtomicBool,
     /// ms between full frames (for reading text) and between preview frames (0 = default)
     pub capture_ms: AtomicU64,
     pub preview_ms: AtomicU64,
 }
 
-/// Preview frames are at most this wide.
-pub const PREVIEW_W: u32 = 1280;
+/// Preview frames are at most this wide: a 1080p game is shown at full size, a 4K one at half.
+pub const PREVIEW_W: u32 = 1920;
+
+/// How a card's YUV numbers map to colour: which standard, and whether black is 16 or 0.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct YuvColor {
+    pub bt709: bool,
+    pub full_range: bool,
+}
+
+/// A YUY2 frame: 2 bytes per pixel, each pair of pixels stored as Y0 U Y1 V, rows `w * 2` bytes.
+pub struct YuvFrame {
+    pub w: u32,
+    pub h: u32,
+    pub color: YuvColor,
+    pub data: Vec<u8>,
+}
+
+/// YUY2 → RGBA (for reading text; the preview does the same on the GPU).
+pub fn yuy2_to_rgba(src: &[u8], w: u32, h: u32, c: YuvColor) -> Vec<u8> {
+    // R = Y + kr·V, G = Y − kgu·U − kgv·V, B = Y + kb·U, in fixed point (×1024)
+    let (kr, kgu, kgv, kb) = if c.bt709 { (1.5748, 0.1873, 0.4681, 1.8556) } else { (1.402, 0.3441, 0.7141, 1.772) };
+    let (ys, yo, cs): (f64, i32, f64) = if c.full_range { (1.0, 0, 1.0) } else { (255.0 / 219.0, 16, 255.0 / 224.0) };
+    let f = |k: f64| (k * cs * 1024.0).round() as i32;
+    let (ym, cr, cgu, cgv, cb) = ((ys * 1024.0).round() as i32, f(kr), f(kgu), f(kgv), f(kb));
+    let clamp = |v: i32| ((v + 512) >> 10).clamp(0, 255) as u8; // rounded
+    let n = (w * h) as usize;
+    let mut out = vec![0u8; n * 4];
+    for (i, q) in src[..n * 2].chunks_exact(4).enumerate() {
+        let (u, v) = (q[1] as i32 - 128, q[3] as i32 - 128);
+        let (dr, dg, db) = (cr * v, cgu * u + cgv * v, cb * u);
+        for (j, y) in [q[0], q[2]].into_iter().enumerate() {
+            let y = (y as i32 - yo) * ym;
+            let o = (i * 2 + j) * 4;
+            out[o] = clamp(y + dr);
+            out[o + 1] = clamp(y - dg);
+            out[o + 2] = clamp(y + db);
+            out[o + 3] = 255;
+        }
+    }
+    out
+}
+
+/// Milliseconds since the app started (a steady clock for "when did X last happen").
+fn app_ms() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
 
 impl Shared {
     pub fn latest(&self) -> Option<Arc<FrameData>> {
@@ -75,9 +128,19 @@ impl Shared {
     pub fn full_due(&self, last: Instant) -> bool {
         last.elapsed() >= Duration::from_millis(self.capture_ms.load(Ordering::Relaxed).max(30))
     }
+    /// Is anyone watching the preview: an open stream, or the window asked for a frame in the last 2 s?
+    pub fn watching(&self) -> bool {
+        self.preview_clients.load(Ordering::Relaxed) > 0
+            || app_ms().saturating_sub(self.preview_pulled_ms.load(Ordering::Relaxed)) < 2000
+                && self.preview_pulled_ms.load(Ordering::Relaxed) > 0
+    }
+    /// The window just asked for a preview frame.
+    pub fn mark_preview_pulled(&self) {
+        self.preview_pulled_ms.store(app_ms().max(1), Ordering::Relaxed);
+    }
     /// Time for the next preview frame — and is anyone watching?
     pub fn preview_due(&self, last: Instant) -> bool {
-        self.preview_clients.load(Ordering::Relaxed) > 0
+        self.watching()
             && !self.preview_paused.load(Ordering::Relaxed)
             // ¾ of the interval: frames arrive every ~16.7 ms, and a strict 33 ms test would often just
             // miss one and wait a whole extra frame (30 fps would become ~20)
@@ -96,6 +159,11 @@ impl Shared {
     pub fn put_preview(&self, f: FrameData) {
         *self.preview_raw.lock().unwrap() = Some(Arc::new(f));
     }
+    /// Store a raw YUY2 preview frame (a capture card's own picture).
+    pub fn put_preview_yuv(&self, f: YuvFrame) {
+        let seq = self.preview_seq.fetch_add(1, Ordering::Relaxed) + 1;
+        *self.preview_yuv.lock().unwrap() = Some((seq, Arc::new(f)));
+    }
     /// Store a ready-made preview JPEG (OBS sends one).
     pub fn put_preview_jpeg(&self, jpeg: Vec<u8>) {
         let seq = self.preview_seq.fetch_add(1, Ordering::Relaxed) + 1;
@@ -110,6 +178,21 @@ impl Shared {
 /// samples per output pixel. `bgr`: the source is BGRA/BGRX (output is always RGBA).
 pub fn shrink(src: &[u8], w: u32, h: u32, pitch: usize, bgr: bool) -> FrameData {
     let f = w.div_ceil(PREVIEW_W).max(1);
+    if f == 1 {
+        // already small enough: copy the rows as they are (RGBA out)
+        let row = (w * 4) as usize;
+        let mut out = Vec::with_capacity(row * h as usize);
+        for y in 0..h as usize {
+            out.extend_from_slice(&src[y * pitch..y * pitch + row]);
+        }
+        for p in out.chunks_exact_mut(4) {
+            if bgr {
+                p.swap(0, 2);
+            }
+            p[3] = 255;
+        }
+        return FrameData { w, h, rgba: out, seq: 0 };
+    }
     let (ow, oh) = (w / f, h / f);
     let mut out = vec![255u8; (ow * oh * 4) as usize];
     let half = (f / 2) as usize;
@@ -227,3 +310,19 @@ pub struct WindowInfo {
     pub process: String,
 }
 
+
+#[cfg(test)]
+mod yuv_tests {
+    use super::*;
+
+    #[test]
+    fn yuy2_limited_bt709_colours() {
+        let c = YuvColor { bt709: true, full_range: false };
+        // white, black, then BT.709 limited-range red (Y 63, U 102, V 240)
+        let px = |y: u8, u: u8, v: u8| yuy2_to_rgba(&[y, u, y, v], 2, 1, c)[..4].to_vec();
+        assert_eq!(px(235, 128, 128), [255, 255, 255, 255]);
+        assert_eq!(px(16, 128, 128), [0, 0, 0, 255]);
+        let r = px(63, 102, 240);
+        assert!(r[0] > 245 && r[1] < 10 && r[2] < 10, "red came out as {r:?}");
+    }
+}

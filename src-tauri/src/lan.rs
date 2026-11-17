@@ -22,6 +22,11 @@ const KEEP: usize = 200;
 
 /// Remember a line that was just shown, for the page.
 pub fn push(shared: &Shared, area: &str, en: &str, segments: &[(String, Option<String>)], at_ms: u64) {
+    // "Live translations" switched off: the list pauses (and switching it back on doesn't dump what came
+    // in meanwhile). Independent of the overlays: with this on, the list keeps filling with them off.
+    if shared.live_off.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
     let text: String = segments
         .iter()
         .map(|(t, c)| if c.as_deref().is_some_and(|c| c.starts_with("icon:")) { "🎮" } else { t.as_str() })
@@ -70,6 +75,7 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
     loop {
         let (on, port) = {
             let c = cfg.lock().unwrap();
+            shared.live_off.store(!c.live_translations, Ordering::Relaxed);
             (c.lan_page, c.lan_port)
         };
         match (&listener, on) {
@@ -113,7 +119,8 @@ fn handle(app: &AppHandle, shared: &Shared, s: TcpStream) {
             let after: u64 = query.split('&').find_map(|kv| kv.strip_prefix("after=")).and_then(|v| v.parse().ok()).unwrap_or(0);
             let lines: Vec<serde_json::Value> =
                 shared.live_log.lock().unwrap().iter().filter(|l| l["id"].as_u64().unwrap_or(0) > after).cloned().collect();
-            let body = serde_json::json!({ "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines });
+            let live = !shared.live_off.load(std::sync::atomic::Ordering::Relaxed);
+            let body = serde_json::json!({ "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live });
             respond(s, "200 OK", "application/json; charset=utf-8", body.to_string().as_bytes());
         }
         // the page's fonts and nothing else

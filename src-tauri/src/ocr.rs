@@ -145,6 +145,60 @@ pub fn clean(words: &[Word]) -> String {
     if letters >= 4 && letters as f64 / total as f64 > 0.5 { fix_contractions(&text) } else { String::new() }
 }
 
+/// Could this be real English, or is it the OCR spelling out something that isn't English letters
+/// at all — text in another script (the console's Arabic menu "وسائط" read as "bjlwg"), icons, a map?
+/// False only when the line has words made of letters and none of them could be a word: no vowel
+/// ("bjlwg"), six consonants in a row, or a capital in the middle of lowercase ("ulnJiJl").
+/// Acronyms ("LSPD", "FIB") and the usual vowel-less words ("Mr", "hmm", "shh") are fine.
+pub fn looks_like_words(text: &str) -> bool {
+    const NO_VOWEL_OK: [&str; 16] = ["mr", "mrs", "ms", "dr", "st", "jr", "hmm", "hm", "mm", "shh", "sh", "psst", "pst", "brr", "grr", "pfft"];
+    let plausible = |w: &str| {
+        let lower = w.to_lowercase();
+        if NO_VOWEL_OK.contains(&lower.as_str()) || (w.chars().count() <= 5 && w.chars().all(|c| c.is_uppercase())) {
+            return true; // "Hmm", "LSPD"
+        }
+        // accented letters ("ö", "é") count as vowels: "Röckstar" is a word
+        let vowel = |c: char| "aeiouy".contains(c) || !c.is_ascii();
+        let has_vowel = lower.chars().any(vowel);
+        let mut run = 0;
+        let long_run = lower.chars().any(|c| {
+            run = if vowel(c) { 0 } else { run + 1 };
+            run >= 6
+        });
+        // "ulnJiJl": lowercase then a capital inside the word ("McKay" and "iPhone" are rare in games)
+        let chars: Vec<char> = w.chars().collect();
+        let odd_caps = chars.windows(2).skip(1).any(|p| p[0].is_lowercase() && p[1].is_uppercase());
+        has_vowel && !long_run && !odd_caps
+    };
+    let words: Vec<&str> = text
+        .split(|c: char| c.is_whitespace() || ".,!?;:\"()[]…-–—".contains(c))
+        .map(|w| w.trim_matches('\''))
+        .filter(|w| !w.is_empty() && w.chars().all(|c| c.is_alphabetic() || c == '\''))
+        .collect();
+    words.is_empty() || words.iter().any(|w| plausible(w))
+}
+
+#[cfg(test)]
+mod word_tests {
+    use super::looks_like_words as ok;
+    #[test]
+    fn tells_words_from_misread_script() {
+        assert!(!ok("bjlwg")); // the PS5's Arabic «وسائط» read by the English OCR
+        assert!(!ok("ulnJiJl hjluJ9"));
+        assert!(!ok("bjlwg qrtzm"));
+        assert!(ok("Go to the guard."));
+        assert!(ok("Hmm."));
+        assert!(ok("LSPD"));
+        assert!(ok("Mr. K"));
+        assert!(ok("C'mon mister"));
+        assert!(ok("Press {1} to bring up the phone"));
+        assert!(ok("Trevor"));
+        assert!(ok("Strengths")); // "ngths": a long but real consonant run
+        assert!(ok("Röckstar Editör"));
+        assert!(ok("$500")); // no words at all: left as it was
+    }
+}
+
 /// Windows OCR drops the apostrophe in GTA's subtitle font ("Cmon mister, were giving you ...").
 /// Put it back where the word can't be anything else; and "were" + an "-ing" verb at the start of a
 /// sentence or after a comma ("mister, were giving") is "we're" ("they were giving" stays).

@@ -29,6 +29,11 @@
         const W = window.innerWidth, H = window.innerHeight;
         const k = H / 1080; // style sizes are for 1080p
         areasEl.innerHTML = "";
+        // Overlays switched off in the app: nothing on the stream either
+        if (state.overlays === false) {
+          screenEl.innerHTML = "";
+          return;
+        }
         if (!state.screen) {
           for (const a of state.areas) {
             const ev = state.shown[a.id];
