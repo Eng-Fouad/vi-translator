@@ -72,6 +72,18 @@ pub struct Memory {
     shared: Vec<Entry>,
 }
 
+/// What lines logged now are, for sharing: (game, confirmed, held). Confirmed: one of the game's own
+/// pages has been on screen this session, so this is really that game. Held: another game the app
+/// knows is on screen (the player is playing something else with this profile): not shared.
+static SHARE: std::sync::RwLock<(String, bool, bool)> = std::sync::RwLock::new((String::new(), false, false));
+
+pub fn set_share(game: &str, confirmed: bool, held: bool) {
+    let mut s = SHARE.write().unwrap();
+    if s.0 != game || s.1 != confirmed || s.2 != held {
+        *s = (game.to_string(), confirmed, held);
+    }
+}
+
 /// How much we trust each source: a better translation is never replaced by a worse one.
 fn rank(source: &str) -> u8 {
     match source {
@@ -293,13 +305,16 @@ impl Memory {
         self.find(&key).map(|e| (fill(&e.ar, icons, phrases), e.source.clone()))
     }
 
-    /// Note an English line that was on screen from `start_ms` to `end_ms` (Unix ms) in `area`.
+    /// Note an English line that was on screen from `start_ms` to `end_ms` (Unix ms) in `area`, with
+    /// the game it was seen in, whether that game was confirmed on screen, and whether it is held back
+    /// from sharing (see `set_share`).
     pub fn log_line(&self, area: &str, en: &str, start_ms: u64, end_ms: u64) {
         let key = key_of(en);
         if key.is_empty() {
             return;
         }
-        let row = serde_json::json!({ "area": area, "key": key, "en": en, "start": start_ms, "end": end_ms });
+        let (game, confirmed, held) = SHARE.read().unwrap().clone();
+        let row = serde_json::json!({ "area": area, "key": key, "en": en, "start": start_ms, "end": end_ms, "game": game, "confirmed": confirmed, "held": held });
         append_sealed(&self.dir.join(LOG_FILE), LOG_KIND, [row.to_string()]);
     }
 
@@ -468,6 +483,13 @@ mod tests {
         m.put("Get in the car.", &vec![("اركب السيارة.".into(), None)], "local");
         m.log_line("subtitles", "Get in the car.", 1, 2);
         assert!(!std::fs::read_to_string(path.join(LOG_FILE)).unwrap().contains("car"), "the log is sealed too");
+        // each logged line says which game it was seen in, and whether it may be shared
+        set_share("rdr2", true, true);
+        m.log_line("subtitles", "Saddle up.", 5, 9);
+        set_share("", false, false);
+        let rows: Vec<serde_json::Value> = std::fs::read_to_string(path.join(LOG_FILE)).unwrap().lines().filter_map(open_log_line).filter_map(|l| serde_json::from_str(&l).ok()).collect();
+        let last = rows.last().unwrap();
+        assert_eq!((last["en"].as_str(), last["game"].as_str(), last["confirmed"].as_bool(), last["held"].as_bool()), (Some("Saddle up."), Some("rdr2"), Some(true), Some(true)));
         // after a restart: the same lines, read back from the encrypted file
         let mut m = Memory::load(path.clone(), "ar");
         assert_eq!(m.get("get in the car", &[], &[]).unwrap().0[0].0, "اركب السيارة.");

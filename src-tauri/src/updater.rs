@@ -1,6 +1,6 @@
 //! Auto-update: "Version X is available — Update now".
 //!
-//! On start (after a short wait) and once a day, the app asks GitHub for the latest release of
+//! On start (after a short wait) and every hour, the app asks GitHub for the latest release of
 //! the app. If it is newer than this build, the window shows a banner. "Update now" downloads this
 //! platform's executable and its signature, checks the signature against the public key built in
 //! below (the private key exists only as a secret of the release workflow), puts the new
@@ -21,7 +21,7 @@ use crate::config::Config;
 const RELEASES: &str = "https://api.github.com/repos/Eng-Fouad/vi-translator/releases/latest";
 /// Ed25519 public key that release files are signed with (base64 of the 32 raw bytes).
 pub(crate) const PUBLIC_KEY: &str = "kQ2qBATJSRXwW3PtomkxkIUplaHqPHwoq+z3zJjTpWk=";
-const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+const CHECK_EVERY: Duration = Duration::from_secs(60 * 60);
 
 /// The release file for this platform: vi-translator-<windows|linux|macos>-<x64|arm64>[.exe]
 pub fn asset_name() -> String {
@@ -142,7 +142,7 @@ pub fn clean_up() {
     }
 }
 
-/// Background check: on start (after a minute) and once a day; tells the window when an update exists.
+/// Background check: on start (after a minute) and every hour; tells the window when an update exists.
 pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, found: Arc<Mutex<Option<Update>>>) {
     clean_up();
     std::thread::sleep(Duration::from_secs(60));

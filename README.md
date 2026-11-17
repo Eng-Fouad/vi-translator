@@ -53,9 +53,11 @@ It's portable, so there's nothing to install:
 *Help improve translations* (Advanced tab) is **on by default**. Every few minutes it sends the
 English lines you saw (subtitles, instructions, captions) to the project server, so they can be
 translated better for everyone. It's anonymous: a random install ID, no account, no screenshots,
-and never menus (that's where player names appear). Turn it off and nothing more is sent.
+and never menus (that's where player names appear). Each batch says which game the lines are from
+and whether one of that game's own screens was seen while playing. Lines seen while the picture
+looks like a different game the app knows are not sent. Turn it off and nothing more is sent.
 
-The app also checks GitHub once a day for a new version. The
+The app also checks GitHub every hour for a new version. The
 phone page is only served on your home network, and only while you have it turned on.
 
 ## Build

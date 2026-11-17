@@ -21,7 +21,8 @@ use crate::memory::{self, Memory};
 /// The project server (a different one can be set in the settings file: `server_url`).
 pub const DEFAULT_SERVER: &str = "https://vitranslator.app";
 const UPLOAD_EVERY: Duration = Duration::from_secs(10 * 60);
-const DOWNLOAD_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+// (an unchanged download is a short "304 Not Modified": checking often costs next to nothing)
+const DOWNLOAD_EVERY: Duration = Duration::from_secs(60 * 60);
 const MAX_LINES_PER_UPLOAD: usize = 500;
 const MAX_LINE_CHARS: usize = 400;
 
@@ -123,6 +124,14 @@ struct LogRow {
     en: String,
     start: u64,
     end: u64,
+    /// the game it was seen in (older rows: none, the game in use now)
+    #[serde(default)]
+    game: String,
+    #[serde(default)]
+    confirmed: bool,
+    /// another game was on screen: never shared
+    #[serde(default)]
+    held: bool,
 }
 
 #[derive(Serialize)]
@@ -178,10 +187,20 @@ fn share_file(http: &reqwest::blocking::Client, url: &str, c: &Config, game: &st
         // menus can hold player names: never shared
         .filter(|r| !r.area.starts_with("__menu") && !r.area.starts_with("__free"))
         .filter(|r| r.en.chars().count() <= MAX_LINE_CHARS && looks_like_text(&r.en))
+        .filter(|r| !r.held)
         .collect();
-    for chunk in rows.chunks(MAX_LINES_PER_UPLOAD) {
+    // sent per game seen in, and confirmed or not (the server counts confirmed players apart)
+    let mut groups: Vec<((String, bool), Vec<&LogRow>)> = Vec::new();
+    for r in &rows {
+        let g = (if r.game.is_empty() { game.to_string() } else { r.game.clone() }, r.confirmed);
+        match groups.iter_mut().find(|(k, _)| *k == g) {
+            Some((_, list)) => list.push(r),
+            None => groups.push((g, vec![r])),
+        }
+    }
+    for ((game, confirmed), chunk) in groups.iter().flat_map(|(k, list)| list.chunks(MAX_LINES_PER_UPLOAD).map(move |c| (k.clone(), c))) {
         let lines: Vec<UploadLine> = chunk.iter().map(|r| UploadLine { en: &r.en, area: &r.area, start: r.start, end: r.end.max(r.start) }).collect();
-        let body = serde_json::json!({ "game": game, "clientVersion": env!("CARGO_PKG_VERSION"), "lines": lines });
+        let body = serde_json::json!({ "game": game, "confirmed": confirmed, "clientVersion": env!("CARGO_PKG_VERSION"), "lines": lines });
         let sent = http.post(format!("{url}/v1/lines")).header("X-Install-Id", &c.install_id).json(&body).send();
         match sent {
             Ok(r) if r.status().is_success() => {}

@@ -768,6 +768,10 @@ fn ocr_loop(
     let mut other_pages: HashMap<String, (u64, Option<pagescript::Pages>)> = HashMap::new();
     let mut recognized_at = Instant::now();
     let mut recognized: (String, u32) = (String::new(), 0);
+    // For sharing lines: the game one of whose pages was on screen this session (that game is
+    // really being played), and until when another game the app knows was seen on screen.
+    let mut confirmed_game = String::new();
+    let mut other_game_until: Option<Instant> = None;
     loop {
         if shared.reset_sizes.swap(false, std::sync::atomic::Ordering::Relaxed) {
             sizes.lock().unwrap().reset();
@@ -1032,7 +1036,8 @@ fn ocr_loop(
             }
             // Another game on screen? Every few seconds, while no page is up, the other games' scripts
             // look at the picture; two looks in a row that agree switch to that game.
-            if c.auto_game && screen.is_none() && found.is_none() && recognized_at.elapsed() >= Duration::from_secs(4) {
+            // (also while sharing lines: another game on screen holds its lines back)
+            if (c.auto_game || c.share_lines) && screen.is_none() && found.is_none() && recognized_at.elapsed() >= Duration::from_secs(4) {
                 recognized_at = Instant::now();
                 let generation = pagescript::GENERATION.load(std::sync::atomic::Ordering::Relaxed);
                 let here = c.game();
@@ -1047,12 +1052,15 @@ fn ocr_loop(
                         break;
                     }
                 }
+                if seen.is_some() {
+                    other_game_until = Some(Instant::now() + Duration::from_secs(90));
+                }
                 recognized = match seen {
                     Some(g) if recognized.0 == g => (g, recognized.1 + 1),
                     Some(g) => (g, 1),
                     None => (String::new(), 0),
                 };
-                if recognized.1 >= 2 {
+                if c.auto_game && recognized.1 >= 2 {
                     let g = std::mem::take(&mut recognized.0);
                     recognized.1 = 0;
                     let mut now = cfg.lock().unwrap();
@@ -1064,6 +1072,11 @@ fn ocr_loop(
                     }
                 }
             }
+            // What lines logged now are, for sharing (see memory::set_share).
+            if screen.is_some() || found.is_some() {
+                confirmed_game = c.game();
+            }
+            memory::set_share(&c.game(), confirmed_game == c.game(), other_game_until.is_some_and(|t| Instant::now() < t));
             // A script's page went: tell it (`ended`), so it can forget what it kept about it.
             {
                 let now_id = screen.as_ref().map(|s| s.id.clone()).or_else(|| found.as_ref().map(|l| l.id.clone()));
@@ -1665,6 +1678,90 @@ fn main() {
         let mut tr = Translator::new(model_dir());
         let segs = tr.recolor(&cfg, vec![(ar.clone(), None)], &[(phrase.clone(), "#7ed957".into())], &|_| {});
         println!("{segs:?}");
+        return;
+    }
+    // `--read-pages <folder> [--game <id>] [--script <file.js>] [--full]`: what a pages script reads
+    // on every PNG in a folder (saved debug frames), page by page — to try a new page before it's
+    // signed and sent to testers. Without --script: the game's script as the app would load it (its
+    // own, or a signed download). A --script file needn't be signed (it's yours, on your PC).
+    if let Some(dir) = args.iter().position(|a| a == "--read-pages").and_then(|i| args.get(i + 1)) {
+        let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+        let full = args.iter().any(|a| a == "--full");
+        let run = || -> anyhow::Result<()> {
+            Ocr::init_thread();
+            let ocr = Ocr::new()?;
+            let game = opt("--game").unwrap_or_else(|| Config::load(&config_path()).game());
+            let pages = match opt("--script") {
+                Some(file) => {
+                    let mut p = pagescript::Pages::load(&std::fs::read_to_string(&file)?)?;
+                    p.origin = format!("{file}, version {}", pagescript::version_of(&std::fs::read_to_string(&file)?));
+                    p
+                }
+                None => pagescript::Pages::for_game(&game, &data_dir()).ok_or_else(|| anyhow::anyhow!("no pages script for {game}: give one with --script"))?,
+            };
+            println!("script: {} · pages: {}", pages.origin, pages.list.iter().map(|i| i.id.as_str()).collect::<Vec<_>>().join(", "));
+            for o in &pages.options {
+                println!("switch: {} ({}), on by default: {}", o.id, o.name, o.on);
+            }
+            let mut files: Vec<_> = std::fs::read_dir(dir)?.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "png")).collect();
+            files.sort();
+            let (mut n, mut found, mut recognised) = (0, 0, 0);
+            for path in files {
+                let Ok(img) = image::open(&path) else { continue };
+                let img = img.to_rgba8();
+                let (w, h) = img.dimensions();
+                let frame = capture::FrameData { w, h, rgba: img.into_raw(), seq: 1 };
+                n += 1;
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let mut any = false;
+                for info in &pages.list {
+                    let t = Instant::now();
+                    let Some(k) = pages.present(&info.id, &frame, &ocr) else { continue };
+                    let read = pages.read(&info.id, &frame, &ocr, &k);
+                    let ms = t.elapsed().as_millis();
+                    any = true;
+                    found += 1;
+                    match read {
+                        None => println!("{name} {}: on screen, but read() found nothing ({ms} ms)", info.id),
+                        Some(l) if full => println!("{name} {} ({ms} ms): {}", info.id, serde_json::to_string_pretty(&l).unwrap_or_default()),
+                        Some(l) => {
+                            let mut parts = Vec::new();
+                            if l.title.w > 0.0 {
+                                parts.push(format!("title at {:.3},{:.3}", l.title.x, l.title.y));
+                            }
+                            if !l.reason_en.is_empty() {
+                                parts.push(format!("reason {:?}", l.reason_en));
+                            }
+                            if !l.buttons.is_empty() {
+                                parts.push(format!("buttons {:?}", l.buttons.iter().map(|b| b.en.as_str()).collect::<Vec<_>>()));
+                            }
+                            if !l.labels.is_empty() {
+                                parts.push(format!("labels {:?}", l.labels.iter().map(|b| b.en.as_str()).collect::<Vec<_>>()));
+                            }
+                            if let Some(p) = &l.player {
+                                parts.push(format!("player {:?}", p.en));
+                            }
+                            if !l.menu.is_empty() {
+                                let shown: Vec<String> = l.menu.iter().take(12).map(|m| if m.private { "(private)".to_string() } else { m.en.clone() }).collect();
+                                parts.push(format!("{} text box(es) {:?}{}", l.menu.len(), shown, if l.menu.len() > 12 { " …" } else { "" }));
+                            }
+                            println!("{name} {} ({ms} ms): {}", info.id, if parts.is_empty() { "an empty page".to_string() } else { parts.join(" · ") });
+                        }
+                    }
+                }
+                if pages.recognize(&frame, &ocr) {
+                    recognised += 1;
+                }
+                if !any {
+                    println!("{name}: no page");
+                }
+            }
+            println!("{n} frames, {found} pages on screen, the game recognised on {recognised}");
+            Ok(())
+        };
+        if let Err(e) = run() {
+            eprintln!("read-pages: {e:#}");
+        }
         return;
     }
     // `--compare-pages <folder>`: run the built-in pages script and the Rust detection on every PNG in a
