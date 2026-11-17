@@ -197,7 +197,6 @@ I18N.add("fa", {
   "Help improve translations": "کمک به بهبود ترجمه‌ها",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "خطوط انگلیسی‌ای را که در بازی می‌بینید (زیرنویس‌ها، راهنماها و نوشته‌ها؛ هرگز منوها) هر چند دقیقه با سرور VI Translator به اشتراک می‌گذارد تا برای همه بهتر ترجمه شوند. ناشناس: یک id تصادفی، بدون حساب کاربری، بدون اسکرین‌شات.",
   "Automatic layout updates": "به‌روزرسانی خودکار چیدمان",
-  "Keeps the game profile's read areas and fonts up to date.": "ناحیه‌های خواندن و فونت‌های پروفایل بازی را به‌روز نگه می‌دارد.",
   "Forget all remembered translations?": "همه ترجمه‌های به‌خاطرسپرده فراموش شوند؟",
   "{n} remembered line(s)": "{n} خط به‌خاطرسپرده",
   "Folder: {path}": "پوشه: {path}",
@@ -269,5 +268,11 @@ I18N.add("fa", {
   "For {game} · {n} read area(s)": "برای {game} · {n} ناحیهٔ خواندن",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "نمایه‌های داخلی به‌روزرسانی‌های بازی را خودکار می‌گیرند. کپی تغییرات شما را نگه می‌دارد و مال شما می‌ماند.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "تغییرات شما در ناحیه‌های خواندن، سبک متن و صفحه‌های بازی در همین نمایه ذخیره می‌شود.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "صفحه‌های خاص {game} هنوز شناخته نشده‌اند، پس فعلاً ترجمه نمی‌شوند. زیرنویس‌ها و ناحیه‌های خواندن طبق معمول کار می‌کنند."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "صفحه‌های خاص {game} هنوز شناخته نشده‌اند، پس فعلاً ترجمه نمی‌شوند. زیرنویس‌ها و ناحیه‌های خواندن طبق معمول کار می‌کنند.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "نواحی خواندن، فونت‌ها، سبک متن و زمان‌بندی نمایه بازی را به‌روز نگه می‌دارد.",
+  "Switch games automatically": "تعویض خودکار بازی",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "وقتی تصویر بازی دیگری را نشان می‌دهد که برنامه می‌شناسد (از صفحه‌های آن)، نمایه همان بازی به کار می‌رود. بازی‌ای که خیلی شبیه دیگری است ممکن است با آن اشتباه گرفته شود.",
+  "Get test versions of game pages": "دریافت نسخه‌های آزمایشی صفحه‌های بازی",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "صفحه‌های تازه بازی اول به چند بازیکن می‌رسند. نسخه آزمایشی ممکن است هنوز به همان خوبی کار نکند. شناسه این نصب: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "اگر دست نخورند، سه مورد آخر از زمان‌بندی خود نمایه بازی پیروی می‌کنند، اگر داشته باشد."
 });

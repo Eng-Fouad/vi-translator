@@ -197,7 +197,6 @@ I18N.add("ja", {
   "Help improve translations": "翻訳の改善に協力する",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "ゲーム内に表示された英語の行 (字幕、指示、テロップ。メニューは含みません) を数分ごとに VI Translator のサーバーと共有し、すべての人のために翻訳を改善します。匿名です: ランダムな ID のみで、アカウントもスクリーンショットも使いません。",
   "Automatic layout updates": "レイアウトの自動更新",
-  "Keeps the game profile's read areas and fonts up to date.": "ゲームプロファイルの読み取り範囲とフォントを最新の状態に保ちます。",
   "Forget all remembered translations?": "記憶したすべての翻訳を消去しますか？",
   "{n} remembered line(s)": "記憶済み {n} 行",
   "Folder: {path}": "フォルダー: {path}",
@@ -269,5 +268,11 @@ I18N.add("ja", {
   "For {game} · {n} read area(s)": "{game} 用 · 読み取りエリア {n} 個",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "組み込みプロファイルはゲーム向けの更新を自動で受け取ります。コピーには変更が保存され、あなたのものとして残ります。",
   "Your changes to read areas, text style and game pages are saved in this profile.": "読み取りエリア、テキストのスタイル、ゲームの画面への変更はこのプロファイルに保存されます。",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 固有の画面はまだ分かっていないため、現時点では翻訳されません。字幕と読み取りエリアは通常どおり動作します。"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 固有の画面はまだ分かっていないため、現時点では翻訳されません。字幕と読み取りエリアは通常どおり動作します。",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "ゲームプロファイルの読み取り範囲・フォント・文字スタイル・タイミングを最新に保ちます。",
+  "Switch games automatically": "ゲームを自動で切り替える",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "アプリが知っている別のゲームが画面に映ると（そのゲーム画面で判断）、そのゲームのプロファイルを使います。よく似たゲームを取り違えることがあります。",
+  "Get test versions of game pages": "ゲーム画面のテスト版を受け取る",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "新しいゲーム画面はまず一部のプレイヤーに届きます。テスト版はまだ十分に動かないことがあります。このインストールのID：{id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "変更しなければ、最後の3つはゲームプロファイル独自のタイミングがあればそれに従います。"
 });

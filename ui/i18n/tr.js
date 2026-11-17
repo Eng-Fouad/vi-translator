@@ -197,7 +197,6 @@ I18N.add("tr", {
   "Help improve translations": "Çevirilerin iyileştirilmesine yardım et",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Oyunda gördüğün İngilizce satırları (altyazılar, talimatlar ve yazılar; menüler asla) birkaç dakikada bir VI Translator sunucusuyla paylaşır, böylece herkes için daha iyi çevrilebilirler. Anonimdir: rastgele bir kimlik, hesap yok, ekran görüntüsü yok.",
   "Automatic layout updates": "Otomatik düzen güncellemeleri",
-  "Keeps the game profile's read areas and fonts up to date.": "Oyun profilinin okuma alanlarını ve yazı tiplerini güncel tutar.",
   "Forget all remembered translations?": "Hatırlanan tüm çeviriler unutulsun mu?",
   "{n} remembered line(s)": "{n} hatırlanan satır",
   "Folder: {path}": "Klasör: {path}",
@@ -269,5 +268,11 @@ I18N.add("tr", {
   "For {game} · {n} read area(s)": "{game} için · {n} okuma alanı",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Yerleşik profiller oyunun güncellemelerini otomatik alır. Kopya, değişikliklerinizi korur ve sizin kalır.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Okuma alanları, metin stili ve oyun sayfalarındaki değişiklikleriniz bu profile kaydedilir.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} oyununun kendi sayfaları henüz bilinmiyor, bu yüzden şimdilik hiçbiri çevrilmiyor. Altyazılar ve okuma alanları her zamanki gibi çalışır."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} oyununun kendi sayfaları henüz bilinmiyor, bu yüzden şimdilik hiçbiri çevrilmiyor. Altyazılar ve okuma alanları her zamanki gibi çalışır.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Oyun profilinin okuma alanlarını, yazı tiplerini, metin stilini ve zamanlamasını güncel tutar.",
+  "Switch games automatically": "Oyunları otomatik değiştir",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Görüntü, uygulamanın tanıdığı başka bir oyunu gösterdiğinde (oyun sayfalarından), o oyunun profili kullanılır. Başka bir oyuna çok benzeyen bir oyun onunla karıştırılabilir.",
+  "Get test versions of game pages": "Oyun sayfalarının test sürümlerini al",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Yeni oyun sayfaları önce birkaç oyuncuya gider. Test sürümü henüz o kadar iyi çalışmayabilir. Bu kurulumun kimliği: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Olduğu gibi bırakılırsa son üçü, varsa oyun profilinin kendi zamanlamasını izler."
 });

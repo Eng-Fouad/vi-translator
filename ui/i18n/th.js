@@ -197,7 +197,6 @@ I18N.add("th", {
   "Help improve translations": "ช่วยปรับปรุงคำแปล",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "ส่งบรรทัดภาษาอังกฤษที่คุณเห็นในเกม (ซับไตเติล คำแนะนำ และข้อความบนจอ; ไม่รวมเมนู) ไปยังเซิร์ฟเวอร์ VI Translator ทุก ๆ ไม่กี่นาที เพื่อให้แปลได้ดีขึ้นสำหรับทุกคน ไม่ระบุตัวตน: ใช้ ID แบบสุ่ม ไม่มีบัญชี ไม่มีภาพหน้าจอ",
   "Automatic layout updates": "อัปเดตเลย์เอาต์อัตโนมัติ",
-  "Keeps the game profile's read areas and fonts up to date.": "อัปเดตพื้นที่อ่านและฟอนต์ของโปรไฟล์เกมให้เป็นปัจจุบันอยู่เสมอ",
   "Forget all remembered translations?": "ลบคำแปลที่จดจำไว้ทั้งหมดหรือไม่",
   "{n} remembered line(s)": "จดจำไว้ {n} บรรทัด",
   "Folder: {path}": "โฟลเดอร์: {path}",
@@ -269,5 +268,11 @@ I18N.add("th", {
   "For {game} · {n} read area(s)": "สำหรับ {game} · พื้นที่อ่าน {n} แห่ง",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "โปรไฟล์ในตัวได้รับอัปเดตของเกมโดยอัตโนมัติ สำเนาจะเก็บการเปลี่ยนแปลงของคุณและเป็นของคุณ",
   "Your changes to read areas, text style and game pages are saved in this profile.": "การเปลี่ยนแปลงพื้นที่อ่าน รูปแบบข้อความ และหน้าของเกมจะบันทึกไว้ในโปรไฟล์นี้",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "ยังไม่รู้จักหน้าเฉพาะของ {game} จึงยังไม่มีการแปล คำบรรยายและพื้นที่อ่านทำงานตามปกติ"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "ยังไม่รู้จักหน้าเฉพาะของ {game} จึงยังไม่มีการแปล คำบรรยายและพื้นที่อ่านทำงานตามปกติ",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "อัปเดตพื้นที่อ่าน ฟอนต์ รูปแบบข้อความ และจังหวะเวลาของโปรไฟล์เกมให้เป็นปัจจุบัน",
+  "Switch games automatically": "สลับเกมอัตโนมัติ",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "เมื่อภาพแสดงเกมอื่นที่แอปรู้จัก (จากหน้าเกมของมัน) จะใช้โปรไฟล์ของเกมนั้น เกมที่คล้ายเกมอื่นมากอาจถูกเข้าใจว่าเป็นเกมนั้น",
+  "Get test versions of game pages": "รับหน้าเกมรุ่นทดสอบ",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "หน้าเกมใหม่จะส่งถึงผู้เล่นไม่กี่คนก่อน รุ่นทดสอบอาจยังทำงานได้ไม่ดีเท่า รหัสการติดตั้งนี้: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "ถ้าไม่ปรับ สามรายการสุดท้ายจะใช้จังหวะเวลาของโปรไฟล์เกมเองเมื่อมี"
 });

@@ -162,6 +162,12 @@ pub struct Config {
     pub server_url: String,
     /// Apply read-area and font updates for the game profile automatically.
     pub auto_layout: bool,
+    /// Get test versions of game pages before everyone (Advanced).
+    pub early_pages: bool,
+    /// Switch to the game the picture shows (recognised by the games' pages scripts).
+    pub auto_game: bool,
+    /// The profile last used for each game (where switching to a game goes).
+    pub game_profiles: std::collections::BTreeMap<String, String>,
     /// Version of the last layout update applied (from before per-game versions; see `layout_versions`).
     pub layout_version: u32,
     /// Version of the last layout update applied, by game.
@@ -213,6 +219,17 @@ pub struct Profile {
     pub areas: Vec<Area>,
     pub style: Style,
     pub pages: ProfileOpts,
+    /// How the game's text comes and goes, if it needs other timing than the app's (0 = the app's).
+    pub timing: Timing,
+}
+
+/// Reading timing a game can bring (see `Config::timing`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Timing {
+    pub interval_ms: u64,
+    pub stable_ms: u64,
+    pub clear_after_ms: u64,
 }
 
 impl Default for Profile {
@@ -270,7 +287,7 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
         ]
     };
     match id {
-        "gta5" => Some(Profile { id: "gta5".into(), name: "Grand Theft Auto V".into(), game: "gta5".into(), areas: gta_areas(), style: Style::default(), pages: ProfileOpts::default() }),
+        "gta5" => Some(Profile { id: "gta5".into(), name: "Grand Theft Auto V".into(), game: "gta5".into(), areas: gta_areas(), style: Style::default(), pages: ProfileOpts::default(), timing: Timing::default() }),
         // GTA VI starts from GTA V's areas; layout updates from the server tune it once the game is out.
         // Its own pages aren't known yet: none are recognised.
         "gta6" => Some(Profile {
@@ -280,6 +297,7 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
             areas: gta_areas(),
             style: Style::default(),
             pages: ProfileOpts { mission_failed: false, pause_menu: false, captions: false, ..ProfileOpts::default() },
+            timing: Timing::default(),
         }),
         _ => None,
     }
@@ -345,6 +363,9 @@ impl Default for Config {
             auto_layout: true,
             layout_version: 0,
             layout_versions: Default::default(),
+            early_pages: false,
+            auto_game: false,
+            game_profiles: Default::default(),
             server_games: Vec::new(),
             games_version: 0,
             obs_port: 4455,
@@ -372,6 +393,15 @@ impl Config {
         let mut c: Self = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
         c.normalize();
         c
+    }
+
+    /// Reading timing in use (interval, settle, clear after; ms): the player's own where they moved
+    /// the slider (Advanced), else the profile's game timing if it has one, else the app's.
+    pub fn timing(&self) -> (u64, u64, u64) {
+        let d = Config::default();
+        let t = self.builtins.iter().chain(self.profiles.iter()).find(|p| p.id == self.profile).map(|p| p.timing.clone()).unwrap_or_default();
+        let pick = |own: u64, default: u64, game: u64| if own != default || game == 0 { own } else { game };
+        (pick(self.interval_ms, d.interval_ms, t.interval_ms), pick(self.stable_ms, d.stable_ms, t.stable_ms), pick(self.clear_after_ms, d.clear_after_ms, t.clear_after_ms))
     }
 
     /// A built-in profile (the app's own, or a game the server added)?
@@ -431,6 +461,7 @@ impl Config {
                 style: self.style.clone(),
                 // "none" (no game pages) before profiles: keep them off
                 pages: if self.profile == "none" { ProfileOpts { mission_failed: false, pause_menu: false, captions: false, ..self.profile_opts.clone() } } else { self.profile_opts.clone() },
+                timing: base.timing.clone(),
             };
             if self.profile == "none" || !(same_json(&mine.areas, &base.areas) && same_json(&mine.style, &base.style) && same_json(&mine.pages, &base.pages)) {
                 self.profile = mine.id.clone();
@@ -455,6 +486,9 @@ impl Config {
                 p.game = "gta5".into();
             }
         }
+        // the profile each game was last played with (where switching to that game goes)
+        let ids: Vec<String> = self.builtins.iter().chain(self.profiles.iter()).map(|p| p.id.clone()).collect();
+        self.game_profiles.retain(|_, p| ids.contains(p));
         let active = self
             .builtins
             .iter()
@@ -463,9 +497,22 @@ impl Config {
             .cloned()
             .unwrap_or_else(|| self.builtins.iter().find(|p| p.id == "gta6").cloned().expect("built-in"));
         self.profile = active.id.clone();
+        self.game_profiles.insert(active.game.clone(), active.id.clone());
         self.areas = active.areas;
         self.style = active.style;
         self.profile_opts = active.pages;
+    }
+
+    /// Switch to a game: the profile it was last played with, else its built-in one. False if it is
+    /// the game in use already or not a game the app knows.
+    pub fn switch_to_game(&mut self, game: &str) -> bool {
+        if self.game() == game || !self.builtins.iter().any(|p| p.id == game) {
+            return false;
+        }
+        let mine = self.game_profiles.get(game).filter(|id| self.profiles.iter().any(|p| &p.id == *id && p.game == game)).cloned();
+        self.profile = mine.unwrap_or_else(|| game.to_string());
+        self.normalize();
+        true
     }
 
     /// The server's list of games (the layout update named "games"):
@@ -516,6 +563,33 @@ impl Config {
 #[cfg(test)]
 mod profile_tests {
     use super::*;
+
+    #[test]
+    fn a_games_timing_unless_the_player_set_their_own() {
+        let mut c = Config::default();
+        c.normalize();
+        let d = Config::default();
+        assert_eq!(c.timing(), (d.interval_ms, d.stable_ms, d.clear_after_ms));
+        c.builtins.iter_mut().find(|p| p.id == c.profile).unwrap().timing = Timing { interval_ms: 0, stable_ms: 120, clear_after_ms: 1500 };
+        assert_eq!(c.timing(), (d.interval_ms, 120, 1500));
+        c.clear_after_ms = 900; // the player's own
+        assert_eq!(c.timing(), (d.interval_ms, 120, 900));
+    }
+
+    #[test]
+    fn switching_games_goes_to_the_profile_last_used_for_it() {
+        let mut c = Config::default();
+        c.normalize();
+        c.profiles.push(Profile { id: "custom-5".into(), name: "Mine".into(), game: "gta5".into(), ..Profile::default() });
+        c.profile = "custom-5".into();
+        c.normalize();
+        assert!(c.switch_to_game("gta6"));
+        assert_eq!(c.profile, "gta6");
+        assert!(!c.switch_to_game("gta6"), "already");
+        assert!(!c.switch_to_game("nope"));
+        assert!(c.switch_to_game("gta5"));
+        assert_eq!(c.profile, "custom-5");
+    }
 
     #[test]
     fn the_server_adds_games() {

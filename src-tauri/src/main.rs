@@ -761,12 +761,21 @@ fn ocr_loop(
     // the game's pages script (pagescript.rs), loaded again when the game or the script changes
     let mut pages: Option<pagescript::Pages> = None;
     let mut pages_for: (String, u64) = (String::new(), u64::MAX);
+    // the page on screen last time round (to tell its script when it goes)
+    let mut ended_check: Option<String> = None;
+    // Switching games by the picture (Advanced): the other games' scripts, when they were last
+    // asked, and which game the picture looked like how many times in a row.
+    let mut other_pages: HashMap<String, (u64, Option<pagescript::Pages>)> = HashMap::new();
+    let mut recognized_at = Instant::now();
+    let mut recognized: (String, u32) = (String::new(), 0);
     loop {
         if shared.reset_sizes.swap(false, std::sync::atomic::Ordering::Relaxed) {
             sizes.lock().unwrap().reset();
         }
         let c = cfg.lock().unwrap().clone();
         let t0 = Instant::now();
+        // (the player's, or the game's own: see Config::timing)
+        let (interval_ms, stable_ms, clear_after_ms) = c.timing();
         if c.target_lang != last_lang {
             // another language: everything shown and cached is in the old one
             last_lang = c.target_lang.clone();
@@ -853,7 +862,7 @@ fn ocr_loop(
                     // A script's page is up. Without hold rules (captions): still the same? Else read it
                     // again, or it's gone. With them (Mission Failed): kept while its title blinks out
                     // (up to hold_ms), ended once the screen is dark, read again every reread_ms.
-                    Some(old) if old.id != screens::PAUSE_ID && pages.as_ref().is_some_and(|p| p.has(&old.id)) => {
+                    Some(old) if screens::menu_rects(old).is_none() && pages.as_ref().is_some_and(|p| p.has(&old.id)) => {
                         let p = pages.as_ref().expect("checked");
                         let id = old.id.clone();
                         let info = p.info(&id).cloned().unwrap_or_default();
@@ -886,35 +895,41 @@ fn ocr_loop(
                     }
                     // Pause menu: gone the moment its tab bar is; re-read twice a second (the selected
                     // tab moves as the player browses).
-                    Some(old) if old.id == screens::PAUSE_ID => {
+                    // (and any script page that asks to be followed like a menu: `hold.follow`)
+                    Some(old) if screens::menu_rects(old).is_some() => {
+                        let id = old.id.clone();
+                        let (content_rect, buttons_rect) = screens::menu_rects(old).expect("checked");
+                        let rust_pause = id == screens::PAUSE_ID;
                         // the script reads the menu when it has it; the app follows it here either way
-                        let by_script = pages.as_ref().filter(|p| p.has(screens::PAUSE_ID));
+                        let by_script = pages.as_ref().filter(|p| p.has(&id));
                         let pause_present = |f: &capture::FrameData| match by_script {
-                            Some(p) => p.same(screens::PAUSE_ID, f, &ocr, old) == Some(true),
-                            None => screens::pause_present(f),
+                            Some(p) => p.same(&id, f, &ocr, old) == Some(true),
+                            None => rust_pause && screens::pause_present(f),
                         };
                         let reread = |f: &capture::FrameData| match by_script {
-                            Some(p) if p.can(screens::PAUSE_ID, "reread") => p.reread(screens::PAUSE_ID, f, &ocr, old),
-                            Some(p) => p.present(screens::PAUSE_ID, f, &ocr).and_then(|k| p.read(screens::PAUSE_ID, f, &ocr, &k)),
-                            None => screens::reread_pause_menu(f, &ocr, old),
+                            Some(p) if p.can(&id, "reread") => p.reread(&id, f, &ocr, old),
+                            Some(p) => p.present(&id, f, &ocr).and_then(|k| p.read(&id, f, &ocr, &k)),
+                            None if rust_pause => screens::reread_pause_menu(f, &ocr, old),
+                            None => None,
                         };
                         let full_read = |f: &capture::FrameData| match by_script {
-                            Some(p) => p.present(screens::PAUSE_ID, f, &ocr).and_then(|k| p.read(screens::PAUSE_ID, f, &ocr, &k)),
-                            None => screens::detect_gta5_pause(f, &ocr),
+                            Some(p) => p.present(&id, f, &ocr).and_then(|k| p.read(&id, f, &ocr, &k)),
+                            None if rust_pause => screens::detect_gta5_pause(f, &ocr),
+                            None => None,
                         };
                         // Every frame: a menu line whose English changed or went away loses its Arabic
                         // at once, and the menu is read again straight away.
                         let gone = old.menu.iter().any(|m| !screens::region_same(&frame, &m.rect, &m.sig))
                             || old.labels.iter().any(|l| !screens::region_same(&frame, &l.rect, &l.sig))
-                            || !screens::region_same(&frame, &screens::BUTTON_ROW, &old.buttons_sig);
+                            || !screens::region_same(&frame, &buttons_rect, &old.buttons_sig);
                         // Read again only when something changed (or every 3 s, to be safe): re-reading a
                         // still menu only makes OCR's boxes shift a few pixels.
-                        let changed = screens::content_changed(&frame, &old.content_sig);
+                        let changed = screens::content_changed_in(&frame, &content_rect, &old.content_sig);
                         let due = screen_checked.elapsed() >= Duration::from_secs(3);
                         // a state of this tab seen before, matching what's on screen now
-                        let tab = screens::selected_tab_name(old).unwrap_or("").to_string();
+                        let tab = format!("{id}/{}", screens::selected_tab_name(old).unwrap_or(""));
                         let known = (gone || changed)
-                            .then(|| menu_states.iter().find(|(t, sig, _)| *t == tab && !screens::content_changed(&frame, sig)))
+                            .then(|| menu_states.iter().find(|(t, sig, _)| *t == tab && !screens::content_changed_in(&frame, &content_rect, sig)))
                             .flatten()
                             .filter(|(_, sig, _)| *sig != old.content_sig);
                         if !pause_present(&frame) {
@@ -1015,6 +1030,50 @@ fn ocr_loop(
             } else if screen.is_some() {
                 hide_screen(&app, &shared, &mut screen);
             }
+            // Another game on screen? Every few seconds, while no page is up, the other games' scripts
+            // look at the picture; two looks in a row that agree switch to that game.
+            if c.auto_game && screen.is_none() && found.is_none() && recognized_at.elapsed() >= Duration::from_secs(4) {
+                recognized_at = Instant::now();
+                let generation = pagescript::GENERATION.load(std::sync::atomic::Ordering::Relaxed);
+                let here = c.game();
+                let mut seen: Option<String> = None;
+                for g in c.builtins.iter().map(|p| p.id.clone()).filter(|g| *g != here) {
+                    let entry = other_pages.entry(g.clone()).or_insert((u64::MAX, None));
+                    if entry.0 != generation {
+                        *entry = (generation, pagescript::Pages::for_game(&g, &data_dir()));
+                    }
+                    if entry.1.as_ref().is_some_and(|p| p.recognize(&frame, &ocr)) {
+                        seen = Some(g);
+                        break;
+                    }
+                }
+                recognized = match seen {
+                    Some(g) if recognized.0 == g => (g, recognized.1 + 1),
+                    Some(g) => (g, 1),
+                    None => (String::new(), 0),
+                };
+                if recognized.1 >= 2 {
+                    let g = std::mem::take(&mut recognized.0);
+                    recognized.1 = 0;
+                    let mut now = cfg.lock().unwrap();
+                    if now.switch_to_game(&g) {
+                        let _ = now.save(&config_path());
+                        let _ = app.emit("config", &*now);
+                        let name = now.builtins.iter().find(|p| p.id == g).map(|p| p.name.clone()).unwrap_or(g);
+                        let _ = app.emit("status-msg", format!("Switched to {name}: the picture looks like it."));
+                    }
+                }
+            }
+            // A script's page went: tell it (`ended`), so it can forget what it kept about it.
+            {
+                let now_id = screen.as_ref().map(|s| s.id.clone()).or_else(|| found.as_ref().map(|l| l.id.clone()));
+                if ended_check != now_id {
+                    if let (Some(p), Some(gone)) = (&pages, &ended_check) {
+                        p.ended(gone, &frame);
+                    }
+                    ended_check = now_id;
+                }
+            }
             if let Some(layout) = found.as_mut().filter(|l| !l.menu.is_empty()) {
                 // Pause-menu content: built-in words, then this session's translations, then the
                 // translation memory; anything else is sent to the translator and shows on a later read.
@@ -1023,7 +1082,15 @@ fn ocr_loop(
                 if friends_tab {
                     layout.menu.retain(|m| !m.item);
                 }
+                // (a script marks such text itself)
+                layout.menu.retain(|m| !m.private);
                 for m in layout.menu.iter_mut() {
+                    if m.fixed {
+                        if m.ar.is_empty() {
+                            m.ar = m.en.clone();
+                        }
+                        continue;
+                    }
                     // (OCR may spell a line slightly differently from one read to the next)
                     let cached = {
                         let cache = shared.menu_cache.lock().unwrap();
@@ -1060,7 +1127,7 @@ fn ocr_loop(
                 }
                 // Stability from one read to the next, on the same tab: a line read a bit differently
                 // keeps its Arabic.
-                if let Some(old) = screen.as_ref().filter(|o| o.id == screens::PAUSE_ID && screens::selected_tab_name(o) == screens::selected_tab_name(layout)) {
+                if let Some(old) = screen.as_ref().filter(|o| o.id == layout.id && screens::menu_rects(o).is_some() && screens::selected_tab_name(o) == screens::selected_tab_name(layout)) {
                     let near = |a: &screens::Rect, b: &screens::Rect| (a.y - b.y).abs() < a.h.min(b.h) * 0.6 && (a.x - b.x).abs() < 0.03;
                     // The same line found again (same place, similar words): keep its box, colours and
                     // Arabic exactly, so nothing shifts or changes wording between reads.
@@ -1081,10 +1148,10 @@ fn ocr_loop(
                 // Remember this state of the tab (and add lines an earlier read of it found but
                 // this one missed, if they're still on screen). Only a layout that matches the
                 // picture on screen — not one just trimmed while the page changes under it.
-                if layout.id == screens::PAUSE_ID && !screens::content_changed(&frame, &layout.content_sig) {
-                    let tab = screens::selected_tab_name(layout).unwrap_or("").to_string();
+                if let Some((content_rect, _)) = screens::menu_rects(layout).filter(|(r, _)| !screens::content_changed_in(&frame, r, &layout.content_sig)) {
+                    let tab = format!("{}/{}", layout.id, screens::selected_tab_name(layout).unwrap_or(""));
                     let near = |a: &screens::Rect, b: &screens::Rect| (a.y - b.y).abs() < a.h.min(b.h) * 0.6 && (a.x - b.x).abs() < 0.03;
-                    if let Some(e) = menu_states.iter_mut().find(|(t, sig, _)| *t == tab && !screens::content_changed(&frame, sig)) {
+                    if let Some(e) = menu_states.iter_mut().find(|(t, sig, _)| *t == tab && !screens::content_changed_in(&frame, &content_rect, sig)) {
                         for o in e.2.iter() {
                             if !o.ar.is_empty() && !layout.menu.iter().any(|m| near(&o.rect, &m.rect)) && screens::region_same(&frame, &o.rect, &o.sig) {
                                 layout.menu.push(o.clone());
@@ -1117,7 +1184,7 @@ fn ocr_loop(
                 // the reason is always drawn in the same size
                 // (measured only on a new page / new reason: refreshes reuse the frozen geometry)
                 let new_reason = screen.as_ref().is_none_or(|s| s.reason_en != layout.reason_en);
-                if new_reason && layout.id != screens::PAUSE_ID {
+                if new_reason && screens::menu_rects(&layout).is_none() {
                     let kind = match layout.id.as_str() {
                         screens::CAPTION_ID => "__screen_caption",
                         screens::ALERT_ID => "__screen_alert",
@@ -1126,7 +1193,7 @@ fn ocr_loop(
                     layout.reason_line_h = sizes.lock().unwrap().size(kind, layout.reason_line_h);
                 }
                 // ...and so is the title (kept centred where the game's title is)
-                let th = if screen.is_none() && layout.id != screens::PAUSE_ID && layout.id != screens::CAPTION_ID {
+                let th = if screen.is_none() && screens::menu_rects(&layout).is_none() && layout.id != screens::CAPTION_ID {
                     let kind = if layout.id == screens::ALERT_ID { "__screen_alert_title" } else { "__screen_title" };
                     sizes.lock().unwrap().size(kind, layout.title.h)
                 } else {
@@ -1199,8 +1266,8 @@ fn ocr_loop(
             if screen.is_some() {
                 // The pause menu is checked on every new frame (its checks are tiny), so its Arabic
                 // goes the moment the English does: pace by the capture rate, not the read interval.
-                let pause = screen.as_ref().is_some_and(|s| [screens::PAUSE_ID, screens::CAPTION_ID, screens::ALERT_ID].contains(&s.id.as_str()));
-                let pace = if pause { (1000 / c.capture_fps.clamp(1, 30) as u64).min(c.interval_ms) } else { c.interval_ms };
+                let pause = screen.as_ref().is_some_and(|s| screens::menu_rects(s).is_some() || [screens::CAPTION_ID, screens::ALERT_ID].contains(&s.id.as_str()));
+                let pace = if pause { (1000 / c.capture_fps.clamp(1, 30) as u64).min(interval_ms) } else { interval_ms };
                 let spent = t0.elapsed();
                 std::thread::sleep(Duration::from_millis(pace.max(30)).saturating_sub(spent));
                 continue; // normal areas pause while the page is up
@@ -1248,7 +1315,7 @@ fn ocr_loop(
                             let (t, icons, _) = ocr::text_with_icons(cr, &words);
                             memory.lock().unwrap().knows(if icons.is_empty() { &st.candidate } else { &t })
                         });
-                    let settled = !is_new && st.candidate_since.is_some_and(|s| now - s >= Duration::from_millis(c.stable_ms));
+                    let settled = !is_new && st.candidate_since.is_some_and(|s| now - s >= Duration::from_millis(stable_ms));
                     if (known || settled) && !ocr::similar(&st.candidate, &st.current) {
                         // Stable new text: translate it once. Colours are measured only now.
                         st.current = st.candidate.clone();
@@ -1285,7 +1352,7 @@ fn ocr_loop(
                         let _ = jobs.send(Job { area: area.id.clone(), seq: seq_counter, en, phrases, icons, line_h, en_start, text_box });
                     }
                 } else if !st.current.is_empty()
-                    && st.last_seen.is_some_and(|s| now - s > Duration::from_millis(c.clear_after_ms))
+                    && st.last_seen.is_some_and(|s| now - s > Duration::from_millis(clear_after_ms))
                 {
                     // The English is gone (not just an OCR blink). It really ended when last seen; the
                     // presenter keeps the Arabic up for as long as the English was on screen.
@@ -1302,7 +1369,7 @@ fn ocr_loop(
                     st.current_seq = 0;
                 } else if st.current.is_empty()
                     && !st.candidate.is_empty()
-                    && st.last_seen.is_some_and(|s| now - s > Duration::from_millis(c.clear_after_ms))
+                    && st.last_seen.is_some_and(|s| now - s > Duration::from_millis(clear_after_ms))
                 {
                     // Text that came and went before it was ever translated: forget it, or its old start
                     // time would be reused when similar text shows up minutes later.
@@ -1312,7 +1379,7 @@ fn ocr_loop(
             }
         }
         let spent = t0.elapsed();
-        std::thread::sleep(Duration::from_millis(c.interval_ms.max(50)).saturating_sub(spent));
+        std::thread::sleep(Duration::from_millis(interval_ms.max(50)).saturating_sub(spent));
     }
 }
 
@@ -1347,8 +1414,8 @@ fn translate_loop(
         }
         // A hand-written phrasebook line beats a machine translation remembered earlier (only an
         // reviewed line ranks above it).
-        if c.game() == "gta5" && c.target_lang == "ar" && remembered.as_ref().is_some_and(|(_, src)| src != "reviewed" && src != "phrasebook") {
-            if phrasebook::lookup(&job.en, &job.icons).is_some() {
+        if remembered.as_ref().is_some_and(|(_, src)| src != "reviewed" && src != "phrasebook") {
+            if phrasebook::find(&c.game(), &c.target_lang, &job.en, &job.icons).is_some() {
                 remembered = None; // the translator below answers from the phrasebook, and memory is updated
             }
         }
@@ -1364,7 +1431,7 @@ fn translate_loop(
         let mem_note = if use_memory {
             let mut m = memory.lock().unwrap();
             if let (false, Ok(segs)) = (hit, &result) {
-                let source = if c.game() == "gta5" && c.target_lang == "ar" && phrasebook::lookup(&job.en, &job.icons).is_some() { "phrasebook" } else { c.engine.as_str() };
+                let source = if phrasebook::find(&c.game(), &c.target_lang, &job.en, &job.icons).is_some() { "phrasebook" } else { c.engine.as_str() };
                 m.put(&job.en, segs, source);
             }
             m.record(hit, ready_ms);

@@ -197,7 +197,6 @@ I18N.add("ms", {
   "Help improve translations": "Bantu perbaiki terjemahan",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Berkongsi baris bahasa Inggeris yang anda lihat dalam permainan (sari kata, arahan dan kapsyen; tidak sekali-kali menu) dengan pelayan VI Translator setiap beberapa minit, supaya ia dapat diterjemah dengan lebih baik untuk semua. Tanpa nama: id rawak, tiada akaun, tiada tangkapan skrin.",
   "Automatic layout updates": "Kemas kini susun atur automatik",
-  "Keeps the game profile's read areas and fonts up to date.": "Memastikan kawasan bacaan dan fon profil permainan sentiasa terkini.",
   "Forget all remembered translations?": "Lupakan semua terjemahan yang diingati?",
   "{n} remembered line(s)": "{n} baris diingati",
   "Folder: {path}": "Folder: {path}",
@@ -269,5 +268,11 @@ I18N.add("ms", {
   "For {game} · {n} read area(s)": "Untuk {game} · {n} kawasan baca",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Profil terbina dalam menerima kemas kini permainan secara automatik. Salinan menyimpan perubahan anda dan kekal milik anda.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Perubahan anda pada kawasan baca, gaya teks dan halaman permainan disimpan dalam profil ini.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Halaman khusus {game} belum diketahui, jadi buat masa ini tiada yang diterjemahkan. Sari kata dan kawasan baca berfungsi seperti biasa."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Halaman khusus {game} belum diketahui, jadi buat masa ini tiada yang diterjemahkan. Sari kata dan kawasan baca berfungsi seperti biasa.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Memastikan kawasan bacaan, fon, gaya teks dan masa profil permainan sentiasa terkini.",
+  "Switch games automatically": "Tukar permainan secara automatik",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Apabila gambar menunjukkan permainan lain yang dikenali aplikasi (melalui halaman permainannya), profil permainan itu digunakan. Permainan yang sangat mirip permainan lain mungkin disangka permainan itu.",
+  "Get test versions of game pages": "Dapatkan versi ujian halaman permainan",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Halaman permainan baharu pergi kepada beberapa pemain dahulu. Versi ujian mungkin belum berfungsi sebaik itu. ID pemasangan ini: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Jika dibiarkan, tiga yang terakhir mengikut masa profil permainan sendiri jika ada."
 });

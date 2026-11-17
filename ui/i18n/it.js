@@ -197,7 +197,6 @@ I18N.add("it", {
   "Help improve translations": "Aiuta a migliorare le traduzioni",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Condivide ogni pochi minuti le righe in inglese che vedi nel gioco (sottotitoli, istruzioni e didascalie; mai i menu) con il server di VI Translator, così possono essere tradotte meglio per tutti. Anonimo: un ID casuale, nessun account, nessuno screenshot.",
   "Automatic layout updates": "Aggiornamenti automatici del layout",
-  "Keeps the game profile's read areas and fonts up to date.": "Mantiene aggiornati le aree di lettura e i font del profilo del gioco.",
   "Forget all remembered translations?": "Dimenticare tutte le traduzioni memorizzate?",
   "{n} remembered line(s)": "{n} riga/e memorizzata/e",
   "Folder: {path}": "Cartella: {path}",
@@ -269,5 +268,11 @@ I18N.add("it", {
   "For {game} · {n} read area(s)": "Per {game} · {n} aree di lettura",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "I profili integrati ricevono automaticamente gli aggiornamenti per il gioco. Una copia mantiene le tue modifiche e resta tua.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Le modifiche ad aree di lettura, stile del testo e pagine del gioco vengono salvate in questo profilo.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Le pagine proprie di {game} non sono ancora note, quindi per ora non ne viene tradotta nessuna. Sottotitoli e aree di lettura funzionano come sempre."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Le pagine proprie di {game} non sono ancora note, quindi per ora non ne viene tradotta nessuna. Sottotitoli e aree di lettura funzionano come sempre.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Mantiene aggiornate aree di lettura, caratteri, stile del testo e tempi del profilo di gioco.",
+  "Switch games automatically": "Cambia gioco automaticamente",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Quando l'immagine mostra un altro gioco che l'app conosce (dalle sue pagine), viene usato il profilo di quel gioco. Un gioco molto simile a un altro può essere scambiato per esso.",
+  "Get test versions of game pages": "Ricevi le versioni di prova delle pagine di gioco",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Le nuove pagine di gioco arrivano prima a pochi giocatori. Una versione di prova potrebbe non funzionare ancora altrettanto bene. ID di questa installazione: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Se lasciati così, gli ultimi tre seguono i tempi propri del profilo di gioco, se ne ha."
 });

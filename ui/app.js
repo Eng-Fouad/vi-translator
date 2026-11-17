@@ -754,6 +754,10 @@ function renderTiming() {
     f.querySelector("input").addEventListener("input", (e) => { cfg[key] = Number(e.target.value); f.querySelector(".val").textContent = e.target.value; save(false); });
     form.appendChild(f);
   }
+  const note = document.createElement("div");
+  note.className = "hint";
+  note.textContent = t("Left as they are, the last three follow the game profile's own timing when it has one.");
+  form.appendChild(note);
 }
 
 // ------------------------------------------------------------------------------------- translation memory
@@ -769,13 +773,19 @@ function renderMemory() {
     <label class="check" style="color:var(--text);font-weight:600;margin-top:10px"><input type="checkbox" id="share-on" ${cfg.share_lines !== false ? "checked" : ""}/> ${t("Help improve translations")}</label>
     <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
     <label class="check" style="color:var(--text)"><input type="checkbox" id="layout-auto" ${cfg.auto_layout !== false ? "checked" : ""}/> ${t("Automatic layout updates")}</label>
-    <div class="hint">${t("Keeps the game profile's read areas and fonts up to date.")}</div>`;
+    <div class="hint">${t("Keeps the game profile's read areas, fonts, text style and timing up to date.")}</div>
+    <label class="check" style="color:var(--text)"><input type="checkbox" id="auto-game" ${cfg.auto_game ? "checked" : ""}/> ${t("Switch games automatically")}</label>
+    <div class="hint">${t("When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.")}</div>
+    <label class="check" style="color:var(--text)"><input type="checkbox" id="early-pages" ${cfg.early_pages ? "checked" : ""}/> ${t("Get test versions of game pages")}</label>
+    <div class="hint">${t("New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}", { id: `<code>${AS.esc(cfg.install_id || "—")}</code>` })}</div>`;
   $("size-reset").addEventListener("click", () => invoke("reset_text_sizes"));
   $("mem-reload").addEventListener("click", async () => { await invoke("memory_reload"); updateMemory(); });
   $("mem-on").addEventListener("change", (e) => { cfg.memory_enabled = e.target.checked; save(false); updateMemory(); });
   $("mem-tint").addEventListener("change", (e) => { cfg.memory_tint = e.target.checked; save(); });
   $("share-on").addEventListener("change", (e) => { cfg.share_lines = e.target.checked; save(false); });
   $("layout-auto").addEventListener("change", (e) => { cfg.auto_layout = e.target.checked; save(false); });
+  $("auto-game").addEventListener("change", (e) => { cfg.auto_game = e.target.checked; save(false); });
+  $("early-pages").addEventListener("change", (e) => { cfg.early_pages = e.target.checked; save(false); });
   $("mem-open").addEventListener("click", () => invoke("memory_open_folder").catch((e) => log({ error: String(e) })));
   $("mem-clear").addEventListener("click", async () => {
     if (!confirm(t("Forget all remembered translations?"))) return;
@@ -1124,7 +1134,16 @@ listen("config", (e) => {
   // (every save comes back here too: only a real change does anything)
   if (JSON.stringify(now.layout_versions) !== JSON.stringify(cfg.layout_versions)) for (const k of Object.keys(pageScripts)) delete pageScripts[k];
   const changed = JSON.stringify(now.builtins) !== JSON.stringify(cfg.builtins);
-  Object.assign(cfg, { builtins: now.builtins, server_games: now.server_games, games_version: now.games_version, layout_versions: now.layout_versions });
+  Object.assign(cfg, { builtins: now.builtins, server_games: now.server_games, games_version: now.games_version, layout_versions: now.layout_versions, game_profiles: now.game_profiles });
+  // the app switched games (the picture showed another one)
+  if (now.profile !== cfg.profile) {
+    syncProfile();
+    Object.assign(cfg, { profile: now.profile, areas: now.areas, style: now.style, profile_opts: now.profile_opts });
+    selected = cfg.areas[0]?.id ?? null;
+    for (const k of Object.keys(lastSegs)) delete lastSegs[k];
+    renderAll();
+    return;
+  }
   if (!changed) return;
   if (locked()) {
     const p = activeProfile();
@@ -1184,7 +1203,7 @@ function copyProfile(from) {
   syncProfile();
   const id = `custom-${Date.now().toString(36)}`;
   cfg.profiles = cfg.profiles || [];
-  cfg.profiles.push({ id, name: t("{name} (copy)", { name: from.name }), game: from.game, areas: clone(from.areas), style: clone(from.style), pages: clone(from.pages) });
+  cfg.profiles.push({ id, name: t("{name} (copy)", { name: from.name }), game: from.game, areas: clone(from.areas), style: clone(from.style), pages: clone(from.pages), timing: clone(from.timing || {}) });
   useProfile(id);
   setTimeout(() => $("pf-name")?.select(), 0);
 }

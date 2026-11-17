@@ -197,7 +197,6 @@ I18N.add("ar", {
   "Help improve translations": "المساعدة في تحسين الترجمات",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "يشارك الأسطر الإنجليزية التي تظهر في اللعبة (الترجمة والتعليمات والعبارات؛ وليس القوائم أبداً) مع خادم VI Translator كل بضع دقائق لتحسين ترجمتها للجميع. بشكل مجهول: معرّف عشوائي، بلا حساب، وبلا لقطات شاشة.",
   "Automatic layout updates": "تحديث التصميم تلقائياً",
-  "Keeps the game profile's read areas and fonts up to date.": "يحدّث مناطق القراءة والخطوط في ملف اللعبة تلقائياً.",
   "Forget all remembered translations?": "هل تريد نسيان جميع الترجمات المحفوظة؟",
   "{n} remembered line(s)": "{n} سطر محفوظ",
   "Folder: {path}": "المجلد: {path}",
@@ -269,5 +268,11 @@ I18N.add("ar", {
   "For {game} · {n} read area(s)": "للعبة {game} · {n} منطقة قراءة",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "تحصل الملفات المدمجة على تحديثات اللعبة تلقائيًا. أما النسخة فتحفظ تعديلاتك وتبقى لك.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "تُحفظ تعديلاتك على مناطق القراءة وشكل النص وصفحات اللعبة في هذا الملف.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "صفحات {game} الخاصة غير معروفة بعد، لذا لا يُترجم شيء منها حاليًا. الترجمة السفلية ومناطق القراءة تعمل كالمعتاد."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "صفحات {game} الخاصة غير معروفة بعد، لذا لا يُترجم شيء منها حاليًا. الترجمة السفلية ومناطق القراءة تعمل كالمعتاد.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "يحدّث مناطق القراءة والخطوط وشكل النص والتوقيت في ملف اللعبة تلقائياً.",
+  "Switch games automatically": "التبديل بين الألعاب تلقائياً",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "عندما تُظهر الصورة لعبة أخرى يعرفها التطبيق (من صفحات اللعبة)، يُستخدم ملف تلك اللعبة. قد تُحسب لعبةٌ تشبه أخرى كثيراً على أنها هي.",
+  "Get test versions of game pages": "الحصول على النسخ التجريبية من صفحات اللعبة",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "تصل صفحات اللعبة الجديدة إلى عدد قليل من اللاعبين أولاً. قد لا تعمل النسخة التجريبية بالجودة نفسها بعد. معرّف هذا التثبيت: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "إذا بقيت كما هي، تتبع الثلاثة الأخيرة توقيت ملف اللعبة الخاص إن كان له توقيت."
 });

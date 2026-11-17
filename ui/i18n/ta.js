@@ -197,7 +197,6 @@ I18N.add("ta", {
   "Help improve translations": "மொழிபெயர்ப்புகளை மேம்படுத்த உதவுங்கள்",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "கேமில் நீங்கள் பார்க்கும் ஆங்கில வரிகளை (சப்டைட்டில்கள், வழிமுறைகள், கேப்ஷன்கள்; மெனுக்கள் ஒருபோதும் இல்லை) சில நிமிடங்களுக்கு ஒருமுறை VI Translator சர்வருடன் பகிரும், இதனால் அனைவருக்கும் அவை சிறப்பாக மொழிபெயர்க்கப்படும். அநாமதேயம்: ஒரு சீரற்ற ID, கணக்கு இல்லை, ஸ்கிரீன்ஷாட்கள் இல்லை.",
   "Automatic layout updates": "தானியங்கு தளவமைப்புப் புதுப்பிப்புகள்",
-  "Keeps the game profile's read areas and fonts up to date.": "கேம் சுயவிவரத்தின் படிக்கும் பகுதிகளையும் எழுத்துருக்களையும் புதுப்பித்த நிலையில் வைக்கும்.",
   "Forget all remembered translations?": "நினைவில் உள்ள எல்லா மொழிபெயர்ப்புகளையும் மறக்கவா?",
   "{n} remembered line(s)": "நினைவில் உள்ள {n} வரி(கள்)",
   "Folder: {path}": "கோப்புறை: {path}",
@@ -269,5 +268,11 @@ I18N.add("ta", {
   "For {game} · {n} read area(s)": "{game}க்கு · {n} படிக்கும் பகுதி",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "உள்ளமைந்த சுயவிவரங்கள் விளையாட்டுக்கான புதுப்பிப்புகளைத் தானாகப் பெறும். நகல் உங்கள் மாற்றங்களை வைத்திருக்கும், உங்களுடையதாகவே இருக்கும்.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "படிக்கும் பகுதிகள், உரை பாணி, விளையாட்டுப் பக்கங்களில் நீங்கள் செய்யும் மாற்றங்கள் இந்தச் சுயவிவரத்தில் சேமிக்கப்படும்.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game}இன் சொந்தப் பக்கங்கள் இன்னும் தெரியவில்லை, அதனால் இப்போதைக்கு எதுவும் மொழிபெயர்க்கப்படாது. வசனங்களும் படிக்கும் பகுதிகளும் வழக்கம்போல் இயங்கும்."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game}இன் சொந்தப் பக்கங்கள் இன்னும் தெரியவில்லை, அதனால் இப்போதைக்கு எதுவும் மொழிபெயர்க்கப்படாது. வசனங்களும் படிக்கும் பகுதிகளும் வழக்கம்போல் இயங்கும்.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "கேம் சுயவிவரத்தின் படிக்கும் பகுதிகள், எழுத்துருக்கள், உரை நடை, நேரம் ஆகியவற்றைப் புதுப்பித்து வைக்கிறது.",
+  "Switch games automatically": "கேம்களைத் தானாக மாற்று",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "ஆப் அறிந்த வேறொரு கேம் படத்தில் தெரிந்தால் (அதன் கேம் பக்கங்களால்), அந்த கேமின் சுயவிவரம் பயன்படுத்தப்படும். இன்னொன்றைப் போலவே தோன்றும் கேம் அதுவாகக் கருதப்படலாம்.",
+  "Get test versions of game pages": "கேம் பக்கங்களின் சோதனைப் பதிப்புகளைப் பெறு",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "புதிய கேம் பக்கங்கள் முதலில் சில வீரர்களுக்குச் செல்லும். சோதனைப் பதிப்பு இன்னும் அவ்வளவு நன்றாக வேலை செய்யாமல் போகலாம். இந்த நிறுவலின் ஐடி: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "மாற்றாமல் விட்டால், கடைசி மூன்றும் கேம் சுயவிவரத்துக்குச் சொந்த நேரம் இருந்தால் அதைப் பின்பற்றும்."
 });

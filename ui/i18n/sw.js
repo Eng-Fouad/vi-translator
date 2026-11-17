@@ -197,7 +197,6 @@ I18N.add("sw", {
   "Help improve translations": "Saidia kuboresha tafsiri",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Hushiriki mistari ya Kiingereza unayoiona kwenye mchezo (manukuu, maelekezo na maandishi ya skrini; kamwe si menyu) na seva ya VI Translator kila baada ya dakika chache, ili itafsiriwe vizuri zaidi kwa kila mtu. Bila kujulikana: kitambulisho cha nasibu, hakuna akaunti, hakuna picha za skrini.",
   "Automatic layout updates": "Masasisho ya mpangilio kiotomatiki",
-  "Keeps the game profile's read areas and fonts up to date.": "Huweka maeneo ya kusoma na fonti za wasifu wa mchezo zikiwa za kisasa.",
   "Forget all remembered translations?": "Ungependa kusahau tafsiri zote zilizokumbukwa?",
   "{n} remembered line(s)": "Mistari {n} iliyokumbukwa",
   "Folder: {path}": "Folda: {path}",
@@ -269,5 +268,11 @@ I18N.add("sw", {
   "For {game} · {n} read area(s)": "Kwa {game} · maeneo {n} ya kusoma",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Wasifu uliojengewa ndani hupata masasisho ya mchezo moja kwa moja. Nakala huhifadhi mabadiliko yako na hubaki yako.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Mabadiliko yako kwenye maeneo ya kusoma, mtindo wa maandishi na kurasa za mchezo huhifadhiwa kwenye wasifu huu.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Kurasa za {game} bado hazijulikani, kwa hivyo hakuna inayotafsiriwa kwa sasa. Manukuu na maeneo ya kusoma yanafanya kazi kama kawaida."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Kurasa za {game} bado hazijulikani, kwa hivyo hakuna inayotafsiriwa kwa sasa. Manukuu na maeneo ya kusoma yanafanya kazi kama kawaida.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Huweka maeneo ya kusoma, fonti, mtindo wa maandishi na muda wa wasifu wa mchezo kuwa ya kisasa.",
+  "Switch games automatically": "Badili michezo kiotomatiki",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Picha inapoonyesha mchezo mwingine ambao programu inaujua (kwa kurasa zake), wasifu wa mchezo huo hutumika. Mchezo unaofanana sana na mwingine unaweza kudhaniwa kuwa ndio huo.",
+  "Get test versions of game pages": "Pata matoleo ya majaribio ya kurasa za mchezo",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Kurasa mpya za mchezo huwafikia wachezaji wachache kwanza. Toleo la majaribio huenda lisifanye kazi vizuri bado. Kitambulisho cha usakinishaji huu: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Zikiachwa zilivyo, tatu za mwisho hufuata muda wa wasifu wa mchezo wenyewe ukiwa nao."
 });

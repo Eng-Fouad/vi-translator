@@ -225,6 +225,38 @@ window.AS = (() => {
     for (const m of L.menu || []) {
       if (!m.ar) continue;
       const lh = m.line_h * H;
+      // a script's free-form box: its own place, alignment and look
+      if (m.align || m.font || m.size || m.weight || m.shadow || m.outline || m.wrap) {
+        const fs = lh * (m.size || 1.2);
+        const font = m.font === "title" ? opts.title_font : m.font || opts.text_font;
+        const wrap = m.wrap ? m.wrap === "yes" : !m.item;
+        const align = m.align || (m.right ? "right" : "left");
+        mk(
+          {
+            left: `${m.rect.x * W}px`,
+            top: `${m.rect.y * H}px`,
+            width: `${m.rect.w * W}px`,
+            minHeight: `${m.rect.h * H}px`,
+            boxSizing: "border-box",
+            padding: m.bg && m.bg !== "transparent" ? `0 ${lh * 0.4}px` : "0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: align === "center" ? "center" : (align === "right") === rtl() ? "flex-start" : "flex-end",
+            textAlign: align,
+            whiteSpace: wrap ? "normal" : "nowrap",
+            background: m.bg || "transparent",
+            color: m.fg || "#ffffff",
+            fontFamily: `"${font}", ${fonts()}`,
+            fontWeight: String(m.weight || 500),
+            fontSize: `${fs}px`,
+            lineHeight: "1.35",
+            ...(m.shadow ? { textShadow: shadow(fs) } : {}),
+            ...(m.outline ? { WebkitTextStroke: `${(fs * 0.06).toFixed(1)}px ${m.outline}`, paintOrder: "stroke fill" } : {}),
+          },
+          `<span>${ltrRuns(m.ar)}</span>`,
+        );
+        continue;
+      }
       mk(
         {
           // keep the English's edge: right-aligned values stay right-aligned, lists stay left

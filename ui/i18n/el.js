@@ -197,7 +197,6 @@ I18N.add("el", {
   "Help improve translations": "Βοηθήστε στη βελτίωση των μεταφράσεων",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Στέλνει κάθε λίγα λεπτά τις αγγλικές γραμμές που βλέπετε στο παιχνίδι (υπότιτλους, οδηγίες και λεζάντες· ποτέ μενού) στον διακομιστή του VI Translator, ώστε να μεταφράζονται καλύτερα για όλους. Ανώνυμα: τυχαίο αναγνωριστικό, χωρίς λογαριασμό, χωρίς στιγμιότυπα οθόνης.",
   "Automatic layout updates": "Αυτόματες ενημερώσεις διάταξης",
-  "Keeps the game profile's read areas and fonts up to date.": "Διατηρεί ενημερωμένες τις περιοχές ανάγνωσης και τις γραμματοσειρές του προφίλ παιχνιδιού.",
   "Forget all remembered translations?": "Διαγραφή όλων των αποθηκευμένων μεταφράσεων;",
   "{n} remembered line(s)": "{n} αποθηκευμένες γραμμές",
   "Folder: {path}": "Φάκελος: {path}",
@@ -269,5 +268,11 @@ I18N.add("el", {
   "For {game} · {n} read area(s)": "Για {game} · {n} περιοχές ανάγνωσης",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Τα ενσωματωμένα προφίλ λαμβάνουν αυτόματα ενημερώσεις για το παιχνίδι. Ένα αντίγραφο κρατά τις αλλαγές σας και μένει δικό σας.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Οι αλλαγές σας σε περιοχές ανάγνωσης, στυλ κειμένου και σελίδες παιχνιδιού αποθηκεύονται σε αυτό το προφίλ.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Οι σελίδες του {game} δεν είναι ακόμη γνωστές, οπότε προς το παρόν δεν μεταφράζεται καμία. Οι υπότιτλοι και οι περιοχές ανάγνωσης λειτουργούν κανονικά."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Οι σελίδες του {game} δεν είναι ακόμη γνωστές, οπότε προς το παρόν δεν μεταφράζεται καμία. Οι υπότιτλοι και οι περιοχές ανάγνωσης λειτουργούν κανονικά.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Διατηρεί ενημερωμένες τις περιοχές ανάγνωσης, τις γραμματοσειρές, το στυλ κειμένου και τον χρονισμό του προφίλ παιχνιδιού.",
+  "Switch games automatically": "Αυτόματη εναλλαγή παιχνιδιών",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Όταν η εικόνα δείχνει άλλο παιχνίδι που γνωρίζει η εφαρμογή (από τις σελίδες του), χρησιμοποιείται το προφίλ εκείνου. Ένα παιχνίδι που μοιάζει πολύ με άλλο μπορεί να εκληφθεί ως εκείνο.",
+  "Get test versions of game pages": "Λήψη δοκιμαστικών εκδόσεων σελίδων παιχνιδιού",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Οι νέες σελίδες παιχνιδιού πηγαίνουν πρώτα σε λίγους παίκτες. Μια δοκιμαστική έκδοση ίσως να μη λειτουργεί ακόμη τόσο καλά. Αναγνωριστικό εγκατάστασης: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Αν μείνουν ως έχουν, τα τρία τελευταία ακολουθούν τον χρονισμό του προφίλ παιχνιδιού, όταν έχει."
 });

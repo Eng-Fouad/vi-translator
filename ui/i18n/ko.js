@@ -197,7 +197,6 @@ I18N.add("ko", {
   "Help improve translations": "번역 개선에 참여",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "게임에서 보이는 영어 줄(자막, 안내, 화면 자막. 메뉴는 제외)을 몇 분마다 VI Translator 서버와 공유하여 모두를 위해 번역 품질을 높입니다. 익명으로 처리됩니다: 무작위 ID만 사용하며, 계정이나 스크린샷은 없습니다.",
   "Automatic layout updates": "레이아웃 자동 업데이트",
-  "Keeps the game profile's read areas and fonts up to date.": "게임 프로필의 읽기 영역과 글꼴을 최신 상태로 유지합니다.",
   "Forget all remembered translations?": "기억된 번역을 모두 삭제할까요?",
   "{n} remembered line(s)": "기억된 줄 {n}개",
   "Folder: {path}": "폴더: {path}",
@@ -269,5 +268,11 @@ I18N.add("ko", {
   "For {game} · {n} read area(s)": "{game}용 · 읽기 영역 {n}개",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "기본 제공 프로필은 게임 업데이트를 자동으로 받습니다. 복사본은 변경 사항을 유지하며 계속 내 것으로 남습니다.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "읽기 영역, 텍스트 스타일, 게임 화면의 변경 사항은 이 프로필에 저장됩니다.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 고유 화면은 아직 알려지지 않아 지금은 번역되지 않습니다. 자막과 읽기 영역은 평소처럼 작동합니다."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 고유 화면은 아직 알려지지 않아 지금은 번역되지 않습니다. 자막과 읽기 영역은 평소처럼 작동합니다.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "게임 프로필의 읽기 영역, 글꼴, 텍스트 스타일, 타이밍을 최신으로 유지합니다.",
+  "Switch games automatically": "게임 자동 전환",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "앱이 아는 다른 게임이 화면에 보이면(그 게임 화면으로 판단) 그 게임의 프로필을 사용합니다. 다른 게임과 아주 비슷한 게임은 그 게임으로 착각될 수 있습니다.",
+  "Get test versions of game pages": "게임 화면 테스트 버전 받기",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "새 게임 화면은 먼저 일부 플레이어에게 갑니다. 테스트 버전은 아직 잘 작동하지 않을 수 있습니다. 이 설치의 ID: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "그대로 두면 마지막 세 항목은 게임 프로필에 자체 타이밍이 있을 때 그것을 따릅니다."
 });

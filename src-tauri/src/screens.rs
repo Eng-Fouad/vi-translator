@@ -70,6 +70,13 @@ pub struct ScreenLayout {
     pub player: Option<PlayerInfo>,
     /// Pause menu content under the tabs: list items (left) and text (right), as Arabic replicas.
     pub menu: Vec<MenuText>,
+    /// Followed like a menu while it's up ("menu"; the pause menu always is): each text box and tab
+    /// watched every frame, the page read again when they change, and a tab's earlier states brought
+    /// back at once (see `menu_rects`).
+    pub follow: String,
+    /// for a followed menu: where its content is, and its button row (frame fractions)
+    pub content_rect: Option<Rect>,
+    pub buttons_rect: Option<Rect>,
     /// a fine picture of the whole menu area when it was read (see `content_sig`)
     #[serde(skip)]
     pub content_sig: Vec<u8>,
@@ -104,6 +111,26 @@ pub struct MenuText {
     pub heading: bool,
     /// reads in a row this item was not seen again (kept on screen for a moment meanwhile)
     pub missed: u32,
+    // How the box looks, for pages scripts (all optional: unset = the pause menu's look). With these a
+    // script can put any text anywhere, the way the game shows it:
+    /// "left" | "center" | "right" (unset: the English's edge, see `right`)
+    pub align: String,
+    /// "title" (the profile's title font) | a font family | unset (the profile's text font)
+    pub font: String,
+    /// letter size as a share of `line_h` (unset: 1.2)
+    pub size: f64,
+    /// 100 … 900 (unset: 500)
+    pub weight: u32,
+    /// a dark shadow under the letters (for text straight on the picture, no box)
+    pub shadow: bool,
+    /// an outline around the letters, in this colour
+    pub outline: String,
+    /// "yes" | "no" (unset: list items on one line, paragraphs wrap)
+    pub wrap: String,
+    /// shown as it is (`ar`, else `en`): not translated (numbers, names, the script's own words)
+    pub fixed: bool,
+    /// other people's text (player nicknames …): never translated, sent or kept; not covered either
+    pub private: bool,
     /// what the game showed under it when read (see `region_sig`)
     #[serde(skip)]
     pub sig: Vec<u8>,
@@ -343,6 +370,9 @@ pub fn detect_gta5_mission_failed(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayo
         menu: Vec::new(),
         content_sig: Vec::new(),
         buttons_sig: Vec::new(),
+        follow: String::new(),
+        content_rect: None,
+        buttons_rect: None,
     })
 }
 
@@ -377,10 +407,15 @@ pub fn take_sigs(f: &FrameData, l: &mut ScreenLayout) {
     for lb in l.labels.iter_mut() {
         lb.sig = region_sig(f, &lb.rect);
     }
-    if l.id == PAUSE_ID {
-        l.content_sig = content_sig(f);
-        l.buttons_sig = region_sig(f, &BUTTON_ROW);
+    if let Some((content, buttons)) = menu_rects(l) {
+        l.content_sig = content_sig_in(f, &content);
+        l.buttons_sig = region_sig(f, &buttons);
     }
+}
+
+/// A page followed like a menu: its content area and button row (the pause menu's own by default).
+pub fn menu_rects(l: &ScreenLayout) -> Option<(Rect, Rect)> {
+    (l.follow == "menu" || l.id == PAUSE_ID).then(|| (l.content_rect.clone().unwrap_or(CONTENT), l.buttons_rect.clone().unwrap_or(BUTTON_ROW)))
 }
 
 /// For a script re-reading a page that's up: which of its parts still show what they did.
@@ -388,7 +423,7 @@ pub fn unchanged(f: &FrameData, old: &ScreenLayout) -> serde_json::Value {
     serde_json::json!({
         "menu": old.menu.iter().map(|m| region_same(f, &m.rect, &m.sig)).collect::<Vec<_>>(),
         "labels": old.labels.iter().map(|l| region_same(f, &l.rect, &l.sig)).collect::<Vec<_>>(),
-        "buttons": region_same(f, &BUTTON_ROW, &old.buttons_sig),
+        "buttons": region_same(f, &menu_rects(old).map(|r| r.1).unwrap_or(BUTTON_ROW), &old.buttons_sig),
     })
 }
 
@@ -721,6 +756,9 @@ pub fn detect_gta5_pause(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
         player: read_player(f, ocr),
         content_sig: content_sig(f),
         buttons_sig: region_sig(f, &BUTTON_ROW),
+        follow: "menu".into(),
+        content_rect: Some(CONTENT),
+        buttons_rect: Some(BUTTON_ROW),
     })
 }
 
@@ -1141,6 +1179,7 @@ fn menu_blocks(f: &FrameData, lines: Vec<(u32, u32, u32, u32, String)>, split: u
                 missed: 0,
                 item,
                 right,
+                ..MenuText::default()
             }
         })
         .collect()
@@ -1246,9 +1285,14 @@ const CONTENT: Rect = Rect { x: 0.15, y: 0.212, w: 0.70, h: 0.64 };
 /// A fine picture of the menu's content area (64 x 32 brightness samples): new text appearing
 /// anywhere in it changes some samples a lot; the frozen, blurred game behind it doesn't.
 pub fn content_sig(f: &FrameData) -> Vec<u8> {
+    content_sig_in(f, &CONTENT)
+}
+
+/// The same fine picture of any area.
+pub fn content_sig_in(f: &FrameData, area: &Rect) -> Vec<u8> {
     let (cols, rows) = (64u32, 32u32);
-    let (x0, y0) = ((CONTENT.x * f.w as f64) as u32, (CONTENT.y * f.h as f64) as u32);
-    let (w, h) = ((CONTENT.w * f.w as f64) as u32, (CONTENT.h * f.h as f64) as u32);
+    let (x0, y0) = ((area.x * f.w as f64) as u32, (area.y * f.h as f64) as u32);
+    let (w, h) = (((area.w * f.w as f64) as u32).max(1), ((area.h * f.h as f64) as u32).max(1));
     let mut out = Vec::with_capacity((cols * rows) as usize);
     for j in 0..rows {
         for i in 0..cols {
@@ -1260,8 +1304,8 @@ pub fn content_sig(f: &FrameData) -> Vec<u8> {
 }
 
 /// Has the menu's content changed since `sig` was taken? (a few samples changed a lot)
-pub fn content_changed(f: &FrameData, sig: &[u8]) -> bool {
-    !sig.is_empty() && content_sig(f).iter().zip(sig).filter(|(a, b)| a.abs_diff(**b) > 40).count() >= 3
+pub fn content_changed_in(f: &FrameData, area: &Rect, sig: &[u8]) -> bool {
+    !sig.is_empty() && content_sig_in(f, area).iter().zip(sig).filter(|(a, b)| a.abs_diff(**b) > 40).count() >= 3
 }
 
 /// Letter-level similarity 0..1 (edit distance).
@@ -1490,6 +1534,9 @@ pub fn detect_gta5_caption(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
         menu: Vec::new(),
         content_sig: Vec::new(),
         buttons_sig: Vec::new(),
+        follow: String::new(),
+        content_rect: None,
+        buttons_rect: None,
     })
 }
 
@@ -1619,6 +1666,9 @@ pub fn detect_gta5_alert(f: &FrameData, ocr: &Ocr) -> Option<ScreenLayout> {
         menu: Vec::new(),
         content_sig: Vec::new(),
         buttons_sig: Vec::new(),
+        follow: String::new(),
+        content_rect: None,
+        buttons_rect: None,
     })
 }
 

@@ -197,7 +197,6 @@ I18N.add("ro", {
   "Help improve translations": "Ajutați la îmbunătățirea traducerilor",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Trimite la câteva minute serverului VI Translator rândurile în engleză pe care le vedeți în joc (subtitrări, instrucțiuni și texte; niciodată meniuri), ca să poată fi traduse mai bine pentru toți. Anonim: un id aleatoriu, fără cont, fără capturi de ecran.",
   "Automatic layout updates": "Actualizări automate ale aspectului",
-  "Keeps the game profile's read areas and fonts up to date.": "Menține la zi zonele de citire și fonturile profilului de joc.",
   "Forget all remembered translations?": "Uitați toate traducerile reținute?",
   "{n} remembered line(s)": "Rânduri reținute: {n}",
   "Folder: {path}": "Folder: {path}",
@@ -269,5 +268,11 @@ I18N.add("ro", {
   "For {game} · {n} read area(s)": "Pentru {game} · {n} zone de citire",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Profilurile integrate primesc automat actualizările pentru joc. O copie îți păstrează modificările și rămâne a ta.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Modificările tale la zonele de citire, stilul textului și paginile jocului se salvează în acest profil.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Paginile proprii ale {game} nu sunt încă cunoscute, așa că deocamdată nu se traduce niciuna. Subtitrările și zonele de citire funcționează ca de obicei."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Paginile proprii ale {game} nu sunt încă cunoscute, așa că deocamdată nu se traduce niciuna. Subtitrările și zonele de citire funcționează ca de obicei.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Păstrează la zi zonele de citire, fonturile, stilul textului și ritmul profilului de joc.",
+  "Switch games automatically": "Schimbă jocul automat",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Când imaginea arată alt joc pe care aplicația îl cunoaște (după paginile lui), se folosește profilul acelui joc. Un joc care seamănă mult cu altul poate fi luat drept acela.",
+  "Get test versions of game pages": "Primește versiunile de test ale paginilor de joc",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Paginile noi de joc ajung întâi la câțiva jucători. O versiune de test poate să nu meargă încă la fel de bine. ID-ul acestei instalări: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Lăsate așa, ultimele trei urmează ritmul propriu al profilului de joc, dacă are unul."
 });

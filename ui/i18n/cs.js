@@ -197,7 +197,6 @@ I18N.add("cs", {
   "Help improve translations": "Pomoci zlepšit překlady",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Každých pár minut sdílí se serverem VI Translator anglické řádky, které ve hře vidíte (titulky, pokyny a nápisy; nikdy nabídky), aby je šlo lépe přeložit pro všechny. Anonymně: náhodné ID, žádný účet, žádné snímky obrazovky.",
   "Automatic layout updates": "Automatické aktualizace rozložení",
-  "Keeps the game profile's read areas and fonts up to date.": "Udržuje oblasti čtení a písma profilu hry aktuální.",
   "Forget all remembered translations?": "Zapomenout všechny zapamatované překlady?",
   "{n} remembered line(s)": "Zapamatované řádky: {n}",
   "Folder: {path}": "Složka: {path}",
@@ -269,5 +268,11 @@ I18N.add("cs", {
   "For {game} · {n} read area(s)": "Pro {game} · oblastí čtení: {n}",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Vestavěné profily dostávají aktualizace pro hru automaticky. Kopie si ponechá vaše změny a zůstane vaše.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Vaše změny oblastí čtení, stylu textu a stránek hry se ukládají do tohoto profilu.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Vlastní stránky hry {game} zatím nejsou známé, proto se zatím žádné nepřekládají. Titulky a oblasti čtení fungují jako obvykle."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Vlastní stránky hry {game} zatím nejsou známé, proto se zatím žádné nepřekládají. Titulky a oblasti čtení fungují jako obvykle.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Udržuje oblasti čtení, písma, styl textu a časování herního profilu aktuální.",
+  "Switch games automatically": "Přepínat hry automaticky",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Když obraz ukazuje jinou hru, kterou aplikace zná (podle jejích herních stránek), použije se profil té hry. Hra velmi podobná jiné může být za ni považována.",
+  "Get test versions of game pages": "Dostávat testovací verze herních stránek",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Nové herní stránky dostane nejdřív několik hráčů. Testovací verze ještě nemusí fungovat tak dobře. ID této instalace: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Necháte-li je beze změny, poslední tři se řídí vlastním časováním herního profilu, pokud ho má."
 });

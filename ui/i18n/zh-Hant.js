@@ -197,7 +197,6 @@ I18N.add("zh-Hant", {
   "Help improve translations": "協助改善翻譯",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "每隔幾分鐘將您在遊戲中看到的英文文字（字幕、提示和字卡，絕不包含選單）分享給 VI Translator 伺服器，讓每個人都能獲得更好的翻譯。完全匿名：僅使用隨機 ID，不需帳號，也不會上傳螢幕擷取畫面。",
   "Automatic layout updates": "自動更新版面",
-  "Keeps the game profile's read areas and fonts up to date.": "讓遊戲設定檔的讀取區域和字型保持最新。",
   "Forget all remembered translations?": "要清除所有記住的翻譯嗎？",
   "{n} remembered line(s)": "已記住 {n} 行",
   "Folder: {path}": "資料夾：{path}",
@@ -269,5 +268,11 @@ I18N.add("zh-Hant", {
   "For {game} · {n} read area(s)": "適用於 {game} · {n} 個讀取區域",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "內建設定檔會自動取得遊戲的更新。副本會保留你的變更，並一直屬於你。",
   "Your changes to read areas, text style and game pages are saved in this profile.": "你對讀取區域、文字樣式和遊戲頁面的變更都會儲存在此設定檔中。",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 本身的頁面尚不明確，因此目前不翻譯。字幕和讀取區域照常運作。"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 本身的頁面尚不明確，因此目前不翻譯。字幕和讀取區域照常運作。",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "保持遊戲設定檔的讀取區域、字型、文字樣式與時間設定為最新。",
+  "Switch games automatically": "自動切換遊戲",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "當畫面顯示應用程式認得的另一款遊戲時（依其遊戲頁面判斷），會使用該遊戲的設定檔。與另一款遊戲非常相似的遊戲可能會被誤認。",
+  "Get test versions of game pages": "取得遊戲頁面的測試版本",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "新的遊戲頁面會先送給少數玩家。測試版本可能還不夠完善。此安裝的 ID：{id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "保持不變時，最後三項會在遊戲設定檔有自己的時間設定時依循它。"
 });

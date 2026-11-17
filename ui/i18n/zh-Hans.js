@@ -197,7 +197,6 @@ I18N.add("zh-Hans", {
   "Help improve translations": "帮助改进翻译",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "每隔几分钟将你在游戏中看到的英文文字（字幕、提示和画面字幕，绝不包括菜单）分享给 VI Translator 服务器，以便为所有人提供更好的翻译。完全匿名：仅使用随机 ID，不需要账号，也不上传截图。",
   "Automatic layout updates": "自动更新布局",
-  "Keeps the game profile's read areas and fonts up to date.": "使游戏配置的读取区域和字体保持最新。",
   "Forget all remembered translations?": "要清除所有已记住的翻译吗？",
   "{n} remembered line(s)": "已记住 {n} 行",
   "Folder: {path}": "文件夹：{path}",
@@ -269,5 +268,11 @@ I18N.add("zh-Hans", {
   "For {game} · {n} read area(s)": "适用于 {game} · {n} 个读取区域",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "内置配置会自动获取游戏的更新。副本会保留你的更改，并始终属于你。",
   "Your changes to read areas, text style and game pages are saved in this profile.": "你对读取区域、文字样式和游戏页面的更改都保存在此配置中。",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 自身的页面尚不明确，因此目前不翻译。字幕和读取区域照常工作。"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} 自身的页面尚不明确，因此目前不翻译。字幕和读取区域照常工作。",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "保持游戏配置的读取区域、字体、文字样式和时间设置为最新。",
+  "Switch games automatically": "自动切换游戏",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "当画面显示应用认识的另一款游戏时（根据其游戏页面判断），会使用该游戏的配置。与另一款游戏非常相似的游戏可能会被误认。",
+  "Get test versions of game pages": "获取游戏页面的测试版本",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "新的游戏页面会先发给少数玩家。测试版本可能还不够完善。此安装的 ID：{id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "保持不变时，最后三项会在游戏配置有自己的时间设置时遵循它。"
 });

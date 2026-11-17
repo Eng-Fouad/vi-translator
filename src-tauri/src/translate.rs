@@ -246,12 +246,11 @@ impl Translator {
             return Ok(s.clone());
         }
         // GTA V profile: the game's common instructions have exact, hand-written Arabic.
-        if cfg.game() == "gta5" && cfg.target_lang == "ar" {
-            if let Some(segs) = crate::phrasebook::lookup(line, icons) {
-                self.lines += 1;
-                self.cache.insert(key, segs.clone());
-                return Ok(segs);
-            }
+        // (and any game's phrases from its layout update)
+        if let Some(segs) = crate::phrasebook::find(&cfg.game(), &cfg.target_lang, line, icons) {
+            self.lines += 1;
+            self.cache.insert(key, segs.clone());
+            return Ok(segs);
         }
         let segs = if cfg.engine == "claude" {
             self.claude(cfg, line, phrases, icons)?

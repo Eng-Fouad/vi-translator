@@ -197,7 +197,6 @@ I18N.add("ru", {
   "Help improve translations": "Помочь улучшить переводы",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Каждые несколько минут отправляет на сервер VI Translator английские строки, которые вы видите в игре (субтитры, подсказки и надписи; никогда — меню), чтобы их можно было лучше перевести для всех. Анонимно: случайный идентификатор, без аккаунта, без скриншотов.",
   "Automatic layout updates": "Автообновление разметки",
-  "Keeps the game profile's read areas and fonts up to date.": "Поддерживает области чтения и шрифты профиля игры в актуальном состоянии.",
   "Forget all remembered translations?": "Забыть все запомненные переводы?",
   "{n} remembered line(s)": "Запомненных строк: {n}",
   "Folder: {path}": "Папка: {path}",
@@ -269,5 +268,11 @@ I18N.add("ru", {
   "For {game} · {n} read area(s)": "Для {game} · зон чтения: {n}",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Встроенные профили получают обновления для игры автоматически. Копия сохраняет ваши изменения и остаётся вашей.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Ваши изменения зон чтения, стиля текста и страниц игры сохраняются в этом профиле.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Собственные страницы {game} пока неизвестны, поэтому они пока не переводятся. Субтитры и зоны чтения работают как обычно."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Собственные страницы {game} пока неизвестны, поэтому они пока не переводятся. Субтитры и зоны чтения работают как обычно.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Поддерживает актуальными области чтения, шрифты, стиль текста и тайминги игрового профиля.",
+  "Switch games automatically": "Переключать игры автоматически",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Когда на картинке другая игра, которую знает приложение (по её игровым страницам), используется профиль этой игры. Игру, очень похожую на другую, можно принять за неё.",
+  "Get test versions of game pages": "Получать тестовые версии игровых страниц",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Новые игровые страницы сначала получают несколько игроков. Тестовая версия может пока работать хуже. ID этой установки: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Если их не менять, последние три следуют собственным таймингам игрового профиля, если они есть."
 });

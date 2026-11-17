@@ -197,7 +197,6 @@ I18N.add("ur", {
   "Help improve translations": "ترجمے بہتر بنانے میں مدد کریں",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "گیم میں نظر آنے والی انگریزی سطریں (سب ٹائٹلز، ہدایات اور کیپشنز؛ مینوز کبھی نہیں) ہر چند منٹ بعد VI Translator سرور کے ساتھ شیئر کرتا ہے، تاکہ سب کے لیے ان کا بہتر ترجمہ ہو سکے۔ گمنام: ایک رینڈم id، کوئی اکاؤنٹ نہیں، کوئی اسکرین شاٹ نہیں۔",
   "Automatic layout updates": "خودکار لے آؤٹ اپڈیٹس",
-  "Keeps the game profile's read areas and fonts up to date.": "گیم پروفائل کے پڑھنے کے حصے اور فونٹس اپ ٹو ڈیٹ رکھتا ہے۔",
   "Forget all remembered translations?": "تمام یاد رکھے گئے ترجمے بھلا دیں؟",
   "{n} remembered line(s)": "{n} یاد رکھی گئی سطریں",
   "Folder: {path}": "فولڈر: {path}",
@@ -269,5 +268,11 @@ I18N.add("ur", {
   "For {game} · {n} read area(s)": "{game} کے لیے · {n} ریڈ ایریا",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "بلٹ اِن پروفائلز کو گیم کی اپ ڈیٹس خود بخود ملتی ہیں۔ کاپی آپ کی تبدیلیاں رکھتی ہے اور آپ ہی کی رہتی ہے۔",
   "Your changes to read areas, text style and game pages are saved in this profile.": "ریڈ ایریاز، متن کے انداز اور گیم کے صفحات میں آپ کی تبدیلیاں اسی پروفائل میں محفوظ ہوتی ہیں۔",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} کے اپنے صفحات ابھی معلوم نہیں، اس لیے فی الحال ان کا ترجمہ نہیں ہوتا۔ سب ٹائٹلز اور ریڈ ایریاز معمول کے مطابق کام کرتے ہیں۔"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} کے اپنے صفحات ابھی معلوم نہیں، اس لیے فی الحال ان کا ترجمہ نہیں ہوتا۔ سب ٹائٹلز اور ریڈ ایریاز معمول کے مطابق کام کرتے ہیں۔",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "گیم پروفائل کے پڑھنے کے حصے، فونٹ، متن کا انداز اور ٹائمنگ تازہ رکھتا ہے۔",
+  "Switch games automatically": "گیمز خودکار طور پر بدلیں",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "جب تصویر میں ایپ کا جانا پہچانا کوئی اور گیم دکھے (اس کے گیم صفحات سے)، تو اسی گیم کی پروفائل استعمال ہوتی ہے۔ کسی دوسرے جیسا دکھنے والا گیم وہی سمجھا جا سکتا ہے۔",
+  "Get test versions of game pages": "گیم صفحات کے آزمائشی ورژن حاصل کریں",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "نئے گیم صفحات پہلے چند کھلاڑیوں کو جاتے ہیں۔ آزمائشی ورژن شاید ابھی اتنا اچھا کام نہ کرے۔ اس انسٹال کی شناخت: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "اگر ویسے ہی رہنے دیں تو آخری تین، گیم پروفائل کی اپنی ٹائمنگ ہو تو اسی پر چلتے ہیں۔"
 });

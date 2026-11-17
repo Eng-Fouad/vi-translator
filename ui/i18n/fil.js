@@ -197,7 +197,6 @@ I18N.add("fil", {
   "Help improve translations": "Tumulong na pahusayin ang mga salin",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Ibinabahagi ang mga linyang Ingles na nakikita mo sa laro (mga subtitle, tagubilin at caption; hindi kailanman ang mga menu) sa server ng VI Translator bawat ilang minuto, para mas mahusay na maisalin ang mga ito para sa lahat. Anonymous: isang random na id, walang account, walang screenshot.",
   "Automatic layout updates": "Awtomatikong update ng layout",
-  "Keeps the game profile's read areas and fonts up to date.": "Pinananatiling updated ang mga bahaging babasahin at font ng profile ng laro.",
   "Forget all remembered translations?": "Kalimutan ang lahat ng natandaang salin?",
   "{n} remembered line(s)": "{n} natandaang linya",
   "Folder: {path}": "Folder: {path}",
@@ -269,5 +268,11 @@ I18N.add("fil", {
   "For {game} · {n} read area(s)": "Para sa {game} · {n} read area",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Awtomatikong nakakakuha ng update para sa laro ang mga built-in na profile. Ang kopya ay may mga pagbabago mo at sa iyo pa rin.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Ang mga pagbabago mo sa read area, istilo ng teksto at mga pahina ng laro ay naka-save sa profile na ito.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Hindi pa kilala ang mga sariling pahina ng {game}, kaya wala pang isinasalin sa ngayon. Gumagana pa rin ang subtitle at mga read area."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Hindi pa kilala ang mga sariling pahina ng {game}, kaya wala pang isinasalin sa ngayon. Gumagana pa rin ang subtitle at mga read area.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Pinapanatiling bago ang mga read area, font, istilo ng teksto at timing ng game profile.",
+  "Switch games automatically": "Awtomatikong magpalit ng laro",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Kapag ibang larong kilala ng app ang nasa larawan (ayon sa mga page nito), ang profile ng larong iyon ang gagamitin. Ang larong kamukhang-kamukha ng iba ay maaaring mapagkamalan.",
+  "Get test versions of game pages": "Kumuha ng mga test version ng mga game page",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Sa ilang manlalaro muna napupunta ang mga bagong game page. Maaaring hindi pa ganoon kahusay gumana ang test version. ID ng install na ito: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Kapag hindi binago, sinusunod ng huling tatlo ang sariling timing ng game profile kung mayroon."
 });

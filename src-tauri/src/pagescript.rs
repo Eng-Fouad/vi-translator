@@ -25,6 +25,23 @@
 //! pages.option({ id: "heists", name: { en: "Heist board", ar: "لوحة السرقات" }, about: "…", on: true });
 //! ```
 //!
+//! Pictures the script carries (inside the script, so they're signed with it) can be looked for:
+//!
+//! ```js
+//! pages.image("cross", "iVBORw0KGgo…");        // a PNG, base64
+//! f.find(rect, "cross", { scales: [0.75, 1, 1.25] }) // → {score, x, y, w, h} (best place) or null
+//! ```
+//!
+//! A script can also say whether the picture is its game (for switching games automatically;
+//! without it, any of its pages being on screen counts):
+//!
+//! ```js
+//! pages.recognize((f) => !!f.find({ x: 0, y: 0, w: f.w, h: f.h * 0.2 }, "logo"));
+//! ```
+//!
+//! A page object stays alive while the script is loaded, so it can keep what it needs between
+//! frames (`this.x = …` in its functions); `ended(f)` is called when its page goes.
+//!
 //! and gets, in each call, a frame `f` with: `f.w`, `f.h` (pixels), and
 //!  - `f.pixels(rect, {step, bright: [min, max], spread: [min, max], near: [r, g, b], tol})` →
 //!    `{count, box}`: how many sampled pixels match (bright = brightest channel, spread = brightest −
@@ -81,21 +98,67 @@ pub fn option_of(id: &str) -> &'static str {
     }
 }
 
-/// A layout update may carry a newer pages script: `"pages": {"script": "...", "sig": "<base64>"}`.
-/// Saved (and loaded by the detection loop) only if it is signed with the app's key.
-pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value) {
-    let (Some(script), Some(sig)) = (layout["pages"]["script"].as_str(), layout["pages"]["sig"].as_str()) else { return };
-    if !signed(script, sig) {
-        eprintln!("[pages] the {game} script in the layout update is not signed by VI Translator: ignored");
-        return;
-    }
+/// A layout update may carry pages scripts: `"pages": {"script": "...", "sig": "<base64>"}`, or a
+/// list of them, newest first, each optionally only for testers:
+/// `"pages": [{"script", "sig", "channel": "test", "installs": ["<install id>"]}, {"script", "sig"}]`.
+/// The first one this app can use is saved (and loaded by the detection loop): signed with the app's
+/// key, not needing a newer app (`// requires-app: X.Y.Z`), and for everyone, or a test one for an
+/// install that gets test versions (Advanced) or is named in its `installs`. So a script that needs a
+/// newer app comes with the one before it for older apps, and a new script can go to a few installs
+/// first.
+pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value, install_id: &str, early: bool) {
+    let entries: Vec<&serde_json::Value> = match &layout["pages"] {
+        serde_json::Value::Array(list) => list.iter().collect(),
+        v @ serde_json::Value::Object(_) => vec![v],
+        _ => return,
+    };
+    let mine = |e: &serde_json::Value| -> bool {
+        match e["channel"].as_str().unwrap_or("") {
+            "" | "stable" => true,
+            "test" => early || e["installs"].as_array().is_some_and(|l| l.iter().any(|i| i.as_str() == Some(install_id))),
+            _ => false,
+        }
+    };
+    let pick = entries.into_iter().find_map(|e| {
+        let (script, sig) = (e["script"].as_str()?, e["sig"].as_str()?);
+        if !mine(e) || !runs_here(script) {
+            return None;
+        }
+        if !signed(script, sig) {
+            eprintln!("[pages] a {game} script in the layout update is not signed by VI Translator: ignored");
+            return None;
+        }
+        Some((script, sig))
+    });
     let (js, sg) = files(data_dir, game);
+    let Some((script, sig)) = pick else {
+        // none is for this install now (test versions turned off, say): the app's own pages again
+        if std::fs::remove_file(&js).is_ok() {
+            let _ = std::fs::remove_file(&sg);
+            GENERATION.fetch_add(1, Ordering::Relaxed);
+        }
+        return;
+    };
     if std::fs::read_to_string(&js).is_ok_and(|old| old == script) {
         return;
     }
     if std::fs::write(&js, script).is_ok() && std::fs::write(&sg, sig).is_ok() {
         GENERATION.fetch_add(1, Ordering::Relaxed);
     }
+}
+
+/// `// requires-app: X.Y.Z` in a script's first lines: the oldest app version that can run it.
+pub fn requires_of(script: &str) -> Option<Vec<u64>> {
+    script.lines().take(10).find_map(|l| l.trim().strip_prefix("// requires-app:")).map(|v| version_parts(v.trim()))
+}
+
+fn version_parts(v: &str) -> Vec<u64> {
+    v.split(['.', '-', '+']).take(3).map(|p| p.parse().unwrap_or(0)).collect()
+}
+
+/// Can this app run the script (it needs no newer app)?
+pub fn runs_here(script: &str) -> bool {
+    requires_of(script).is_none_or(|need| need <= version_parts(env!("CARGO_PKG_VERSION")))
 }
 
 /// Longest a single call may run (a script that loops forever is stopped).
@@ -116,6 +179,12 @@ pub struct PageInfo {
     /// Read it again this often while it's up (new words: a new reason, Yes / No buttons); 0 = never.
     /// The measured places are kept (the translation doesn't jump), only the words change.
     pub reread_ms: u64,
+    /// `hold: {follow: "menu", content, buttons}`: followed like the pause menu (see
+    /// `screens::menu_rects`): `same` says whether it's still up, `reread` reads it again when its
+    /// boxes change; content / buttons are its content area and button row (frame fractions).
+    pub follow: String,
+    pub content: Option<crate::screens::Rect>,
+    pub buttons: Option<crate::screens::Rect>,
 }
 
 /// A switch a script declares for its pages (shown in Game pages).
@@ -165,6 +234,10 @@ fn downloaded(data_dir: &Path, game: &str) -> Option<String> {
     let (js, sig) = files(data_dir, game);
     let script = std::fs::read_to_string(js).ok()?;
     let sig = std::fs::read_to_string(sig).ok()?;
+    // (saved by a newer app, then the app went back a version)
+    if !runs_here(&script) {
+        return None;
+    }
     crate::updater::verify(script.as_bytes(), sig.trim(), crate::updater::PUBLIC_KEY).ok()?;
     Some(script)
 }
@@ -230,6 +303,10 @@ impl Pages {
             g.set("__runs", Function::new(ctx.clone(), |rect: String, opts: String| helper_runs(&rect, &opts))?)?;
             g.set("__median", Function::new(ctx.clone(), |rect: String, opts: String| helper_median(&rect, &opts))?)?;
             g.set("__contrast", Function::new(ctx.clone(), |rect: String, against: String, share: f64| helper_contrast(&rect, &against, share))?)?;
+            g.set("__image_add", Function::new(ctx.clone(), |png: String| image_add(&png))?)?;
+            g.set("__find", Function::new(ctx.clone(), |rect: String, key: String, opts: String| helper_find(&rect, &key, &opts))?)?;
+            g.set("__sig", Function::new(ctx.clone(), |rect: String| helper_sig(&rect))?)?;
+            g.set("__same", Function::new(ctx.clone(), |rect: String, sig: String| helper_same(&rect, &sig))?)?;
             g.set("__letter_height", Function::new(ctx.clone(), |rect: String| helper_letter_height(&rect))?)?;
             g.set("__tab_word", Function::new(ctx.clone(), |read: String| {
                 crate::screens::tab_words().iter().find(|(e, _)| *e == read).map(|(e, a)| serde_json::json!([e, a]).to_string()).unwrap_or_else(|| "null".into())
@@ -294,9 +371,35 @@ impl Pages {
             return None;
         }
         let mut l: ScreenLayout = serde_json::from_value(v).ok()?;
-        l.id = id.to_string();
+        self.stamp(id, &mut l);
         crate::screens::take_sigs(frame, &mut l);
         Some(l)
+    }
+
+    /// A layout the script read: its id, and how it's followed.
+    fn stamp(&self, id: &str, l: &mut ScreenLayout) {
+        l.id = id.to_string();
+        if let Some(info) = self.info(id).filter(|i| !i.follow.is_empty()) {
+            l.follow = info.follow.clone();
+            l.content_rect = l.content_rect.take().or_else(|| info.content.clone());
+            l.buttons_rect = l.buttons_rect.take().or_else(|| info.buttons.clone());
+        }
+    }
+
+    /// Is the picture this script's game? Its `recognize`, else any of its pages on screen.
+    pub fn recognize(&self, frame: &FrameData, ocr: &Ocr) -> bool {
+        let has = self.ctx.with(|ctx| ctx.eval::<bool, _>("__has_recognizer()").unwrap_or(false));
+        if has {
+            return self.call("", "recognize", frame, Some(ocr), &serde_json::Value::Null).as_bool() == Some(true);
+        }
+        self.list.iter().any(|p| self.present(&p.id, frame, ocr).is_some())
+    }
+
+    /// The page went (`ended(f)` in the script, to forget what it kept about it).
+    pub fn ended(&self, id: &str, frame: &FrameData) {
+        if self.can(id, "ended") {
+            self.call(id, "ended", frame, None, &serde_json::Value::Null);
+        }
     }
 
     /// Read a page that's up again, quickly (`reread(f, {old, unchanged})` in the script): None if
@@ -308,7 +411,7 @@ impl Pages {
             return None;
         }
         let mut l: ScreenLayout = serde_json::from_value(v).ok()?;
-        l.id = id.to_string();
+        self.stamp(id, &mut l);
         crate::screens::take_sigs(frame, &mut l);
         Some(l)
     }
@@ -345,7 +448,18 @@ impl Pages {
 const PRELUDE: &str = r#"
 const __pages = new Map();
 const __options = new Map();
+const __images = new Map();
+let __recognizer = null;
 globalThis.pages = Object.freeze({
+  image(name, png) {
+    const key = __image_add(String(png || ""));
+    if (!key) throw new Error("not a PNG picture: " + name);
+    __images.set(String(name), key);
+  },
+  recognize(fn) {
+    if (typeof fn !== "function") throw new Error("recognize needs a function");
+    __recognizer = fn;
+  },
   add(p) {
     if (!p || typeof p.id !== "string" || !p.id) throw new Error("a page needs an id");
     __pages.set(p.id, p);
@@ -372,6 +486,9 @@ function __frame() {
     median: (r, o) => JSON.parse(__median(JSON.stringify(r), JSON.stringify(o || {}))),
     contrast: (r, against, share) => JSON.parse(__contrast(JSON.stringify(r), JSON.stringify(against), share ?? 0.125)),
     letterHeight: (r) => __letter_height(JSON.stringify(r)),
+    sig: (r) => __sig(JSON.stringify(r)),
+    find: (r, name, o) => JSON.parse(__find(JSON.stringify(r), __images.get(String(name)) || "", JSON.stringify(o || {}))),
+    same: (r, sig) => __same(JSON.stringify(r), String(sig || "")),
     box: (x, y, bw, bh) => ({ x: x / w, y: y / h, w: bw / w, h: bh / h }),
   });
 }
@@ -387,9 +504,12 @@ globalThis.vi = Object.freeze({
 globalThis.__list = () => JSON.stringify([...__pages.values()].map((p) => ({
   id: p.id, option: p.option || "",
   hold_ms: (p.hold && p.hold.ms) || 0, end_when_dark: !!(p.hold && p.hold.endWhenDark), reread_ms: (p.hold && p.hold.rereadMs) || 0,
+  follow: (p.hold && p.hold.follow) || "", content: (p.hold && p.hold.content) || null, buttons: (p.hold && p.hold.buttons) || null,
 })));
 globalThis.__option_list = () => JSON.stringify([...__options.values()]);
+globalThis.__has_recognizer = () => !!__recognizer;
 globalThis.__call = (id, fn, arg) => {
+  if (id === "" && fn === "recognize") return JSON.stringify(__recognizer ? !!__recognizer(__frame()) : null);
   const p = __pages.get(id);
   if (!p || typeof p[fn] !== "function") return "null";
   const r = p[fn](__frame(), JSON.parse(arg));
@@ -649,6 +769,129 @@ fn helper_icon(rect: &str, thr: f64) -> Option<String> {
         ocr::icon_png(&c, inner, thr.clamp(0.0, 255.0) as u8)
     })
     .flatten()
+}
+
+/// Pictures scripts carry (`pages.image`), by a key made from their bytes: grey levels.
+struct Gray {
+    w: u32,
+    h: u32,
+    px: Vec<u8>,
+}
+
+static IMAGES: std::sync::Mutex<Vec<(String, Arc<Gray>)>> = std::sync::Mutex::new(Vec::new());
+
+fn image_add(png_b64: &str) -> String {
+    use base64::Engine as _;
+    use sha2::Digest as _;
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(png_b64.trim()) else { return String::new() };
+    let key = format!("{:x}", sha2::Sha256::digest(&bytes));
+    let mut all = IMAGES.lock().unwrap();
+    if all.iter().any(|(k, _)| *k == key) {
+        return key;
+    }
+    let Ok(img) = image::load_from_memory(&bytes) else { return String::new() };
+    let g = img.to_luma8();
+    // (small pictures only: icons, logos)
+    if g.width() == 0 || g.height() == 0 || g.width() > 512 || g.height() > 512 {
+        return String::new();
+    }
+    all.push((key.clone(), Arc::new(Gray { w: g.width(), h: g.height(), px: g.into_raw() })));
+    if all.len() > 256 {
+        all.remove(0);
+    }
+    key
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct FindOpts {
+    /// sizes of the picture to try (1 = as it is)
+    scales: Vec<f64>,
+    /// look at every n-th place (1 = every pixel; more is faster, less exact)
+    step: u32,
+}
+
+/// `f.find(rect, name, {scales, step})`: where in the rectangle the picture looks most alike
+/// (normalised correlation of grey levels: 1 = the same, 0 = unrelated): `{score, x, y, w, h}`, or
+/// null if the rectangle is smaller than the picture.
+fn helper_find(rect: &str, key: &str, opts: &str) -> String {
+    let (Ok(r), Ok(o)) = (serde_json::from_str::<PxRect>(rect), serde_json::from_str::<FindOpts>(opts)) else { return "null".into() };
+    let Some(tpl) = IMAGES.lock().unwrap().iter().find(|(k, _)| k == key).map(|(_, g)| g.clone()) else { return "null".into() };
+    with_frame(|f, _| {
+        let Some((x0, y0, x1, y1)) = clamp_rect(&r, f.w, f.h) else { return "null".to_string() };
+        let (rw, rh) = (x1 - x0, y1 - y0);
+        let area: Vec<f32> = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (y, x))).map(|(y, x)| { let (a, b, c) = px(f, x, y); a as f32 * 0.3 + b as f32 * 0.6 + c as f32 * 0.1 }).collect();
+        let scales = if o.scales.is_empty() { vec![1.0] } else { o.scales.iter().copied().filter(|s| (0.1..=4.0).contains(s)).take(8).collect() };
+        let mut best: Option<(f64, u32, u32, u32, u32)> = None;
+        for s in scales {
+            let (tw, th) = (((tpl.w as f64 * s).round() as u32).max(1), ((tpl.h as f64 * s).round() as u32).max(1));
+            if tw > rw || th > rh {
+                continue;
+            }
+            // the picture at this size (nearest pixel), minus its mean
+            let t: Vec<f32> = (0..th).flat_map(|y| (0..tw).map(move |x| (y, x))).map(|(y, x)| tpl.px[((y * tpl.h / th) * tpl.w + x * tpl.w / tw) as usize] as f32).collect();
+            let tm = t.iter().sum::<f32>() / t.len() as f32;
+            let t: Vec<f32> = t.iter().map(|v| v - tm).collect();
+            let tn = t.iter().map(|v| v * v).sum::<f32>().sqrt();
+            if tn < 1.0 {
+                continue; // a flat picture matches anything
+            }
+            let places = ((rw - tw + 1) * (rh - th + 1)) as u64;
+            let step = o.step.max(1).max((((places * (tw * th) as u64) / 30_000_000) as f64).sqrt().ceil() as u32);
+            let mut y = 0;
+            while y + th <= rh {
+                let mut x = 0;
+                while x + tw <= rw {
+                    let (mut sum, mut sq, mut dot) = (0f32, 0f32, 0f32);
+                    for j in 0..th {
+                        let row = ((y + j) * rw + x) as usize;
+                        let trow = (j * tw) as usize;
+                        for i in 0..tw as usize {
+                            let a = area[row + i];
+                            sum += a;
+                            sq += a * a;
+                            dot += a * t[trow + i];
+                        }
+                    }
+                    let n = (tw * th) as f32;
+                    let var = (sq - sum * sum / n).max(0.0).sqrt();
+                    let score = if var < 1.0 { 0.0 } else { (dot / (var * tn)) as f64 };
+                    if best.is_none_or(|b| score > b.0) {
+                        best = Some((score, x0 + x, y0 + y, tw, th));
+                    }
+                    x += step;
+                }
+                y += step;
+            }
+        }
+        match best {
+            Some((score, x, y, w, h)) => serde_json::json!({ "score": (score * 1000.0).round() / 1000.0, "x": x, "y": y, "w": w, "h": h }).to_string(),
+            None => "null".to_string(),
+        }
+    })
+    .unwrap_or_else(|| "null".into())
+}
+
+/// `f.sig(rect)`: a small picture of the rectangle (to keep, e.g. in the page's own memory), and
+/// `f.same(rect, sig)`: does it still look like that? (what the app uses to follow menus)
+fn helper_sig(rect: &str) -> String {
+    use base64::Engine as _;
+    let Ok(r) = serde_json::from_str::<PxRect>(rect) else { return String::new() };
+    with_frame(|f, _| {
+        let fr = crate::screens::Rect { x: r.x / f.w as f64, y: r.y / f.h as f64, w: r.w / f.w as f64, h: r.h / f.h as f64 };
+        base64::engine::general_purpose::STANDARD.encode(crate::screens::region_sig(f, &fr))
+    })
+    .unwrap_or_default()
+}
+
+fn helper_same(rect: &str, sig: &str) -> bool {
+    use base64::Engine as _;
+    let (Ok(r), Ok(sig)) = (serde_json::from_str::<PxRect>(rect), base64::engine::general_purpose::STANDARD.decode(sig)) else { return false };
+    with_frame(|f, _| {
+        let fr = crate::screens::Rect { x: r.x / f.w as f64, y: r.y / f.h as f64, w: r.w / f.w as f64, h: r.h / f.h as f64 };
+        !sig.is_empty() && crate::screens::region_same(f, &fr, &sig)
+    })
+    .unwrap_or(false)
 }
 
 /// `f.runs(rect, rule)`: for each row, its longest unbroken run of matching pixels: `[start, length]`
@@ -957,6 +1200,71 @@ mod tests {
         assert_eq!(v, "undefined,undefined,undefined,undefined,undefined,undefined,undefined");
     }
 
+    /// A grey frame with a white cross (11 x 11, 3 px thick) at (400, 300).
+    fn cross_frame() -> FrameData {
+        let (w, h) = (960u32, 540u32);
+        let mut rgba = vec![60u8; (w * h * 4) as usize];
+        for y in 0..11u32 {
+            for x in 0..11u32 {
+                if (4..7).contains(&x) || (4..7).contains(&y) {
+                    let i = (((300 + y) * w + 400 + x) * 4) as usize;
+                    rgba[i..i + 3].copy_from_slice(&[250, 250, 250]);
+                }
+            }
+        }
+        FrameData { w, h, rgba, seq: 3 }
+    }
+
+    fn cross_png() -> String {
+        use base64::Engine as _;
+        let img = image::GrayImage::from_fn(11, 11, |x, y| image::Luma([if (4..7).contains(&x) || (4..7).contains(&y) { 250 } else { 60 }]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+        base64::engine::general_purpose::STANDARD.encode(out.into_inner())
+    }
+
+    #[test]
+    fn scripts_find_their_pictures_remember_and_recognise() {
+        let script = format!(
+            r#"pages.image("cross", "{}");
+            pages.recognize((f) => {{ const m = f.find({{ x: 0, y: 0, w: f.w, h: f.h }}, "cross"); return !!m && m.score > 0.9; }});
+            pages.add({{ id: "p",
+              hold: {{ follow: "menu", content: {{ x: 0.1, y: 0.1, w: 0.5, h: 0.5 }} }},
+              present(f) {{ this.seen = (this.seen || 0) + 1; return f.find({{ x: 300, y: 200, w: 300, h: 300 }}, "cross", {{ scales: [1, 2] }}); }},
+              same(f) {{ this.sig = this.sig || f.sig({{ x: 390, y: 290, w: 30, h: 30 }}); return f.same({{ x: 390, y: 290, w: 30, h: 30 }}, this.sig); }},
+              ended() {{ this.seen = 0; }},
+              read() {{ return {{ seen: this.seen }}; }} }});"#,
+            cross_png()
+        );
+        let p = Pages::load(&script).expect("loads");
+        let f = cross_frame();
+        let m = p.call("p", "present", &f, None, &serde_json::Value::Null);
+        assert_eq!((m["x"].as_u64(), m["y"].as_u64(), m["w"].as_u64()), (Some(400), Some(300), Some(11)), "{m}");
+        assert!(m["score"].as_f64().unwrap() > 0.99, "{m}");
+        // a page object keeps what it learnt between calls, until it's told the page went
+        p.call("p", "present", &f, None, &serde_json::Value::Null);
+        assert_eq!(p.call("p", "read", &f, None, &serde_json::Value::Null)["seen"], 2);
+        p.ended("p", &f);
+        assert_eq!(p.call("p", "read", &f, None, &serde_json::Value::Null)["seen"], 0);
+        // the same picture is still there; a changed one isn't
+        assert_eq!(p.call("p", "same", &f, None, &serde_json::Value::Null), true);
+        let mut g = cross_frame();
+        for y in 290..320u32 { for x in 390..420u32 { let i = ((y * g.w + x) * 4) as usize; g.rgba[i..i + 3].copy_from_slice(&[0, 0, 200]); } }
+        assert_eq!(p.call("p", "same", &g, None, &serde_json::Value::Null), false);
+        // its game, by the picture
+        assert_eq!(p.call("", "recognize", &f, None, &serde_json::Value::Null), true);
+        let blank = FrameData { w: 960, h: 540, rgba: vec![60; 960 * 540 * 4], seq: 4 };
+        assert_eq!(p.call("", "recognize", &blank, None, &serde_json::Value::Null), false);
+        // followed like a menu, with its own content area
+        let mut l = ScreenLayout::default();
+        p.stamp("p", &mut l);
+        assert_eq!((l.id.as_str(), l.follow.as_str()), ("p", "menu"));
+        let (content, _) = crate::screens::menu_rects(&l).unwrap();
+        assert_eq!(content.w, 0.5);
+        // not a picture: a load error
+        assert!(Pages::load(r#"pages.image("x", "bm90IGEgcG5n");"#).is_err());
+    }
+
     #[test]
     fn a_broken_script_is_an_error_not_a_crash() {
         assert!(Pages::load("this is not javascript (").is_err());
@@ -975,6 +1283,10 @@ mod tests {
         o.pause_menu = false;
         assert!(p.switch_on(&o, "heists") && !p.switch_on(&o, "pause_menu"));
         assert_eq!(version_of("// pages-version: 7\npages.add({id:'x'})"), 7);
+        assert!(runs_here("// pages-version: 7\n// requires-app: 0.9.3\n"));
+        assert!(runs_here(&format!("// requires-app: {}\n", env!("CARGO_PKG_VERSION"))));
+        assert!(!runs_here("// pages-version: 7\n// requires-app: 99.0.0\n"));
+        assert!(runs_here("// pages-version: 7\n"));
     }
 
     #[test]

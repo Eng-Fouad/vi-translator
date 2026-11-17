@@ -197,7 +197,6 @@ I18N.add("hi", {
   "Help improve translations": "अनुवाद बेहतर बनाने में मदद करें",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "गेम में दिखने वाली अंग्रेज़ी लाइनें (सबटाइटल, निर्देश और कैप्शन; मेनू कभी नहीं) हर कुछ मिनट में VI Translator सर्वर के साथ साझा करता है, ताकि सबके लिए उनका बेहतर अनुवाद हो सके। गुमनाम: एक रैंडम ID, कोई खाता नहीं, कोई स्क्रीनशॉट नहीं।",
   "Automatic layout updates": "लेआउट के अपने आप अपडेट",
-  "Keeps the game profile's read areas and fonts up to date.": "गेम प्रोफ़ाइल के पढ़ने के क्षेत्र और फ़ॉन्ट अप-टू-डेट रखता है।",
   "Forget all remembered translations?": "याद रखे गए सभी अनुवाद भुला दें?",
   "{n} remembered line(s)": "{n} याद रखी गई लाइनें",
   "Folder: {path}": "फ़ोल्डर: {path}",
@@ -269,5 +268,11 @@ I18N.add("hi", {
   "For {game} · {n} read area(s)": "{game} के लिए · {n} रीड एरिया",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "बिल्ट-इन प्रोफ़ाइलों को गेम के अपडेट अपने-आप मिलते हैं। कॉपी आपके बदलाव रखती है और आपकी रहती है।",
   "Your changes to read areas, text style and game pages are saved in this profile.": "रीड एरिया, टेक्स्ट शैली और गेम पेज में आपके बदलाव इसी प्रोफ़ाइल में सहेजे जाते हैं।",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} के अपने पेज अभी ज्ञात नहीं हैं, इसलिए अभी उनका अनुवाद नहीं होता। सबटाइटल और रीड एरिया सामान्य रूप से काम करते हैं।"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} के अपने पेज अभी ज्ञात नहीं हैं, इसलिए अभी उनका अनुवाद नहीं होता। सबटाइटल और रीड एरिया सामान्य रूप से काम करते हैं।",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "गेम प्रोफ़ाइल के पढ़ने वाले क्षेत्र, फ़ॉन्ट, टेक्स्ट शैली और टाइमिंग अपडेट रखता है।",
+  "Switch games automatically": "गेम अपने-आप बदलें",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "जब तस्वीर में ऐप का जाना-पहचाना कोई दूसरा गेम दिखे (उसके गेम पेजों से), तो उस गेम की प्रोफ़ाइल इस्तेमाल होती है। किसी दूसरे जैसा दिखने वाला गेम उसे समझा जा सकता है।",
+  "Get test versions of game pages": "गेम पेजों के टेस्ट संस्करण पाएँ",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "नए गेम पेज पहले कुछ खिलाड़ियों को मिलते हैं। टेस्ट संस्करण शायद अभी उतना अच्छा काम न करे। इस इंस्टॉल की आईडी: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "बिना बदले, आख़िरी तीन गेम प्रोफ़ाइल की अपनी टाइमिंग मानते हैं, अगर हो।"
 });

@@ -197,7 +197,6 @@ I18N.add("vi", {
   "Help improve translations": "Giúp cải thiện bản dịch",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Vài phút một lần, gửi các dòng tiếng Anh bạn thấy trong game (phụ đề, hướng dẫn và chú thích; không bao giờ gửi menu) đến máy chủ VI Translator để dịch tốt hơn cho mọi người. Ẩn danh: ID ngẫu nhiên, không tài khoản, không ảnh chụp màn hình.",
   "Automatic layout updates": "Tự động cập nhật bố cục",
-  "Keeps the game profile's read areas and fonts up to date.": "Giữ vùng đọc và phông chữ của hồ sơ game luôn cập nhật.",
   "Forget all remembered translations?": "Xóa tất cả bản dịch đã ghi nhớ?",
   "{n} remembered line(s)": "{n} dòng đã ghi nhớ",
   "Folder: {path}": "Thư mục: {path}",
@@ -269,5 +268,11 @@ I18N.add("vi", {
   "For {game} · {n} read area(s)": "Cho {game} · {n} vùng đọc",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Hồ sơ có sẵn tự động nhận cập nhật cho game. Bản sao giữ thay đổi của bạn và thuộc về bạn.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Thay đổi của bạn về vùng đọc, kiểu chữ và trang game được lưu trong hồ sơ này.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Các trang riêng của {game} chưa được biết, nên hiện chưa dịch trang nào. Phụ đề và vùng đọc vẫn hoạt động như thường."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Các trang riêng của {game} chưa được biết, nên hiện chưa dịch trang nào. Phụ đề và vùng đọc vẫn hoạt động như thường.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Giữ cho vùng đọc, phông chữ, kiểu chữ và thời gian của hồ sơ trò chơi luôn được cập nhật.",
+  "Switch games automatically": "Tự động chuyển trò chơi",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Khi hình ảnh hiển thị một trò chơi khác mà ứng dụng biết (qua các trang của nó), hồ sơ của trò chơi đó sẽ được dùng. Một trò chơi rất giống trò khác có thể bị nhận nhầm.",
+  "Get test versions of game pages": "Nhận bản thử nghiệm của các trang trò chơi",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Các trang trò chơi mới đến với một vài người chơi trước. Bản thử nghiệm có thể chưa chạy tốt bằng. ID của bản cài đặt này: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Nếu để nguyên, ba mục cuối sẽ theo thời gian riêng của hồ sơ trò chơi khi có."
 });

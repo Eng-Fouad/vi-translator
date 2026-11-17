@@ -5,7 +5,31 @@
 //! controller button icons; the Arabic puts each icon where it belongs in the sentence.
 //! Lines not in the book go to the translator as usual.
 
+use std::sync::RwLock;
+
 use crate::translate::Segments;
+
+/// Phrases from the game's layout update (any game, any language): (game, language, phrases).
+static EXTRA: RwLock<(String, String, Vec<(String, String)>)> = RwLock::new((String::new(), String::new(), Vec::new()));
+
+/// The phrases a layout update brings for this game and language (`"phrases": {"ar": {"Press {1} to …": "…"}}`).
+pub fn set_extra(game: &str, lang: &str, phrases: Vec<(String, String)>) {
+    *EXTRA.write().unwrap() = (game.to_string(), lang.to_string(), phrases);
+}
+
+/// The hand-written translation of a line for this game and language, if there is one: the layout
+/// update's phrases first, then the app's own book (GTA V, Arabic).
+pub fn find(game: &str, lang: &str, line: &str, icons: &[String]) -> Option<Segments> {
+    {
+        let extra = EXTRA.read().unwrap();
+        if extra.0 == game && extra.1 == lang && !extra.2.is_empty() {
+            if let Some(segs) = best(extra.2.iter().map(|(e, a)| (e.as_str(), a.as_str())), line, icons) {
+                return Some(segs);
+            }
+        }
+    }
+    (game == "gta5" && lang == "ar").then(|| lookup(line, icons)).flatten()
+}
 
 /// (English, Arabic). Matching ignores case and punctuation; `{n}` = n-th icon in the line.
 const PHRASES: &[(&str, &str)] = &[
@@ -140,13 +164,17 @@ fn similarity(a: &str, b: &str) -> f64 {
 /// icons put back in. Exact match first; then a close match (≥ 90 %, same icons) to tolerate small
 /// OCR slips like a dropped letter.
 pub fn lookup(line: &str, icons: &[String]) -> Option<Segments> {
+    best(PHRASES.iter().copied(), line, icons)
+}
+
+fn best<'a>(phrases: impl Iterator<Item = (&'a str, &'a str)>, line: &str, icons: &[String]) -> Option<Segments> {
     let norm = normalize_line(line);
     if norm.is_empty() {
         return None;
     }
     let n_icons = norm.matches('{').count();
     let mut best: Option<(f64, &str)> = None;
-    for (en, ar) in PHRASES {
+    for (en, ar) in phrases {
         let t = normalize_template(en);
         if t.matches('{').count() != n_icons {
             continue;
@@ -224,6 +252,16 @@ mod tests {
         assert!(lookup("Blame the pricks who called you out here!", &[]).is_none());
         assert!(lookup("Press to take cover", &[]).is_none()); // icon missing: don't invent one
         assert!(lookup("Press ⟦1⟧ to call Lamar.", &icons(1)).is_none());
+    }
+
+    #[test]
+    fn layout_phrases_for_any_game() {
+        set_extra("rdr2", "fr", vec![("Press {1} to mount.".into(), "Appuyez sur {1} pour monter.".into())]);
+        assert_eq!(text(&find("rdr2", "fr", "Press ⟦1⟧ to mount", &icons(1)).unwrap()), "Appuyez sur 🎮 pour monter.");
+        assert!(find("rdr2", "ar", "Press ⟦1⟧ to mount", &icons(1)).is_none(), "another language");
+        assert!(find("gta5", "ar", "Press ⟦1⟧ to take cover", &icons(1)).is_some(), "the app's own book still");
+        assert!(find("rdr2", "ar", "Press ⟦1⟧ to take cover", &icons(1)).is_none(), "GTA V's book is GTA V's");
+        set_extra("", "", Vec::new());
     }
 
     #[test]

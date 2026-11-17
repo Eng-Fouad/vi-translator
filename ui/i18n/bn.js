@@ -197,7 +197,6 @@ I18N.add("bn", {
   "Help improve translations": "অনুবাদ উন্নত করতে সাহায্য করুন",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "গেমে আপনি যে ইংরেজি লাইনগুলো দেখেন (সাবটাইটেল, নির্দেশনা ও ক্যাপশন; মেনু কখনো নয়) কয়েক মিনিট পরপর VI Translator সার্ভারের সাথে শেয়ার করে, যাতে সবার জন্য সেগুলোর অনুবাদ আরও ভালো হয়। বেনামি: একটি র‍্যান্ডম আইডি, কোনো অ্যাকাউন্ট নয়, কোনো স্ক্রিনশট নয়।",
   "Automatic layout updates": "লেআউটের স্বয়ংক্রিয় আপডেট",
-  "Keeps the game profile's read areas and fonts up to date.": "গেম প্রোফাইলের পড়ার এলাকা ও ফন্ট হালনাগাদ রাখে।",
   "Forget all remembered translations?": "মনে রাখা সব অনুবাদ ভুলে যাবেন?",
   "{n} remembered line(s)": "মনে রাখা {n}টি লাইন",
   "Folder: {path}": "ফোল্ডার: {path}",
@@ -269,5 +268,11 @@ I18N.add("bn", {
   "For {game} · {n} read area(s)": "{game}-এর জন্য · {n}টি রিড এরিয়া",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "বিল্ট-ইন প্রোফাইল গেমের আপডেট নিজে থেকেই পায়। কপি আপনার পরিবর্তন রাখে এবং আপনারই থাকে।",
   "Your changes to read areas, text style and game pages are saved in this profile.": "রিড এরিয়া, লেখার স্টাইল ও গেমের পেজে আপনার পরিবর্তন এই প্রোফাইলে সংরক্ষিত হয়।",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game}-এর নিজস্ব পেজ এখনও জানা নেই, তাই আপাতত সেগুলোর অনুবাদ হয় না। সাবটাইটেল ও রিড এরিয়া স্বাভাবিকভাবে কাজ করে।"
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game}-এর নিজস্ব পেজ এখনও জানা নেই, তাই আপাতত সেগুলোর অনুবাদ হয় না। সাবটাইটেল ও রিড এরিয়া স্বাভাবিকভাবে কাজ করে।",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "গেম প্রোফাইলের পড়ার এলাকা, ফন্ট, লেখার ধরন ও সময় হালনাগাদ রাখে।",
+  "Switch games automatically": "স্বয়ংক্রিয়ভাবে গেম বদলান",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "ছবিতে অ্যাপের চেনা অন্য কোনো গেম দেখা গেলে (তার গেম পেজ দিয়ে), সেই গেমের প্রোফাইল ব্যবহার হয়। অন্য গেমের মতো দেখতে কোনো গেমকে সেটি বলে ভুল হতে পারে।",
+  "Get test versions of game pages": "গেম পেজের পরীক্ষামূলক সংস্করণ নিন",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "নতুন গেম পেজ প্রথমে কয়েকজন খেলোয়াড়ের কাছে যায়। পরীক্ষামূলক সংস্করণ এখনও ততটা ভালো কাজ নাও করতে পারে। এই ইনস্টলের আইডি: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "যেমন আছে তেমন রাখলে, শেষ তিনটি গেম প্রোফাইলের নিজস্ব সময় মেনে চলে, যদি থাকে।"
 });

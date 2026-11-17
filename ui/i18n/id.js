@@ -197,7 +197,6 @@ I18N.add("id", {
   "Help improve translations": "Bantu tingkatkan terjemahan",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Membagikan baris bahasa Inggris yang Anda lihat di game (subtitle, petunjuk, dan teks layar; tidak pernah menu) ke server VI Translator setiap beberapa menit, agar dapat diterjemahkan lebih baik untuk semua orang. Anonim: id acak, tanpa akun, tanpa tangkapan layar.",
   "Automatic layout updates": "Pembaruan tata letak otomatis",
-  "Keeps the game profile's read areas and fonts up to date.": "Menjaga area baca dan font profil game tetap terbaru.",
   "Forget all remembered translations?": "Lupakan semua terjemahan yang diingat?",
   "{n} remembered line(s)": "{n} baris diingat",
   "Folder: {path}": "Folder: {path}",
@@ -269,5 +268,11 @@ I18N.add("id", {
   "For {game} · {n} read area(s)": "Untuk {game} · {n} area baca",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Profil bawaan mendapat pembaruan game secara otomatis. Salinan menyimpan perubahan Anda dan tetap milik Anda.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Perubahan Anda pada area baca, gaya teks, dan halaman game disimpan di profil ini.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Halaman milik {game} belum dikenal, jadi untuk sekarang tidak ada yang diterjemahkan. Subtitle dan area baca tetap berjalan seperti biasa."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Halaman milik {game} belum dikenal, jadi untuk sekarang tidak ada yang diterjemahkan. Subtitle dan area baca tetap berjalan seperti biasa.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Menjaga area baca, font, gaya teks, dan waktu profil game tetap terbaru.",
+  "Switch games automatically": "Ganti game otomatis",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Saat gambar menampilkan game lain yang dikenal aplikasi (dari halaman game-nya), profil game itu yang dipakai. Game yang sangat mirip game lain bisa dikira game itu.",
+  "Get test versions of game pages": "Dapatkan versi uji halaman game",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Halaman game baru dikirim ke beberapa pemain dulu. Versi uji mungkin belum bekerja sebaik itu. ID instalasi ini: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Jika dibiarkan, tiga terakhir mengikuti waktu milik profil game bila ada."
 });

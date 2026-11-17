@@ -84,13 +84,13 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
         .expect("http client");
     let mut first = true;
     let (mut next_upload, mut next_download) = (Instant::now(), Instant::now());
-    let mut last = (String::new(), String::new()); // game, language
+    let mut last = (String::new(), String::new(), false); // game, language, test versions of pages
     loop {
         let c = cfg.lock().unwrap().clone();
         // what was downloaded before works offline; another game or language: its own downloads
         if let Some(g) = game(&c) {
-            if last != (g.clone(), c.target_lang.clone()) {
-                last = (g.clone(), c.target_lang.clone());
+            if last != (g.clone(), c.target_lang.clone(), c.early_pages) {
+                last = (g.clone(), c.target_lang.clone(), c.early_pages);
                 // (give the app a moment to switch its memory to the new language first)
                 std::thread::sleep(Duration::from_secs(2));
                 load_cached(&app, &cfg, &memory, &paths, &g, &c.target_lang);
@@ -253,7 +253,8 @@ fn download(
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
             let _ = std::fs::write(paths.layout(game), &bytes);
             st.versions.insert(k, tag.clone());
-            crate::pagescript::save_from_layout(&paths.data, game, &layout);
+            let (id, early) = { let c = cfg.lock().unwrap(); (c.install_id.clone(), c.early_pages) };
+            crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early);
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
@@ -286,8 +287,15 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
             memory.lock().unwrap().set_shared(entries);
         }
     }
+    // (another game: the last one's extra words, phrases and OCR fixes no longer apply)
+    crate::screens::set_layout_words(Vec::new(), Vec::new(), Vec::new());
+    crate::phrasebook::set_extra(game, lang, Vec::new());
+    crate::ocr::set_fixes(Default::default());
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout(game)), st.versions.get(&format!("layout/{game}"))) {
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            // (test versions turned on or off: the script that's for this install now)
+            let (id, early) = { let c = cfg.lock().unwrap(); (c.install_id.clone(), c.early_pages) };
+            crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early);
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
@@ -369,6 +377,18 @@ fn open_pack_with(key: &[u8; 32], file: &[u8], game: &str, lang: &str, version: 
 
 // ------------------------------------------------------------------------------------- layouts
 
+/// `base` with the fields `patch` names replaced (a value that doesn't fit leaves it all as it was).
+fn merged<T: serde::Serialize + serde::de::DeserializeOwned>(base: &T, patch: &serde_json::Value) -> Option<T> {
+    let mut v = serde_json::to_value(base).ok()?;
+    let (o, p) = (v.as_object_mut()?, patch.as_object()?);
+    for (k, x) in p {
+        if o.contains_key(k) {
+            o.insert(k.clone(), x.clone());
+        }
+    }
+    serde_json::from_value(v).ok()
+}
+
 /// Apply a game layout:
 /// ```json
 /// { "areas": [ { "id": "subtitles", "x": 0.1, "y": 0.8, "w": 0.8, "h": 0.15, "centered_only": true } ],
@@ -389,6 +409,10 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
     let mut c = cfg.lock().unwrap();
     if game == c.game() {
         crate::screens::set_layout_words(words("menu"), words("buttons"), words("tabs"));
+        // hand-written translations of the game's lines, and OCR fixes for its fonts
+        let phrases = layout["phrases"][lang].as_object().map(|m| m.iter().filter_map(|(en, t)| Some((en.clone(), t.as_str()?.to_string()))).collect()).unwrap_or_default();
+        crate::phrasebook::set_extra(game, lang, phrases);
+        crate::ocr::set_fixes(crate::ocr::fixes_from(&layout["ocr"]));
     }
     if !c.auto_layout || version <= c.layout_versions.get(game).copied().unwrap_or(0) {
         return;
@@ -397,14 +421,41 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
     let Some(p) = c.builtins.iter_mut().find(|p| p.id == game) else { return };
     if let Some(areas) = layout["areas"].as_array() {
         for a in areas {
-            let Some(area) = a["id"].as_str().and_then(|id| p.areas.iter_mut().find(|x| x.id == id)) else { continue };
-            let num = |k: &str| a[k].as_f64().filter(|v| (0.0..=1.0).contains(v));
-            if let (Some(x), Some(y), Some(w), Some(h)) = (num("x"), num("y"), num("w"), num("h")) {
-                (area.x, area.y, area.w, area.h) = (x, y, w, h);
+            let Some(id) = a["id"].as_str().filter(|id| !id.is_empty()) else { continue };
+            // a place outside the picture is a mistake: that part is left as it was
+            let mut a = a.clone();
+            if ["x", "y", "w", "h"].iter().any(|k| a[*k].as_f64().is_some_and(|v| !(0.0..=1.0).contains(&v))) {
+                for k in ["x", "y", "w", "h"] {
+                    a.as_object_mut().map(|o| o.remove(k));
+                }
             }
-            if let Some(v) = a["centered_only"].as_bool() {
-                area.centered_only = v;
+            match p.areas.iter_mut().find(|x| x.id == id) {
+                // any of the area's settings (place, alignment, font, background, size …)
+                Some(area) => {
+                    if let Some(new) = merged(area, &a) {
+                        *area = new;
+                    }
+                }
+                // a new area (with its place)
+                None if ["x", "y", "w", "h"].iter().all(|k| a[*k].is_number()) => {
+                    if let Some(new) = merged(&crate::config::Area::default(), &a) {
+                        p.areas.push(new);
+                    }
+                }
+                None => {}
             }
+        }
+    }
+    // the whole text style (colours, outline, sizes …), only the parts it names
+    if layout["style"].is_object() {
+        if let Some(new) = merged(&p.style, &layout["style"]) {
+            p.style = new;
+        }
+    }
+    // reading timing for the game
+    if layout["timing"].is_object() {
+        if let Some(new) = merged(&p.timing, &layout["timing"]) {
+            p.timing = new;
         }
     }
     if let Some(f) = layout["fonts"]["title_font"].as_str() {
@@ -422,6 +473,17 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn layouts_change_only_what_they_name() {
+        let style = crate::config::Style::default();
+        let new: crate::config::Style = merged(&style, &serde_json::json!({ "no_such_field": 1 })).unwrap();
+        assert_eq!(serde_json::to_value(&new).unwrap(), serde_json::to_value(&style).unwrap());
+        let area = crate::config::Area { id: "subtitles".into(), x: 0.1, ..Default::default() };
+        let moved: crate::config::Area = merged(&area, &serde_json::json!({ "x": 0.2, "font_scale": 1.1 })).unwrap();
+        assert_eq!((moved.id.as_str(), moved.x, moved.font_scale), ("subtitles", 0.2, 1.1));
+        assert!(merged(&area, &serde_json::json!({ "x": "far" })).is_none(), "a value that doesn't fit changes nothing");
+    }
 
     #[test]
     fn junk_is_not_shared() {

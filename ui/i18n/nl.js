@@ -197,7 +197,6 @@ I18N.add("nl", {
   "Help improve translations": "Help vertalingen te verbeteren",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Deelt om de paar minuten de Engelse regels die je in de game ziet (ondertitels, instructies en teksten; nooit menu's) met de server van VI Translator, zodat ze voor iedereen beter vertaald kunnen worden. Anoniem: een willekeurige id, geen account, geen screenshots.",
   "Automatic layout updates": "Automatische lay-outupdates",
-  "Keeps the game profile's read areas and fonts up to date.": "Houdt de leesgebieden en lettertypen van het gameprofiel up-to-date.",
   "Forget all remembered translations?": "Alle onthouden vertalingen vergeten?",
   "{n} remembered line(s)": "{n} onthouden regel(s)",
   "Folder: {path}": "Map: {path}",
@@ -269,5 +268,11 @@ I18N.add("nl", {
   "For {game} · {n} read area(s)": "Voor {game} · {n} leesgebied(en)",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Ingebouwde profielen krijgen updates voor de game automatisch. Een kopie houdt je wijzigingen en blijft van jou.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Je wijzigingen aan leesgebieden, tekststijl en gamepagina's worden in dit profiel bewaard.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "De eigen pagina's van {game} zijn nog niet bekend, dus die worden voorlopig niet vertaald. Ondertitels en leesgebieden werken gewoon."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "De eigen pagina's van {game} zijn nog niet bekend, dus die worden voorlopig niet vertaald. Ondertitels en leesgebieden werken gewoon.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Houdt leesgebieden, lettertypen, tekststijl en timing van het spelprofiel actueel.",
+  "Switch games automatically": "Automatisch van spel wisselen",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Als het beeld een ander spel toont dat de app kent (aan zijn spelpagina's), wordt het profiel van dat spel gebruikt. Een spel dat sterk op een ander lijkt, kan daarvoor worden aangezien.",
+  "Get test versions of game pages": "Testversies van spelpagina's ontvangen",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Nieuwe spelpagina's gaan eerst naar een paar spelers. Een testversie werkt misschien nog niet zo goed. ID van deze installatie: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Ongewijzigd volgen de laatste drie de eigen timing van het spelprofiel, als het die heeft."
 });

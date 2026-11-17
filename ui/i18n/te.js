@@ -197,7 +197,6 @@ I18N.add("te", {
   "Help improve translations": "అనువాదాలను మెరుగుపరచడంలో సహాయపడండి",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "గేమ్‌లో మీరు చూసే ఆంగ్ల లైన్‌లను (సబ్‌టైటిల్‌లు, సూచనలు, క్యాప్షన్‌లు; మెనూలు ఎప్పుడూ కాదు) ప్రతి కొన్ని నిమిషాలకు VI Translator సర్వర్‌తో షేర్ చేస్తుంది, తద్వారా అందరికీ అవి మెరుగ్గా అనువదించబడతాయి. అనామకం: యాదృచ్ఛిక ID, ఖాతా లేదు, స్క్రీన్‌షాట్‌లు లేవు.",
   "Automatic layout updates": "ఆటోమేటిక్ లేఅవుట్ అప్‌డేట్‌లు",
-  "Keeps the game profile's read areas and fonts up to date.": "గేమ్ ప్రొఫైల్ చదివే ప్రాంతాలను, ఫాంట్‌లను తాజాగా ఉంచుతుంది.",
   "Forget all remembered translations?": "గుర్తుంచుకున్న అన్ని అనువాదాలను మరచిపోవాలా?",
   "{n} remembered line(s)": "గుర్తుంచుకున్న {n} లైన్(లు)",
   "Folder: {path}": "ఫోల్డర్: {path}",
@@ -269,5 +268,11 @@ I18N.add("te", {
   "For {game} · {n} read area(s)": "{game} కోసం · {n} రీడ్ ఏరియా",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "బిల్ట్-ఇన్ ప్రొఫైల్‌లకు గేమ్ నవీకరణలు ఆటోమేటిక్‌గా వస్తాయి. కాపీ మీ మార్పులను ఉంచుతుంది, మీదిగానే ఉంటుంది.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "రీడ్ ఏరియాలు, టెక్స్ట్ శైలి, గేమ్ పేజీలలో మీ మార్పులు ఈ ప్రొఫైల్‌లో సేవ్ అవుతాయి.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} సొంత పేజీలు ఇంకా తెలియవు, కాబట్టి ప్రస్తుతం ఏవీ అనువదించబడవు. సబ్‌టైటిల్స్, రీడ్ ఏరియాలు మామూలుగానే పనిచేస్తాయి."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "{game} సొంత పేజీలు ఇంకా తెలియవు, కాబట్టి ప్రస్తుతం ఏవీ అనువదించబడవు. సబ్‌టైటిల్స్, రీడ్ ఏరియాలు మామూలుగానే పనిచేస్తాయి.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "గేమ్ ప్రొఫైల్ చదివే ప్రాంతాలు, ఫాంట్‌లు, టెక్స్ట్ శైలి, టైమింగ్‌ను తాజాగా ఉంచుతుంది.",
+  "Switch games automatically": "గేమ్‌లను ఆటోమేటిక్‌గా మార్చు",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "యాప్‌కు తెలిసిన మరో గేమ్ చిత్రంలో కనిపిస్తే (దాని గేమ్ పేజీల ద్వారా), ఆ గేమ్ ప్రొఫైల్ వాడబడుతుంది. మరోదానిలా ఉండే గేమ్‌ను అదే అనుకోవచ్చు.",
+  "Get test versions of game pages": "గేమ్ పేజీల పరీక్ష వెర్షన్‌లు పొందండి",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "కొత్త గేమ్ పేజీలు ముందుగా కొద్దిమంది ఆటగాళ్లకు వెళ్తాయి. పరీక్ష వెర్షన్ ఇంకా అంత బాగా పనిచేయకపోవచ్చు. ఈ ఇన్‌స్టాల్ ఐడీ: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "మార్చకపోతే, చివరి మూడు గేమ్ ప్రొఫైల్‌కు సొంత టైమింగ్ ఉంటే దాన్నే అనుసరిస్తాయి."
 });

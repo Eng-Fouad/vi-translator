@@ -530,6 +530,9 @@ const selectedName = (labels) => (labels.find((l) => l.fg === "#000000") || {}).
 pages.add({
   id: "gta5_pause",
   option: "pause_menu",
+  // followed like a menu: every text box and tab watched, read again when they change (its content
+  // area and button row)
+  hold: { follow: "menu", content: { x: 0.15, y: 0.212, w: 0.70, h: 0.64 }, buttons: { x: 0.55, y: 0.90, w: 0.45, h: 0.06 } },
 
   present(f) {
     return selectedTab(f);

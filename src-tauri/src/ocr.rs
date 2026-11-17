@@ -151,9 +151,17 @@ pub fn clean(words: &[Word]) -> String {
 /// ("bjlwg"), six consonants in a row, or a capital in the middle of lowercase ("ulnJiJl").
 /// Acronyms ("LSPD", "FIB") and the usual vowel-less words ("Mr", "hmm", "shh") are fine.
 pub fn looks_like_words(text: &str) -> bool {
+    let fixes = FIXES_EXTRA.read().unwrap();
     const NO_VOWEL_OK: [&str; 16] = ["mr", "mrs", "ms", "dr", "st", "jr", "hmm", "hm", "mm", "shh", "sh", "psst", "pst", "brr", "grr", "pfft"];
     let plausible = |w: &str| {
         let lower = w.to_lowercase();
+        // (the game's layout update can name its own words, and junk it knows the OCR makes)
+        if fixes.junk.contains(&lower) {
+            return false;
+        }
+        if fixes.ok.contains(&lower) {
+            return true;
+        }
         if NO_VOWEL_OK.contains(&lower.as_str()) || (w.chars().count() <= 5 && w.chars().all(|c| c.is_uppercase())) {
             return true; // "Hmm", "LSPD"
         }
@@ -199,6 +207,32 @@ mod word_tests {
     }
 }
 
+/// OCR fixes from the game's layout update:
+/// `"ocr": {"words": {"cmon": "c'mon"}, "junk": ["bjlwg"], "ok": ["hmm"]}` — whole words, any case
+/// (a replacement keeps a leading capital); junk words make a line not text, ok words are real words.
+#[derive(Default, Clone, Debug)]
+pub struct Fixes {
+    pub words: Vec<(String, String)>,
+    pub junk: Vec<String>,
+    pub ok: Vec<String>,
+}
+
+static FIXES_EXTRA: std::sync::RwLock<Fixes> = std::sync::RwLock::new(Fixes { words: Vec::new(), junk: Vec::new(), ok: Vec::new() });
+
+pub fn set_fixes(f: Fixes) {
+    *FIXES_EXTRA.write().unwrap() = f;
+}
+
+/// Read a layout's `"ocr"` block.
+pub fn fixes_from(v: &serde_json::Value) -> Fixes {
+    let list = |k: &str| v[k].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).map(|x| x.to_lowercase()).collect()).unwrap_or_default();
+    Fixes {
+        words: v["words"].as_object().map(|m| m.iter().filter_map(|(k, x)| Some((k.to_lowercase(), x.as_str()?.to_string()))).collect()).unwrap_or_default(),
+        junk: list("junk"),
+        ok: list("ok"),
+    }
+}
+
 /// Windows OCR drops the apostrophe in GTA's subtitle font ("Cmon mister, were giving you ...").
 /// Put it back where the word can't be anything else; and "were" + an "-ing" verb at the start of a
 /// sentence or after a comma ("mister, were giving") is "we're" ("they were giving" stays).
@@ -222,6 +256,9 @@ pub fn fix_contractions(text: &str) -> String {
         let (pre, core, post) = (&w[..start], &w[start..end], &w[end..]);
         let lower = core.to_lowercase();
         let mut fixed = FIXES.iter().find(|(k, _)| *k == lower).map(|(_, v)| v.to_string());
+        if fixed.is_none() {
+            fixed = FIXES_EXTRA.read().unwrap().words.iter().find(|(k, _)| *k == lower).map(|(_, v)| v.clone());
+        }
         if fixed.is_none() && lower == "were" {
             let next_ing = words
                 .get(i + 1)
@@ -262,6 +299,16 @@ mod contraction_tests {
         assert_eq!(f("The cops were waiting."), "The cops were waiting.");
         assert_eq!(f("Go to the guard."), "Go to the guard."); // untouched
         assert_eq!(f("Röckstar Editör, dont stop"), "Röckstar Editör, don't stop"); // non-ASCII letters
+    }
+
+    #[test]
+    fn layout_fixes() {
+        super::set_fixes(super::fixes_from(&serde_json::json!({"words": {"vvanted": "wanted"}, "junk": ["Sogwa"], "ok": ["grrk"]})));
+        assert_eq!(f("Vvanted level"), "Wanted level");
+        assert!(!super::looks_like_words("sogwa"));
+        assert!(super::looks_like_words("Grrk"));
+        super::set_fixes(Default::default());
+        assert_eq!(f("Vvanted level"), "Vvanted level");
     }
 }
 

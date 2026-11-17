@@ -197,7 +197,6 @@ I18N.add("uk", {
   "Help improve translations": "Допомогти покращити переклади",
   "Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.": "Кожні кілька хвилин надсилає на сервер VI Translator англійські рядки, які ви бачите в грі (субтитри, підказки й написи; ніколи — меню), щоб їх можна було краще перекласти для всіх. Анонімно: випадковий ідентифікатор, без облікового запису, без знімків екрана.",
   "Automatic layout updates": "Автоматичне оновлення розмітки",
-  "Keeps the game profile's read areas and fonts up to date.": "Підтримує актуальними області читання й шрифти профілю гри.",
   "Forget all remembered translations?": "Забути всі запам’ятовані переклади?",
   "{n} remembered line(s)": "Запам’ятованих рядків: {n}",
   "Folder: {path}": "Папка: {path}",
@@ -269,5 +268,11 @@ I18N.add("uk", {
   "For {game} · {n} read area(s)": "Для {game} · зон читання: {n}",
   "Built-in profiles get updates for the game automatically. A copy keeps your changes and stays yours.": "Вбудовані профілі отримують оновлення для гри автоматично. Копія зберігає ваші зміни й лишається вашою.",
   "Your changes to read areas, text style and game pages are saved in this profile.": "Ваші зміни зон читання, стилю тексту та сторінок гри зберігаються в цьому профілі.",
-  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Власні сторінки {game} ще невідомі, тож поки нічого з них не перекладається. Субтитри й зони читання працюють як зазвичай."
+  "{game}'s own pages aren't known yet, so none are translated for now. Subtitles and the read areas work as usual.": "Власні сторінки {game} ще невідомі, тож поки нічого з них не перекладається. Субтитри й зони читання працюють як зазвичай.",
+  "Keeps the game profile's read areas, fonts, text style and timing up to date.": "Підтримує актуальними області читання, шрифти, стиль тексту й таймінги ігрового профілю.",
+  "Switch games automatically": "Перемикати ігри автоматично",
+  "When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.": "Коли на зображенні інша гра, яку знає застосунок (за її ігровими сторінками), використовується профіль цієї гри. Гру, дуже схожу на іншу, можна сплутати з нею.",
+  "Get test versions of game pages": "Отримувати тестові версії ігрових сторінок",
+  "New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}": "Нові ігрові сторінки спершу отримують кілька гравців. Тестова версія може поки працювати гірше. ID цього встановлення: {id}",
+  "Left as they are, the last three follow the game profile's own timing when it has one.": "Якщо їх не змінювати, останні три дотримуються власних таймінгів ігрового профілю, якщо вони є."
 });
