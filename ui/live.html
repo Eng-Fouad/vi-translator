@@ -61,6 +61,9 @@
       // button icon, sized to the text like a letter (as on the PC); only PNG data URLs are drawn.
       const segs = (list) => list.map(([text, c]) => {
         if (text === "\n" && !c) return "<br>"; // two speakers' lines, each on its own
+        if (c === "dim") return `<span style="opacity:.6">${esc(text)}</span>`; // the other speaker, in grey
+        // a speaker name ("Dobbs:") in the game's colour for it
+        if (c && /^name:#[0-9a-f]{6}$/i.test(c)) return `<span style="color:${c.slice(5)}">${esc(text)}</span>`;
         if (!(c && c.startsWith("icon:"))) return esc(text);
         let src = c.slice(5);
         let h = 1.2;

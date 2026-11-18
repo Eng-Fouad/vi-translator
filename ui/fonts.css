@@ -6,3 +6,5 @@
 @font-face { font-family: "Tajawal"; src: url("fonts/Tajawal-Bold.ttf") format("truetype"); font-weight: 700; }
 @font-face { font-family: "Tajawal"; src: url("fonts/Tajawal-ExtraBold.ttf") format("truetype"); font-weight: 800 900; }
 @font-face { font-family: "Noto Sans Arabic"; src: url("fonts/NotoSansArabic.ttf") format("truetype"); font-weight: 100 900; font-stretch: 62.5% 100%; }
+/* The same font at one weight, 500 (regular or bold asked, 500 drawn): the weight of GTA VI's subtitles */
+@font-face { font-family: "Noto Sans Arabic Medium"; src: url("fonts/NotoSansArabic.ttf") format("truetype"); font-weight: 500; }

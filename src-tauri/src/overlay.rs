@@ -78,6 +78,14 @@ fn overlay_rect(a: &Area, cw: i32, ch: i32) -> (i32, i32, i32, i32) {
         let w = aw.clamp(50, cw);
         return (ax.clamp(0, cw - w), ay.clamp(0, ch - h), w, h);
     }
+    if a.placement == "above_text" {
+        // Covers the read area and room above it; the page puts the Arabic right above the game's
+        // text, centred on it.
+        let (ax, ay, aw, ah) = area_px(a, cw, ch);
+        let h = (ah + (ch as f64 * 0.4) as i32).min(ch);
+        let w = aw.clamp(50, cw);
+        return (ax.clamp(0, cw - w), (ay + ah - h).clamp(0, ch - h), w, h);
+    }
     rect_for(&a.placement, area_px(a, cw, ch), cw, ch)
 }
 

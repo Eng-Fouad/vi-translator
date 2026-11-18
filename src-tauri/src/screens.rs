@@ -325,6 +325,11 @@ pub fn use_words_for(game: &str, lang: &str) {
     }
 }
 
+/// The language in use ("ar" from "gta6/ar"), for page scripts' own words.
+pub fn words_lang() -> String {
+    WORDS_FOR.read().unwrap().rsplit('/').next().unwrap_or("").to_string()
+}
+
 fn layout_words(i: usize) -> Vec<(&'static str, &'static str)> {
     let w = LAYOUT_WORDS.read().unwrap();
     if w.0 == *WORDS_FOR.read().unwrap() { w.1[i].clone() } else { Vec::new() }

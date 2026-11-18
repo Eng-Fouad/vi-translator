@@ -20,6 +20,7 @@ mod lan;
 mod langs;
 mod screens;
 mod pagescript;
+mod speaker;
 mod sync;
 mod translate;
 mod tv;
@@ -192,6 +193,10 @@ struct TranslationEvent {
     /// The English text block (words + icons) as [x, y, w, h] fractions of the frame, so the Arabic
     /// can line up with the game's own box ("below the game's text box" placement).
     text_box: Option<[f64; 4]>,
+    /// The game's own box around that text (GTA's help box) as [x, y, w, h] fractions, when its edges
+    /// were found: the Arabic box below it takes exactly its left and right edges.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    game_box: Option<[f64; 4]>,
     /// came from the translation memory (shown tinted while testing)
     cached: bool,
     /// when the English line appeared on screen (Unix ms; 0 = unknown)
@@ -613,6 +618,8 @@ struct Job {
     en_start: Instant,
     /// The English text block as [x, y, w, h] fractions of the frame
     text_box: Option<[f64; 4]>,
+    /// The game's box around it (see TranslationEvent::game_box)
+    game_box: Option<[f64; 4]>,
     /// Two speakers' lines (see ocr::speaker_lines): each part with its brightness; empty = one line
     parts: Vec<(String, f64)>,
 }
@@ -784,7 +791,7 @@ fn present_loop(app: AppHandle, rx: mpsc::Receiver<PMsg>, shared: Arc<Shared>) {
                     shared.shown.lock().unwrap().remove(&area);
                     let _ = app.emit(
                         "translation",
-                        TranslationEvent { area, en: String::new(), en_segments: Vec::new(), segments: Vec::new(), stats: String::new(), error: None, line_h: 0.0, text_box: None, cached: false, at: 0 },
+                        TranslationEvent { area, en: String::new(), en_segments: Vec::new(), segments: Vec::new(), stats: String::new(), error: None, line_h: 0.0, text_box: None, game_box: None, cached: false, at: 0 },
                     );
                 }
             }
@@ -1266,7 +1273,7 @@ fn ocr_loop(
                         None => {
                             if !menu_asked.contains(&m.en) && !menu_asked.iter().any(|a| ocr::similar(a, &m.en)) && menu_asked.insert(m.en.clone()) {
                                 seq_counter += 1;
-                                let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: m.en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, parts: Vec::new() });
+                                let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: m.en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, game_box: None, parts: Vec::new() });
                             }
                         }
                     }
@@ -1321,7 +1328,7 @@ fn ocr_loop(
                 let mut ask = |en: &str| {
                     if menu_asked.insert(en.to_string()) {
                         seq_counter += 1;
-                        let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: en.to_string(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, parts: Vec::new() });
+                        let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: en.to_string(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, game_box: None, parts: Vec::new() });
                     }
                 };
                 screen_missing = localize_screen(layout, &cache.map, &mut ask);
@@ -1376,7 +1383,7 @@ fn ocr_loop(
                         if !layout.reason_en.is_empty() {
                             seq_counter += 1;
                             latest.lock().unwrap().insert(SCREEN_REASON.into(), seq_counter);
-                            let _ = jobs.send(Job { area: SCREEN_REASON.into(), seq: seq_counter, en: layout.reason_en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, parts: Vec::new() });
+                            let _ = jobs.send(Job { area: SCREEN_REASON.into(), seq: seq_counter, en: layout.reason_en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, game_box: None, parts: Vec::new() });
                         }
                     }
                     *shared.screen.lock().unwrap() = serde_json::to_value(&layout).ok();
@@ -1415,12 +1422,12 @@ fn ocr_loop(
                 let st = states.entry(area.id.clone()).or_default();
                 let now = Instant::now();
                 let crop = Crop::from_frame(&frame.rgba, frame.w, frame.h, area.x, area.y, area.w, area.h);
-                let (mut text, words) = match &crop {
-                    Some(cr) => match ocr.recognize(cr) {
-                        Ok(words) => (ocr::clean(&words), words),
-                        Err(_) => (String::new(), Vec::new()),
+                let (mut text, words, sure) = match &crop {
+                    Some(cr) => match ocr.recognize_checked(cr) {
+                        Ok((words, sure)) => (ocr::clean(&words), words, sure),
+                        Err(_) => (String::new(), Vec::new(), true),
                     },
-                    None => (String::new(), Vec::new()),
+                    None => (String::new(), Vec::new(), true),
                 };
                 // Subtitles are centred in the picture: text whose middle is off-centre (a menu's
                 // "Browse" at the bottom right) is not a subtitle.
@@ -1447,11 +1454,19 @@ fn ocr_loop(
                     // A line the translation memory already knows needn't wait to settle: show it on
                     // first sight. Other lines wait `stable_ms` so a half-faded frame isn't translated.
                     let known = is_new
+                        && sure
                         && crop.as_ref().is_some_and(|cr| {
                             let (t, icons, _) = ocr::text_with_icons(cr, &words);
-                            memory.lock().unwrap().knows(if icons.is_empty() { &st.candidate } else { &t })
+                            let line = if icons.is_empty() { &st.candidate } else { &t };
+                            let m = memory.lock().unwrap();
+                            // (a speaker name in front is not part of what's remembered)
+                            m.knows(line) || speaker::without_name(line).is_some_and(|rest| m.knows(rest))
                         });
-                    let settled = !is_new && st.candidate_since.is_some_and(|s| now - s >= Duration::from_millis(stable_ms));
+                    // A reading the app isn't sure of (text still animating in: GTA VI's instructions
+                    // fade in with a glow) waits three times as long: by then the real text has
+                    // replaced it, or it really is what's on screen.
+                    let wait = if sure { stable_ms } else { stable_ms * 3 };
+                    let settled = !is_new && st.candidate_since.is_some_and(|s| now - s >= Duration::from_millis(wait));
                     if (known || settled) && !ocr::similar(&st.candidate, &st.current) {
                         // Stable new text: translate it once. Colours are measured only now.
                         st.current = st.candidate.clone();
@@ -1460,17 +1475,28 @@ fn ocr_loop(
                         let (en_icons, icons_found, block) =
                             crop.as_ref().map(|cr| ocr::text_with_icons(cr, &words)).unwrap_or((String::new(), Vec::new(), None));
                         let (en, icons) = if icons_found.is_empty() { (st.current.clone(), Vec::new()) } else { (en_icons, icons_found) };
-                        // two people's lines, white and grey (not with button icons: those are instructions)
+                        // stacked subtitle lines (not with button icons: those are instructions)
                         let parts = match &crop {
-                            Some(cr) if icons.is_empty() => ocr::speaker_lines(cr, &words),
+                            // (subtitles only: an instructions box's sentences read as one text)
+                            Some(cr) if icons.is_empty() && area.centered_only => ocr::speaker_lines(cr, &words),
                             _ => Vec::new(),
                         };
                         // the block in frame fractions (the crop starts at the area's top-left)
                         let (cx0, cy0) = ((area.x.clamp(0.0, 1.0) * frame.w as f64) as u32, (area.y.clamp(0.0, 1.0) * frame.h as f64) as u32);
-                        let text_box = block.map(|(x, y, w, h)| {
+                        let to_frame = |(x, y, w, h): (u32, u32, u32, u32)| {
                             let (fw, fh) = (frame.w as f64, frame.h as f64);
                             [(cx0 + x) as f64 / fw, (cy0 + y) as f64 / fh, w as f64 / fw, h as f64 / fh]
-                        });
+                        };
+                        let text_box = block.map(to_frame);
+                        // the game's own box (only placed below it: "under_text")
+                        let game_box = match (&crop, block) {
+                            (Some(cr), Some(b)) if area.placement == "under_text" => {
+                                let mut hs: Vec<u32> = words.iter().map(|w| w.rect.3).collect();
+                                hs.sort_unstable();
+                                ocr::box_around(cr, b, hs.get(hs.len() / 2).copied().unwrap_or(20)).map(to_frame)
+                            }
+                            _ => None,
+                        };
                         seq_counter += 1;
                         latest.lock().unwrap().insert(area.id.clone(), seq_counter);
                         // the previous English line ended when this one appeared
@@ -1488,9 +1514,13 @@ fn ocr_loop(
                         let measured = hs.get(hs.len() / 2).map(|&h| h as f64 / frame.h as f64).unwrap_or(0.0);
                         // same size for every line of this area
                         let line_h = sizes.lock().unwrap().size(&area.id, measured);
-                        st.current_en = en.clone();
+                        // (logged without a speaker name in front: the sentence is what gets translated)
+                        st.current_en = {
+                            let line = speaker::split(&en, &phrases).map(|(_, _, rest)| rest).unwrap_or(&en);
+                            speaker::language_tag(line).map(|(_, s)| s).unwrap_or(line).to_string()
+                        };
                         st.current_start = Some(en_start);
-                        let _ = jobs.send(Job { area: area.id.clone(), seq: seq_counter, en, phrases, icons, line_h, en_start, text_box, parts });
+                        let _ = jobs.send(Job { area: area.id.clone(), seq: seq_counter, en, phrases, icons, line_h, en_start, text_box, game_box, parts });
                     }
                 } else if !st.current.is_empty()
                     && st.last_seen.is_some_and(|s| now - s > Duration::from_millis(clear_after_ms))
@@ -1576,18 +1606,16 @@ fn translate_loop(
             let mut hits = true;
             let mut err = None;
             for (i, (en, rel)) in job.parts.iter().enumerate() {
-                let (r, h) = translate_line(&mut tr, &c, &memory, en, &[], &job.phrases, &status);
+                let (r, h) = translate_spoken(&mut tr, &c, &memory, en, &[], &job.phrases, &status);
                 hits &= h;
                 match r {
                     Ok(segs) => {
                         if i > 0 {
                             all.push(("\n".into(), None));
                         }
-                        // the game's grey, on the plain parts (a highlighted word keeps its colour)
-                        let grey = (*rel < 0.95).then(|| {
-                            let v = (255.0 * rel.clamp(0.55, 1.0)).round() as u8;
-                            format!("#{v:02x}{v:02x}{v:02x}")
-                        });
+                        // the game's grey, on the plain parts (a highlighted word keeps its colour); the
+                        // pages draw "dim" grey whatever the colour setting
+                        let grey = (*rel < 0.95).then(|| "dim".to_string());
                         all.extend(segs.into_iter().map(|(t, col)| (t, col.or_else(|| grey.clone()))));
                     }
                     Err(e) => err = Some(e),
@@ -1595,7 +1623,7 @@ fn translate_loop(
             }
             (match err { Some(e) => Err(e), None => Ok(all) }, hits)
         } else {
-            translate_line(&mut tr, &c, &memory, &job.en, &job.icons, &job.phrases, &status)
+            translate_spoken(&mut tr, &c, &memory, &job.en, &job.icons, &job.phrases, &status)
         };
         let hit_from = if hit { "memory" } else { "" };
         // time from the English line appearing to its Arabic being ready
@@ -1658,6 +1686,7 @@ fn translate_loop(
                 error: None,
                 line_h: job.line_h,
                 text_box: job.text_box,
+                game_box: job.game_box,
                 cached: hit,
                 at: unix_ms(en_start),
             },
@@ -1670,6 +1699,7 @@ fn translate_loop(
                 error: Some(format!("{e:#}")),
                 line_h: job.line_h,
                 text_box: job.text_box,
+                game_box: job.game_box,
                 cached: false,
                 at: unix_ms(en_start),
             },
@@ -1688,6 +1718,52 @@ fn translate_loop(
 
 /// One English line to the target language: from the translation memory when it knows it, else
 /// the translator (and then into the memory). True when it came from the memory.
+/// `translate_line`, with a speaker name in front ("Dobbs: …") kept out of the translation: only the
+/// sentence is translated and remembered, and the name comes back in front in the game's colour, in
+/// the target language's letters (see `speaker`).
+fn translate_spoken(
+    tr: &mut Translator,
+    c: &Config,
+    memory: &Arc<Mutex<memory::Memory>>,
+    en: &str,
+    icons: &[String],
+    phrases: &[(String, String)],
+    status: &dyn Fn(String),
+) -> (anyhow::Result<translate::Segments>, bool) {
+    let named = speaker::split(en, phrases);
+    let (line, phrases) = match &named {
+        Some((name, _, rest)) => (*rest, speaker::phrases_without(phrases, name)),
+        None => (en, phrases.to_vec()),
+    };
+    // "In Spanish: …": the sentence alone, the tag in front (as the app knows it, or translated too)
+    let (result, hit) = match speaker::language_tag(line) {
+        Some((language, sentence)) => {
+            let (result, hit) = translate_line(tr, c, memory, sentence, icons, &phrases, status);
+            let tag = speaker::language_in(&c.target_lang, &language).or_else(|| {
+                let (r, _) = translate_line(tr, c, memory, &format!("In {language}:"), &[], &[], status);
+                r.ok().map(|segs| segs.iter().map(|s| s.0.as_str()).collect::<String>())
+            });
+            match tag {
+                Some(tag) => (result.map(|segs| speaker::with_language(&tag, segs)), hit),
+                None => (result, hit),
+            }
+        }
+        None => translate_line(tr, c, memory, line, icons, &phrases, status),
+    };
+    let Some((name, color, _)) = named else { return (result, hit) };
+    let shown = speaker::name_in(&c.target_lang, &name, reviewed_name(memory, c, &name));
+    (result.map(|segs| speaker::with_name(&shown, &color, segs)), hit)
+}
+
+/// A reviewed translation of a name alone ("Dobbs" -> "دوبس") from the downloaded translations.
+fn reviewed_name(memory: &Arc<Mutex<memory::Memory>>, c: &Config, name: &str) -> Option<String> {
+    let m = memory.lock().unwrap();
+    if m.lang() != c.target_lang {
+        return None;
+    }
+    m.get(name, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(segs, _)| segs.iter().map(|s| s.0.as_str()).collect())
+}
+
 fn translate_line(
     tr: &mut Translator,
     c: &Config,
@@ -1717,7 +1793,7 @@ fn translate_line(
     let hit = remembered.is_some();
     let result = match remembered {
         // (coloured here when the remembered line has no colours but the game highlights a word)
-        Some((segs, _)) => Ok(tr.recolor(c, segs, phrases, status)),
+        Some((segs, _)) => Ok(translate::polite(&c.target_lang, tr.recolor(c, segs, phrases, status))),
         None => tr.translate(c, en, phrases, icons, status),
     };
     if let (false, Ok(segs)) = (hit, &result) {
@@ -1736,6 +1812,67 @@ fn translate_line(
 // ------------------------------------------------------------------------------------- test mode
 
 /// `vi-translator --test-image shot.png [--area help]`: OCR + translate one screenshot and print the result.
+/// See `--read-video`: frames come from ffmpeg (raw RGBA on its stdout, never saved).
+fn read_video(file: &str, fps: f64, from: f64, to: f64) -> anyhow::Result<()> {
+    use std::io::{Read, Write};
+    let cfg = Config::load(&config_path());
+    let areas: Vec<_> = cfg.areas.iter().filter(|a| a.enabled).cloned().collect();
+    // the picture's size
+    let probe = std::process::Command::new("ffprobe")
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file])
+        .output()?;
+    let dims = String::from_utf8_lossy(&probe.stdout).trim().to_string();
+    let (w, h) = dims.split_once(',').and_then(|(a, b)| Some((a.trim().parse::<u32>().ok()?, b.trim().parse::<u32>().ok()?))).ok_or_else(|| anyhow::anyhow!("no video size in {dims:?}"))?;
+    let mut cmd = std::process::Command::new("ffmpeg");
+    cmd.args(["-v", "error"]);
+    if from > 0.0 {
+        cmd.args(["-ss", &format!("{from}")]);
+    }
+    cmd.args(["-i", file]);
+    if to > from {
+        cmd.args(["-t", &format!("{}", to - from)]);
+    }
+    cmd.args(["-an", "-vf", &format!("fps={fps}"), "-f", "rawvideo", "-pix_fmt", "rgba", "-"]).stdout(std::process::Stdio::piped());
+    let mut child = cmd.spawn()?;
+    let mut pipe = child.stdout.take().ok_or_else(|| anyhow::anyhow!("no ffmpeg output"))?;
+    Ocr::init_thread();
+    let ocr = Ocr::new()?;
+    let mut frame = vec![0u8; (w * h * 4) as usize];
+    let out = std::io::stdout();
+    let mut out = out.lock();
+    let mut n = 0u64;
+    while pipe.read_exact(&mut frame).is_ok() {
+        let t = from + n as f64 / fps;
+        n += 1;
+        for area in &areas {
+            let Some(crop) = Crop::from_frame(&frame, w, h, area.x, area.y, area.w, area.h) else { continue };
+            let (words, sure) = ocr.recognize_checked(&crop)?;
+            let en = ocr::clean(&words);
+            if en.is_empty() {
+                continue;
+            }
+            let (en_icons, icons, block) = ocr::text_with_icons(&crop, &words);
+            let phrases = ocr::colored_phrases(&crop, &words);
+            let parts = if icons.is_empty() && area.centered_only { ocr::speaker_lines(&crop, &words) } else { Vec::new() };
+            // where the text sits across the frame (areas that read only centred text skip the rest)
+            let cx = block.map(|(x, _, bw, _)| (area.x * w as f64 + x as f64 + bw as f64 / 2.0) / w as f64);
+            let line = serde_json::json!({
+                "t": (t * 100.0).round() / 100.0, "area": area.id, "en": if icons.is_empty() { en } else { en_icons },
+                "sure": sure, "icons": icons.len(), "cx": cx, "phrases": phrases,
+                "parts": parts.iter().map(|(p, rel)| serde_json::json!([p, (rel * 100.0).round() / 100.0])).collect::<Vec<_>>(),
+            });
+            writeln!(out, "{line}")?;
+        }
+        if n % 600 == 0 {
+            eprintln!("read-video: {:.0} min", t / 60.0);
+            out.flush()?;
+        }
+    }
+    let _ = child.wait();
+    eprintln!("read-video: {n} frames");
+    Ok(())
+}
+
 fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     let cfg = Config::load(&config_path());
     let mut area = cfg.areas.iter().find(|a| a.id == area_id).cloned().ok_or_else(|| anyhow::anyhow!("no area {area_id}"))?;
@@ -1763,6 +1900,14 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     let t2 = Instant::now();
     let (en_icons, icons, block) = ocr::text_with_icons(&crop, &words);
     println!("Text block (crop px): {block:?}");
+    if let Some(b) = block {
+        let mut hs: Vec<u32> = words.iter().map(|w| w.rect.3).collect();
+        hs.sort_unstable();
+        let lh = hs.get(hs.len() / 2).copied().unwrap_or(20);
+        // the game's own box around it, in frame pixels (the crop starts at the area's top-left)
+        let (cx0, cy0) = ((area.x.clamp(0.0, 1.0) * w as f64) as u32, (area.y.clamp(0.0, 1.0) * h as f64) as u32);
+        println!("Game box (frame px): {:?}", ocr::box_around(&crop, b, lh).map(|(x, y, bw, bh)| (cx0 + x, cy0 + y, bw, bh)));
+    }
     // with VI_TRANSLATOR_ICON_DIR set, write the cut-out icons there (to check how they look)
     if let Some(dir) = std::env::var_os("VI_TRANSLATOR_ICON_DIR") {
         use base64::Engine as _;
@@ -1781,9 +1926,46 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
         println!("Highlighted: {phrases:?}");
     }
     let mut tr = Translator::new(model_dir());
+    // the memory as the app has it (the downloaded reviewed lines too); read only, nothing is saved
+    let mut mem = memory::Memory::load(db_dir(), &cfg.target_lang);
+    if let Some(entries) = sync::kept_pack_in(&data_dir(), &cfg.game(), &cfg.target_lang) {
+        mem.set_shared(&cfg.target_lang, entries);
+    }
+    let line = |tr: &mut Translator, en: &str, icons: &[String]| -> anyhow::Result<translate::Segments> {
+        // "In Spanish:" in front: the sentence alone, the tag in front (as `translate_spoken` does)
+        if speaker::split(en, &phrases).is_none() {
+            if let Some((language, sentence)) = speaker::language_tag(en) {
+                println!("Language: {language}");
+                let segs = match mem.get(sentence, icons, &phrases) {
+                    Some((segs, _)) => tr.recolor(&cfg, segs, &phrases, &|s| println!("{s}")),
+                    None => tr.translate(&cfg, sentence, &phrases, icons, &|s| println!("{s}"))?,
+                };
+                let tag = speaker::language_in(&cfg.target_lang, &language).unwrap_or_else(|| format!("In {language}:"));
+                return Ok(speaker::with_language(&tag, translate::polite(&cfg.target_lang, segs)));
+            }
+        }
+        // a speaker name in front: only the sentence is translated (as `translate_spoken` does)
+        if let Some((name, color, rest)) = speaker::split(en, &phrases) {
+            let ph = speaker::phrases_without(&phrases, &name);
+            let segs = match mem.get(rest, icons, &ph) {
+                Some((segs, _)) => tr.recolor(&cfg, segs, &ph, &|s| println!("{s}")),
+                None => tr.translate(&cfg, rest, &ph, icons, &|s| println!("{s}"))?,
+            };
+            let reviewed = mem.get(&name, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(s, _)| s.iter().map(|x| x.0.as_str()).collect());
+            println!("Speaker: {name} ({color})");
+            return Ok(speaker::with_name(&speaker::name_in(&cfg.target_lang, &name, reviewed), &color, translate::polite(&cfg.target_lang, segs)));
+        }
+        match mem.get(en, icons, &phrases) {
+            Some((segs, src)) => {
+                println!("From memory ({src})");
+                Ok(translate::polite(&cfg.target_lang, tr.recolor(&cfg, segs, &phrases, &|s| println!("{s}"))))
+            }
+            None => tr.translate(&cfg, en, &phrases, icons, &|s| println!("{s}")),
+        }
+    };
     let t = Instant::now();
     // two speakers' lines (white and grey): each translated on its own, as the app does
-    let parts = if icons.is_empty() { ocr::speaker_lines(&crop, &words) } else { Vec::new() };
+    let parts = if icons.is_empty() && area.centered_only { ocr::speaker_lines(&crop, &words) } else { Vec::new() };
     let segs = if parts.len() > 1 {
         println!("Speakers: {parts:?}");
         let mut all: translate::Segments = Vec::new();
@@ -1791,16 +1973,13 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
             if i > 0 {
                 all.push(("\n".into(), None));
             }
-            let grey = (*rel < 0.95).then(|| {
-                let v = (255.0 * rel.clamp(0.55, 1.0)).round() as u8;
-                format!("#{v:02x}{v:02x}{v:02x}")
-            });
-            let segs = tr.translate(&cfg, en, &phrases, &[], &|s| println!("{s}"))?;
+            let grey = (*rel < 0.95).then(|| "dim".to_string());
+            let segs = line(&mut tr, en, &[])?;
             all.extend(segs.into_iter().map(|(t, col)| (t, col.or_else(|| grey.clone()))));
         }
         all
     } else {
-        tr.translate(&cfg, &en_icons, &phrases, &icons, &|s| println!("{s}"))?
+        line(&mut tr, &en_icons, &icons)?
     };
     println!("Segments: {}", serde_json::to_string(&segs).unwrap_or_default());
     let shown: String = segs
@@ -1936,6 +2115,8 @@ fn main() {
             Ocr::init_thread();
             let ocr = Ocr::new()?;
             let game = opt("--game").unwrap_or_else(|| Config::load(&config_path()).game());
+            // (the language in use, for a script's own words: `--lang xx` to try another)
+            screens::use_words_for(&game, &opt("--lang").unwrap_or_else(|| Config::load(&config_path()).target_lang));
             let pages = match opt("--script") {
                 Some(file) => {
                     let mut p = pagescript::Pages::load(&std::fs::read_to_string(&file)?)?;
@@ -2011,6 +2192,16 @@ fn main() {
         };
         if let Err(e) = run() {
             eprintln!("read-pages: {e:#}");
+        }
+        return;
+    }
+    // `--read-video <file> [--fps N] [--from S] [--to S]`: every enabled area of every frame read the
+    // way the app reads them (nothing translated), as JSON lines on stdout — to collect a game's lines.
+    if let Some(file) = args.iter().position(|a| a == "--read-video").and_then(|i| args.get(i + 1)) {
+        let num = |name: &str, def: f64| args.iter().position(|a| a == name).and_then(|j| args.get(j + 1)).and_then(|v| v.parse().ok()).unwrap_or(def);
+        if let Err(e) = read_video(file, num("--fps", 2.0), num("--from", 0.0), num("--to", 0.0)) {
+            eprintln!("read-video: {e:#}");
+            std::process::exit(1);
         }
         return;
     }

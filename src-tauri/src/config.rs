@@ -394,6 +394,12 @@ impl Default for Profile {
 /// `Config::server_games`).
 pub const BUILTINS: [&str; 1] = ["gta6"];
 
+/// GTA VI's own text look: white, medium weight (the font sets it: not bold), a soft shadow, no
+/// outline — measured against the game's subtitles on gameplay frames.
+fn gta6_text() -> Style {
+    Style { font_family: "Noto Sans Arabic Medium".into(), bold: false, outline_width: 0.0, shadow: true, ..Style::default() }
+}
+
 /// A built-in profile as the app ships it.
 pub fn builtin_profile(id: &str) -> Option<Profile> {
     let gta_areas = || {
@@ -402,14 +408,27 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 id: "subtitles".into(),
                 name: "Subtitles".into(),
                 centered_only: true,
+                // up to two lines (two speakers), at ~0.84–0.92 of the height; it ends above the step
+                // dots and the instructions GTA VI shows under the subtitles
                 x: 0.10,
-                y: 0.78,
+                y: 0.80,
                 w: 0.80,
-                h: 0.17,
-                placement: "above".into(),
+                h: 0.118,
+                // A fixed place, whatever the English does: above the bottom instructions' Arabic
+                // line, which sits right above the highest the game's lines go (two lines with an
+                // instruction under them, ~0.83); grows upward, so it never covers anything and
+                // doesn't jump when a line or an instruction comes or goes.
+                placement: "custom".into(),
+                out_x: 0.10,
+                out_y: 0.56,
+                out_w: 0.80,
+                out_h: 0.20,
+                out_valign: "bottom".into(),
+                out_halign: "center".into(),
                 text_pos: "bottom-center".into(),
                 background: "none".into(),
-                font_family: "Tajawal".into(),
+                font_family: "Noto Sans Arabic Medium".into(),
+                style: Some(gta6_text()),
                 // matched size × 104% looks the same as GTA's subtitles (calibrated on real frames)
                 font_scale: 1.04,
                 ..Area::default()
@@ -417,17 +436,44 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
             Area {
                 id: "help".into(),
                 name: "Instructions (top left)".into(),
+                // GTA VI's instructions box sits at ~0.27–0.31 of the height (seen on gameplay frames)
                 x: 0.01,
-                y: 0.02,
+                y: 0.18,
                 w: 0.30,
-                h: 0.22,
+                h: 0.20,
                 // right under GTA's own box: same left edge, at most its width, growing downward
                 placement: "under_text".into(),
                 text_pos: "top-left".into(),
-                font_family: "Tajawal".into(),
+                font_family: "Noto Sans Arabic Medium".into(),
+                style: Some(gta6_text()),
                 // square, dark see-through box like GTA's own instructions box
                 background: "game".into(),
                 // matched size × 92% looks the same as GTA's instruction text
+                font_scale: 0.92,
+                ..Area::default()
+            },
+            Area {
+                id: "instructions".into(),
+                name: "Instructions (bottom)".into(),
+                // GTA VI's instructions at the very bottom, under the subtitles and the step dots
+                // ("Use Ⓡ to aim at the teller"): centred, one line, with button icons
+                centered_only: true,
+                x: 0.20,
+                y: 0.935,
+                w: 0.60,
+                h: 0.06,
+                // A fixed line right above the highest the game's subtitles go (~0.83), the subtitles'
+                // Arabic above it: nothing covers the English, and nothing jumps.
+                placement: "custom".into(),
+                out_x: 0.10,
+                out_y: 0.765,
+                out_w: 0.80,
+                out_h: 0.05,
+                out_valign: "bottom".into(),
+                out_halign: "center".into(),
+                background: "none".into(), // like the game: no box, white with pink words
+                font_family: "Noto Sans Arabic Medium".into(),
+                style: Some(gta6_text()),
                 font_scale: 0.92,
                 ..Area::default()
             },

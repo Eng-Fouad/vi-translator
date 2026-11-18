@@ -45,12 +45,13 @@ impl Crop {
         Some(Crop { w: cw, h: ch, rgba: out })
     }
 
-    fn px(&self, x: u32, y: u32) -> (i32, i32, i32) {
+    pub fn px(&self, x: u32, y: u32) -> (i32, i32, i32) {
         let i = ((y * self.w + x) * 4) as usize;
         (self.rgba[i] as i32, self.rgba[i + 1] as i32, self.rgba[i + 2] as i32)
     }
 }
 
+#[derive(Clone)]
 pub struct Word {
     pub text: String,
     /// Box in crop pixels: x, y, w, h.
@@ -80,11 +81,17 @@ impl Ocr {
         let scale = if crop.h < 60 { 2 } else { 1 };
         let (w, h) = (crop.w * scale, crop.h * scale);
         let max_dim = engine::Engine::max_dim();
+        let inside = matches!(mode, Prep::Outlined).then(|| outlined_letters(crop));
         let mut out = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h {
             for x in 0..w {
-                let (r, g, b) = crop.px(x / scale, y / scale);
-                let v = 255 - prep_value(mode, r, g, b);
+                let v = match &inside {
+                    Some(m) => if m[((y / scale) * crop.w + x / scale) as usize] { 0 } else { 255 },
+                    None => {
+                        let (r, g, b) = crop.px(x / scale, y / scale);
+                        255 - prep_value(mode, r, g, b)
+                    }
+                };
                 out.extend_from_slice(&[v, v, v, 255]);
             }
         }
@@ -105,6 +112,19 @@ impl Ocr {
     /// instructions box) — and keep whichever reading has more real-looking words. A reading can
     /// look clean yet have silently lost words, so both always run.
     pub fn recognize(&self, crop: &Crop) -> Result<Vec<Word>> {
+        Ok(self.recognize_checked(crop)?.0)
+    }
+
+    /// `recognize`, and whether the reading is sure: the two ways of reading agree (or one only
+    /// missed a line the other has, like a grey speaker's). Not sure: text still animating in —
+    /// GTA VI's instructions start with a white glow around their outline that fades away.
+    pub fn recognize_checked(&self, crop: &Crop) -> Result<(Vec<Word>, bool)> {
+        let (words, sure, first) = self.recognize_passes(crop)?;
+        Ok((with_speaker_name(words, &first), sure))
+    }
+
+    /// The reading taken, whether it is sure, and the first pass's reading (see `with_speaker_name`).
+    fn recognize_passes(&self, crop: &Crop) -> Result<(Vec<Word>, bool, Vec<Word>)> {
         let first = drop_junk(self.recognize_with(crop, Prep::Brightest)?);
         let second = drop_junk(self.recognize_with(crop, Prep::WhiteOrColour)?);
         let score = |w: &[Word]| {
@@ -118,7 +138,31 @@ impl Ocr {
         // The second reading must clearly win: a 1-character edge is usually a misread ("time" for "the").
         // (a pass that read nothing never replaces one that read something: "nothing" scores 0, which
         // can beat a junky but useful read such as "gussian FaiLedj" for the Pricedown title)
-        Ok(if !second.is_empty() && score(&second) >= score(&first) + 3 { second } else { first })
+        let txt = |w: &[Word]| w.iter().map(|x| x.text.as_str()).collect::<Vec<_>>().join(" ");
+        // the two readings disagree, or the one taken looks wrong ("to aim uold", "aim7ät")
+        let unsure = !agree(&txt(&first), &txt(&second));
+        let (t1, t2) = (txt(&first), txt(&second));
+        let took_second = !second.is_empty() && score(&second) >= score(&first) + 3;
+        let first_kept = first.clone();
+        let best = if took_second { second } else { first };
+        // Outlined letters over a bright floor (GTA VI's instructions under the subtitles): read once
+        // more with only the letters inside their outline.
+        if unsure || quality(&best).1 > 0 || words_out_of_order(&best) {
+            let third = drop_junk(self.recognize_with(crop, Prep::Outlined)?);
+            if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
+                eprintln!("[ocr] pass3 {:?} (score {})", txt(&third), score(&third));
+            }
+            // (and only with as many words the other passes read too: "tix myeleg" scores as plain
+            // letters, but no other pass saw those words)
+            let t3 = txt(&third);
+            let best_others = if took_second { [t1.as_str(), &t3] } else { [t2.as_str(), &t3] }.join(" ");
+            let third_ok = agreed(&third, &[t1.as_str(), &t2].join(" ")) >= agreed(&best, &best_others);
+            // (a clear edge, like the second pass: "lget's" beat "Let's" by one point)
+            if !third.is_empty() && score(&third) >= score(&best) + 2 && !words_out_of_order(&third) && third_ok {
+                return Ok((third, false, first_kept));
+            }
+        }
+        Ok((best, !unsure, first_kept))
     }
 
     pub fn recognize_with(&self, crop: &Crop, mode: Prep) -> Result<Vec<Word>> {
@@ -136,19 +180,176 @@ impl Ocr {
     }
 }
 
+/// Two words OCR glued with a dot it saw in the gap: "my.leg" -> "my leg" (both sides at least two
+/// lower-case letters, so "e.g." and "U.S." stay).
+fn split_glued(w: &str) -> String {
+    if let Some((a, b)) = w.split_once('.') {
+        let low = |t: &str, n: usize| t.chars().take_while(|c| c.is_ascii_lowercase()).count() >= n;
+        let a_tail: String = a.chars().rev().take_while(|c| c.is_ascii_lowercase()).collect();
+        if a_tail.len() >= 2 && a_tail.len() == a.trim_start_matches(|c: char| !c.is_alphanumeric()).len() && low(b, 2) && !b.contains('.') {
+            return format!("{a} {b}");
+        }
+    }
+    w.to_string()
+}
+
+/// GTA VI's speaker names ("Dobbs: Not to be annoying…"): a pale colour that only the first pass
+/// (brightest channel) reads when it sits over something bright. When that pass starts a line with
+/// "Name:" left of where the reading taken starts that line, the name goes in front of it.
+fn with_speaker_name(mut words: Vec<Word>, first: &[Word]) -> Vec<Word> {
+    let Some((n, name, (nx, ny, nw, nh))) = name_words(first) else { return words };
+    if name_words(&words).is_some() {
+        return words;
+    }
+    // the same name read without its colon ("Cal I will"): give it back
+    let bare: Vec<String> = name.trim_end_matches(':').split_whitespace().map(String::from).collect();
+    let line: Vec<(u32, String)> = top_line(&words).iter().map(|w| (w.rect.0, w.text.clone())).collect();
+    if line.len() > n && line[..n].iter().map(|(_, t)| t).eq(bare.iter()) && line[0].0 < nx + nw {
+        let x = line[n - 1].0;
+        if let Some(w) = words.iter_mut().find(|w| w.rect.0 == x && w.text == bare[n - 1]) {
+            w.text.push(':');
+        }
+        return words;
+    }
+    let cy = ny + nh / 2;
+    // the words of the same line, all to the right of the name
+    let same_line: Vec<&Word> = words.iter().filter(|w| w.rect.1 <= cy && cy <= w.rect.1 + w.rect.3).collect();
+    if same_line.is_empty() || same_line.iter().any(|w| w.rect.0 < nx + nw) {
+        return words;
+    }
+    let line = same_line[0].line;
+    let at = words.iter().position(|w| w.line == line).unwrap_or(0);
+    // (each word of the name, from the first pass, in front)
+    let named: Vec<Word> = top_line(first)[..n].iter().map(|w| Word { line, text: w.text.clone(), rect: w.rect }).collect();
+    for (k, w) in named.into_iter().enumerate() {
+        words.insert(at + k, w);
+    }
+    words
+}
+
+/// How many words at the start of a line make a speaker name: "Dobbs:" (1) or "Real Dimez:",
+/// "Officer Smith:" (2) — capitalised words, the last ending with a colon.
+pub fn name_len(tokens: &[&str]) -> Option<usize> {
+    let first = tokens.first()?;
+    if speaker_name(first).is_some() {
+        return Some(1);
+    }
+    let capital_word = first.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+        && first.chars().count() >= 2
+        && first.chars().all(|c| c.is_alphabetic() || c == '\'' || c == '-' || c == '.');
+    (capital_word && tokens.get(1).is_some_and(|t| speaker_name(t).is_some())).then_some(2)
+}
+
+/// A line starting with a speaker name: (the name with its colon, "Real Dimez:"; the rest of the line).
+pub fn split_name(text: &str) -> Option<(String, &str)> {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let n = name_len(&tokens)?;
+    let last = tokens[n - 1];
+    let end = text.find(last)? + last.len();
+    Some((tokens[..n].join(" "), text[end..].trim_start()))
+}
+
+/// The words of the top line, left to right (by position: the OCR can number two stacked lines alike).
+fn top_line(words: &[Word]) -> Vec<&Word> {
+    let Some(top) = words.iter().min_by_key(|w| w.rect.1 + w.rect.3 / 2) else { return Vec::new() };
+    let (ty0, ty1) = (top.rect.1, top.rect.1 + top.rect.3);
+    let mut line: Vec<&Word> = words.iter().filter(|w| (ty0..=ty1).contains(&(w.rect.1 + w.rect.3 / 2))).collect();
+    line.sort_by_key(|w| w.rect.0);
+    line
+}
+
+/// The speaker name at the start of the top line: (how many words, their text with the colon, their box).
+fn name_words(words: &[Word]) -> Option<(usize, String, (u32, u32, u32, u32))> {
+    let line = top_line(words);
+    let n = name_len(&line.iter().map(|w| w.text.as_str()).collect::<Vec<_>>())?;
+    let (x0, y0) = (line[..n].iter().map(|w| w.rect.0).min()?, line[..n].iter().map(|w| w.rect.1).min()?);
+    let x1 = line[..n].iter().map(|w| w.rect.0 + w.rect.2).max()?;
+    let y1 = line[..n].iter().map(|w| w.rect.1 + w.rect.3).max()?;
+    Some((n, line[..n].iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" "), (x0, y0, x1 - x0, y1 - y0)))
+}
+
+/// The game's own box around a text block (GTA's see-through help box): its edges found where the
+/// brightness leaves the box's own level, scanning out from the text (crop pixels: x, y, w, h). The
+/// level inside is the median brightness of the block's columns (letters are a minority of each
+/// column); an edge is the first of 3 columns (rows) in a row that differ from it by 25 or more,
+/// within 3 line heights of the text. None when an edge isn't clear (no box, or busy scenery).
+pub fn box_around(c: &Crop, block: (u32, u32, u32, u32), line_h: u32) -> Option<(u32, u32, u32, u32)> {
+    let (bx, by, bw, bh) = block;
+    if bw == 0 || bh == 0 || c.w == 0 || c.h == 0 {
+        return None;
+    }
+    let lum = |x: u32, y: u32| {
+        let i = ((y * c.w + x) * 4) as usize;
+        c.rgba[i].max(c.rgba[i + 1]).max(c.rgba[i + 2]) as i32
+    };
+    let median = |mut v: Vec<i32>| {
+        v.sort_unstable();
+        v[v.len() / 2]
+    };
+    let (y0, y1) = (by, (by + bh).min(c.h));
+    let col = |x: u32| median((y0..y1).map(|y| lum(x, y)).collect());
+    let (x0, x1) = (bx, (bx + bw).min(c.w));
+    let reach = 3 * line_h.max(4);
+    // walks out from the text: the box's own level is taken right next to it (its padding; the box
+    // is lighter over a bright sky), and the edge is the first of 3 values in a row 25 or more off it
+    let edge = |steps: Vec<u32>, at: &dyn Fn(u32) -> i32| -> Option<u32> {
+        if steps.len() < 8 {
+            return None;
+        }
+        let inside = median(steps[1..4].iter().map(|&s| at(s)).collect());
+        let mut run = 0;
+        for (i, &s) in steps.iter().enumerate().skip(1) {
+            if (at(s) - inside).abs() >= 25 {
+                run += 1;
+                if run == 3 {
+                    return Some(steps[i - 2]);
+                }
+            } else {
+                run = 0;
+            }
+        }
+        None
+    };
+    let left = edge((x0.saturating_sub(reach)..x0).rev().collect(), &col)?; // first column outside, going left
+    let right = edge((x1..(x1 + reach).min(c.w)).collect(), &col)?; // first column outside, going right
+    let (lx, rx) = (left + 1, right);
+    let row = |y: u32| median((lx..rx).step_by(2).map(|x| lum(x, y)).collect());
+    let bottom = edge((y1..(y1 + reach).min(c.h)).collect(), &row)?;
+    let top = edge((y0.saturating_sub(reach)..y0).rev().collect(), &row).map(|t| t + 1).unwrap_or(y0);
+    (rx > lx && bottom > top).then_some((lx, top, rx - lx, bottom - top))
+}
+
+/// "Dobbs:" -> "Dobbs": a capitalised name of letters (a ' or - inside) ending with a colon.
+pub fn speaker_name(word: &str) -> Option<&str> {
+    let n = word.strip_suffix(':')?;
+    let mut ch = n.chars();
+    let ok = ch.next().is_some_and(|c| c.is_ascii_uppercase())
+        && n.chars().count() >= 2
+        && n.chars().all(|c| c.is_alphabetic() || c == '\'' || c == '-' || c == '.');
+    ok.then_some(n)
+}
+
+/// Letters in the words of `words` that `other` (another reading of the same text) has too.
+fn agreed(words: &[Word], other: &str) -> usize {
+    let norm = |t: &str| t.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+    let seen: std::collections::HashSet<String> = other.split_whitespace().map(norm).filter(|t| !t.is_empty()).collect();
+    words.iter().map(|w| norm(&w.text)).filter(|t| seen.contains(t)).map(|t| t.chars().count()).sum()
+}
+
 /// Join words and drop OCR noise (almost no letters).
 pub fn clean(words: &[Word]) -> String {
     let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = text.split_whitespace().map(split_glued).collect::<Vec<_>>().join(" ");
     let letters = text.chars().filter(|c| c.is_alphabetic()).count();
     let total = text.chars().count().max(1);
     if letters >= 4 && letters as f64 / total as f64 > 0.5 { fix_contractions(&text) } else { String::new() }
 }
 
-/// GTA VI shows two people's lines as two subtitle lines: the one speaking now in white, the other
-/// in grey ("Do not move." / "Idiot."). Lines whose letters differ clearly in brightness are split
-/// into one part per speaker: (text, brightness relative to the brightest part, 0..1]. A line that
-/// only wrapped (the same speaker, the same brightness) stays one part. Fewer than two parts: empty.
+/// GTA VI stacks subtitle lines: two people's, the one speaking now in white and the other in grey
+/// ("Do not move." / "Idiot."), or two white ones, the second coming and going under the first.
+/// Each is split off as its own part — lines that differ clearly in brightness, or a line that ends
+/// a sentence — so each is translated (and remembered) on its own: (text, brightness relative to the
+/// brightest part, 0..1]. A line that only wrapped stays one part. Fewer than two parts: empty.
 pub fn speaker_lines(c: &Crop, words: &[Word]) -> Vec<(String, f64)> {
     if words.len() < 2 {
         return Vec::new();
@@ -203,12 +404,24 @@ pub fn speaker_lines(c: &Crop, words: &[Word]) -> Vec<(String, f64)> {
         v.sort_by(|a, b| a.total_cmp(b));
         v[v.len() / 2]
     };
-    // consecutive lines of about the same brightness are one speaker
+    // A line that ends a sentence ("Sit tight. We're gonna check on a couple things.") is a line of
+    // its own: GTA VI stacks the next one under it ("What's he doing with the bag?") and takes it
+    // away again, both white. A line that ends mid-sentence only wrapped.
+    let ends_sentence = |idx: &[usize]| {
+        let last = idx.iter().max_by_key(|&&i| (words[i].line, words[i].rect.0)).map(|&i| words[i].text.trim_end_matches(['"', '\'', '”', '’', ')']));
+        last.is_some_and(|t| t.ends_with(['.', '?', '!', '…']))
+    };
+    let starts_lower = |idx: &[usize]| {
+        let first = idx.iter().min_by_key(|&&i| (words[i].line, words[i].rect.0)).map(|&i| words[i].text.as_str());
+        first.and_then(|t| t.chars().find(|c| c.is_alphabetic())).is_some_and(|c| c.is_lowercase())
+    };
+    // consecutive lines of about the same brightness, the upper one not ending a sentence, are one line
     let mut parts: Vec<(Vec<usize>, f64)> = Vec::new();
     for (_, mut idx) in joined {
         let l = line_lum(&idx);
         match parts.last_mut() {
-            Some((pidx, pl)) if l.min(*pl) >= 0.82 * l.max(*pl) => {
+            // (a line going on in lower case only wrapped, even after "not..." : "…which is not… / much.")
+            Some((pidx, pl)) if l.min(*pl) >= 0.82 * l.max(*pl) && (!ends_sentence(pidx) || starts_lower(&idx)) => {
                 pidx.append(&mut idx);
                 *pl = pl.max(l);
             }
@@ -293,12 +506,54 @@ mod speaker_tests {
     }
 
     #[test]
+    fn a_dim_icon_is_cut_out_visible() {
+        // a grey (185) square on a dark (40) background, with a dark symbol inside; the line's
+        // threshold (220) is above the icon's brightness
+        let (w, h) = (20u32, 20u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let v = if (4..16).contains(&x) && (4..16).contains(&y) && !((8..12).contains(&x) && (8..12).contains(&y)) { 185 } else { 40 };
+                let i = ((y * w + x) * 4) as usize;
+                rgba[i..i + 4].copy_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let c = Crop { rgba, w, h };
+        let url = icon_png(&c, (4, 4, 12, 12), 220).expect("an icon");
+        use base64::Engine as _;
+        let png = base64::engine::general_purpose::STANDARD.decode(url.trim_start_matches("data:image/png;base64,")).unwrap();
+        let img = image::load_from_memory(&png).unwrap().to_rgba8();
+        let solid = img.pixels().filter(|p| p[3] == 255).count();
+        assert!(solid >= 12 * 12, "the icon must stay visible, {solid} solid pixels");
+    }
+
+    #[test]
     fn a_white_and_a_grey_line_are_two_speakers() {
         let (c, w) = picture(&[("Do", (100, 10, 30, 20), 0, 210), ("not", (140, 10, 40, 20), 0, 215), ("move.", (190, 10, 60, 20), 0, 205), ("Idiot.", (150, 50, 60, 20), 1, 122)]);
         let parts = speaker_lines(&c, &w);
         assert_eq!(parts.iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["Do not move.", "Idiot."]);
         assert_eq!(parts[0].1, 1.0);
         assert!((0.5..0.65).contains(&parts[1].1), "{}", parts[1].1);
+    }
+
+    #[test]
+    fn stacked_white_lines_are_two_subtitles() {
+        let (c, w) = picture(&[
+            ("Sit", (60, 10, 30, 20), 0, 210), ("tight.", (100, 10, 50, 20), 0, 212), ("We're", (160, 10, 50, 20), 0, 208), ("off.", (220, 10, 40, 20), 0, 210),
+            ("What's", (100, 50, 60, 20), 1, 209), ("that?", (170, 50, 50, 20), 1, 211),
+        ]);
+        let parts = speaker_lines(&c, &w);
+        assert_eq!(parts.iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["Sit tight. We're off.", "What's that?"]);
+        assert!(parts.iter().all(|p| p.1 > 0.95), "both white: neither drawn grey");
+    }
+
+    #[test]
+    fn readings_that_agree() {
+        assert!(agree("Do not move. Idiot.", "Do not move."), "the grey line missed");
+        assert!(agree("It's your fault.", "It's your fault"));
+        assert!(agree("", ""));
+        assert!(!agree("", "to aim uold"), "one read nothing");
+        assert!(!agree("Press toathreaten.the teller", "Press to threaten the tene"));
     }
 
     #[test]
@@ -553,7 +808,60 @@ pub fn colored_phrases(crop: &Crop, words: &[Word]) -> Vec<(String, String)> {
             phrases.push((cur.join(" "), hex(cc)));
         }
     }
+    // a speaker name's pale colour ("Kyle:" pink, "Jason:" yellow) is too soft for the highlight test
+    if let Some((name, color)) = name_color(crop, words) {
+        if !phrases.iter().any(|(p, _)| p.starts_with(name.as_str())) {
+            phrases.insert(0, (name, color));
+        }
+    }
     phrases
+}
+
+/// A speaker name in front of a subtitle ("Kyle: Hey, yeah!") and its colour, when it is drawn in a
+/// colour of its own: the brightest letter pixels of the name against those of the words after it.
+pub fn name_color(crop: &Crop, words: &[Word]) -> Option<(String, String)> {
+    let (n, name_text, name_rect) = name_words(words)?;
+    let line = top_line(words);
+    let rest: Vec<&Word> = line[n..].iter().take(4).copied().collect();
+    let letters = |rects: &[(u32, u32, u32, u32)]| -> Option<(i32, i32, i32)> {
+        let mut px: Vec<(i32, i32, i32)> = Vec::new();
+        for &(x0, y0, w, h) in rects {
+            for y in y0..(y0 + h).min(crop.h) {
+                for x in x0..(x0 + w).min(crop.w) {
+                    let p = crop.px(x, y);
+                    if p.0.max(p.1).max(p.2) >= 150 {
+                        px.push(p);
+                    }
+                }
+            }
+        }
+        if px.len() < 12 {
+            return None;
+        }
+        // the letters' own colour: the brightest part (edges blend into the background)
+        px.sort_by_key(|p| -(p.0 + p.1 + p.2));
+        px.truncate((px.len() * 2 / 5).max(12));
+        let med = |f: fn(&(i32, i32, i32)) -> i32| {
+            let mut v: Vec<i32> = px.iter().map(f).collect();
+            v.sort_unstable();
+            v[v.len() / 2]
+        };
+        Some((med(|p| p.0), med(|p| p.1), med(|p| p.2)))
+    };
+    let name = letters(&[name_rect])?;
+    let chroma = name.0.max(name.1).max(name.2) - name.0.min(name.1).min(name.2);
+    if chroma < 22 {
+        return None; // white or grey: not a coloured name
+    }
+    if let Some(other) = letters(&rest.iter().map(|w| w.rect).collect::<Vec<_>>()) {
+        // (tinted against the words after it: Peggy's pale green 211,232,201 against 220,220,218)
+        let other_chroma = other.0.max(other.1).max(other.2) - other.0.min(other.1).min(other.2);
+        let diff = (name.0 - other.0).abs().max((name.1 - other.1).abs()).max((name.2 - other.2).abs());
+        if chroma - other_chroma < 15 && diff < 25 {
+            return None; // the whole line is that colour: not a name of its own
+        }
+    }
+    Some((name_text, format!("#{:02x}{:02x}{:02x}", name.0, name.1, name.2)))
 }
 
 // ------------------------------------------------------------------------------------- button icons
@@ -578,6 +886,21 @@ pub fn icon_png(c: &Crop, r: (u32, u32, u32, u32), thr: u8) -> Option<String> {
     let lum = |x: u32, y: u32| {
         let i = ((y * c.w + x) * 4) as usize;
         c.rgba[i].max(c.rgba[i + 1]).max(c.rgba[i + 2])
+    };
+    // A dimmer icon than the line's text (a video's compression greys GTA VI's L2 to ~185): the cut-out
+    // line goes halfway between the icon's brightest and the background around it, or nothing at all
+    // would count as icon and it would come out fully transparent.
+    let brightest = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).map(|(x, y)| lum(x, y)).max().unwrap_or(0);
+    let thr = if brightest > thr {
+        thr
+    } else {
+        let mut edge: Vec<u8> = (x0..x1).flat_map(|x| [lum(x, y0), lum(x, y1 - 1)]).chain((y0..y1).flat_map(|y| [lum(x0, y), lum(x1 - 1, y)])).collect();
+        edge.sort_unstable();
+        let bg = edge[edge.len() / 2];
+        if brightest < bg.saturating_add(40) {
+            return None; // no shape that stands out: nothing to cut
+        }
+        ((brightest as u32 + bg as u32) / 2) as u8
     };
     let mut img = image::RgbaImage::new(x1 - x0, y1 - y0);
     for y in y0..y1 {
@@ -880,6 +1203,71 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
 
 // ------------------------------------------------------------------------------------- OCR passes
 
+/// Two readings of the same picture agree: alike, or one is the other with a line missing (the
+/// white-only reading drops a grey speaker's line). Nothing read by both agrees too.
+fn agree(a: &str, b: &str) -> bool {
+    if a.trim().is_empty() && b.trim().is_empty() {
+        return true;
+    }
+    if a.trim().is_empty() || b.trim().is_empty() {
+        return false;
+    }
+    if similar(a, b) {
+        return true;
+    }
+    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    long.contains(short)
+}
+
+/// Words of one line that the OCR gave right to left ("to aim uold" for "Hold LT to aim"): a reading
+/// of scenery, not of the text.
+fn words_out_of_order(words: &[Word]) -> bool {
+    // (also across the OCR's lines when they are at the same height: "uold" put on a line of its own)
+    words.windows(2).any(|p| {
+        let same_row = (p[0].rect.1 as i64 - p[1].rect.1 as i64).abs() < (p[0].rect.3.max(p[1].rect.3) as i64) / 2;
+        (p[0].line == p[1].line || same_row) && p[1].rect.0 + p[1].rect.2 < p[0].rect.0
+    })
+}
+
+/// Letters drawn with a dark outline (GTA VI's instructions): the bright pixels that have the outline
+/// close on both sides, across or up and down — inside a letter's stroke. A bright floor or wall
+/// behind the text has the outline on one side only, so it drops out.
+fn outlined_letters(c: &Crop) -> Vec<bool> {
+    let (w, h) = (c.w as usize, c.h as usize);
+    let lum: Vec<i32> = (0..w * h).map(|i| { let (r, g, b) = c.px((i % w) as u32, (i / w) as u32); r.max(g).max(b) }).collect();
+    // (the outline is dark grey, lighter where video compression smeared it)
+    let dark = |i: usize| lum[i] < 120;
+    // a stroke is a small part of the text's height; the area holds about one line
+    let reach = (h / 9).clamp(3, 12);
+    let mut m = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            if lum[i] < 170 {
+                continue;
+            }
+            let side = |dx: isize, dy: isize| {
+                (1..=reach as isize).any(|k| {
+                    let (nx, ny) = (x as isize + dx * k, y as isize + dy * k);
+                    nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h && dark(ny as usize * w + nx as usize)
+                })
+            };
+            m[i] = (side(-1, 0) && side(1, 0)) || (side(0, -1) && side(0, 1));
+        }
+    }
+    // one pixel thicker: the strokes come out thin, and the OCR reads solid letters best
+    let mut thick = m.clone();
+    for y in 1..h.saturating_sub(1) {
+        for x in 1..w.saturating_sub(1) {
+            let i = y * w + x;
+            if !m[i] && (m[i - 1] || m[i + 1] || m[i - w] || m[i + w]) && lum[i] >= 150 {
+                thick[i] = true;
+            }
+        }
+    }
+    thick
+}
+
 /// How pixels are turned into the black-on-white picture the OCR reads.
 #[derive(Clone, Copy)]
 pub enum Prep {
@@ -888,6 +1276,8 @@ pub enum Prep {
     /// Only near-white or strongly coloured pixels, stretched: drops a lamp or sky showing through
     /// GTA's grey see-through box, and dull red/brown scenery, while keeping white and highlight text.
     WhiteOrColour,
+    /// Only the bright pixels inside a dark outline (see `outlined_letters`).
+    Outlined,
 }
 
 fn prep_value(mode: Prep, r: i32, g: i32, b: i32) -> u8 {
@@ -898,6 +1288,7 @@ fn prep_value(mode: Prep, r: i32, g: i32, b: i32) -> u8 {
             let v = if mx - mn > 80 { mx } else { mn }; // coloured: its brightness; grey/white: its whiteness
             (((v - 150).max(0) * 255) / 105).min(255) as u8
         }
+        Prep::Outlined => r.max(g).max(b) as u8, // (prepared as a whole picture in preprocess)
     }
 }
 

@@ -466,6 +466,19 @@ fn fetch(http: &reqwest::blocking::Client, url: &str, have: Option<&String>) -> 
     Some((r.bytes().ok()?.to_vec(), tag))
 }
 
+/// The pack kept from the last download ("series/version"; before change downloads: the version).
+fn kept_pack(paths: &Paths, st: &State, game: &str, lang: &str) -> Option<Vec<memory::Entry>> {
+    let version = st.versions.get(&format!("pack/{game}/{lang}")).and_then(|v| v.split_once('/')).map(|(_, v)| v.to_string())
+        .or_else(|| st.versions.get(&format!("data/{game}/{lang}")).cloned())?;
+    open_pack(&std::fs::read(paths.shared(game, lang)).ok()?, game, lang, &version)
+}
+
+/// The pack kept from the last download, outside the running app (`--test-image`).
+pub fn kept_pack_in(data: &std::path::Path, game: &str, lang: &str) -> Option<Vec<memory::Entry>> {
+    let paths = Paths { data: data.to_path_buf(), db: data.to_path_buf() };
+    kept_pack(&paths, &load_state(&paths), game, lang)
+}
+
 fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Memory>>, paths: &Paths, game: &str, lang: &str) {
     let st = load_state(paths);
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout("games")), st.versions.get("layout/games")) {
@@ -473,13 +486,8 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
             apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
         }
     }
-    // the pack kept from the last download ("series/version"; before change downloads: the version)
-    let version = st.versions.get(&format!("pack/{game}/{lang}")).and_then(|v| v.split_once('/')).map(|(_, v)| v.to_string())
-        .or_else(|| st.versions.get(&format!("data/{game}/{lang}")).cloned());
-    if let (Ok(bytes), Some(version)) = (std::fs::read(paths.shared(game, lang)), version) {
-        if let Some(entries) = open_pack(&bytes, game, lang, &version) {
-            memory.lock().unwrap().set_shared(lang, entries);
-        }
+    if let Some(entries) = kept_pack(paths, &st, game, lang) {
+        memory.lock().unwrap().set_shared(lang, entries);
     }
     // (another game: the last one's extra words, phrases and OCR fixes no longer apply)
     crate::screens::set_layout_words(game, lang, Vec::new(), Vec::new(), Vec::new());

@@ -56,7 +56,8 @@ mod tests {
     fn seals_and_opens_one_record() {
         let k = [7u8; 32];
         let line = seal_with(&k, "memory/ar", r#"{"en":"hi","ar":"مرحبا","source":"local"}"#);
-        assert!(!line.contains("hi") && !line.contains('\n'), "nothing readable, one line");
+        // (not "hi" itself: random base64 has it now and then)
+        assert!(!line.contains("\"en\"") && !line.contains("مرحبا") && !line.contains('\n'), "nothing readable, one line");
         assert_eq!(open_with(&k, "memory/ar", &line).as_deref(), Some(r#"{"en":"hi","ar":"مرحبا","source":"local"}"#));
         assert!(open_with(&k, "lines-log", &line).is_none(), "another kind must not open");
         assert!(open_with(&[8u8; 32], "memory/ar", &line).is_none(), "another key must not open");

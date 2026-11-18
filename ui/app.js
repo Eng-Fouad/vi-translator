@@ -9,6 +9,7 @@ let selected = null; // selected area id
 const lastSegs = {}; // area id -> latest Arabic segments
 const lastLineH = {}; // area id -> English line height (fraction of the frame), for size matching
 const lastTextBox = {}; // area id -> English text block [x, y, w, h] (fractions of the frame)
+const lastGameBox = {}; // area id -> the game's own box around it, when found (same units)
 
 // ------------------------------------------------------------------------------------- saving
 
@@ -160,10 +161,9 @@ function drawLayer() {
       // matched size only for real translations (the sample text has no English line to match)
       const fontPx = lastSegs[a.id]?.length ? AS.matchedPx(a, lastLineH[a.id], shown.h) : 0;
       AS.renderBox(box, segs, AS.styleOf(a, cfg.style), k, a.font_scale, a.placement, a, fontPx);
-      if (a.placement === "under_text") {
+      if (AS.atText(a.placement)) {
         const tb = lastSegs[a.id]?.length ? lastTextBox[a.id] : null;
-        if (tb) AS.placeUnderText(box, tb, lastLineH[a.id], shown.w, shown.h, r.x, r.y);
-        else Object.assign(box.style, { position: "absolute", left: "0", top: `${px.h}px`, margin: "0" });
+        AS.placeAtText(box, a.placement, tb, lastLineH[a.id], shown.w, shown.h, r.x, r.y, px.w, px.h, tb ? lastGameBox[a.id] : null);
       }
       band.insertAdjacentHTML("beforeend", `<div class="tag">${AS.esc(t("Translation · {name}", { name: a.name }))}</div>`);
       addHandles(band, a, "out");
@@ -604,7 +604,7 @@ function renderEngines() {
 
 // ------------------------------------------------------------------------------------- areas
 
-const PLACEMENTS = [["under_text", "Below the game's text box (same left edge, at most its width)"], ["above", "Above the area"], ["below", "Below the area"], ["right", "To the right"], ["left", "To the left"], ["over", "On top of the area"], ["custom", "Custom position (drag it in the preview)"]];
+const PLACEMENTS = [["under_text", "Below the game's text box (same left edge, at most its width)"], ["above_text", "Just above the game's text (centred on it)"], ["above", "Above the area"], ["below", "Below the area"], ["right", "To the right"], ["left", "To the left"], ["over", "On top of the area"], ["custom", "Custom position (drag it in the preview)"]];
 // Where the Arabic box sits inside its region (preset placements).
 const TEXT_POS = [
   ["", "Automatic for this placement"],
@@ -768,6 +768,7 @@ const BUNDLED_FONTS = [
   { name: "Changa", note: "bold geometric" },
   { name: "Cairo", note: "clean, many weights" },
   { name: "Tajawal", note: "clean text" },
+  { name: "Noto Sans Arabic Medium", note: "like GTA VI's subtitles" },
 ];
 
 /** A font name as a CSS font-family value (a quoted string): for `el.style.fontFamily` only. */
@@ -1293,6 +1294,7 @@ listen("translation", (e) => {
     lastSegs[ev.area] = ev.segments;
     if (ev.line_h) lastLineH[ev.area] = ev.line_h;
     if (ev.text_box) lastTextBox[ev.area] = ev.text_box;
+    lastGameBox[ev.area] = ev.game_box || null;
   }
   // the list keeps filling while "Live translations" is on, whether or not the overlays are
   if (ev.segments.length && cfg.live_translations !== false) log(ev);

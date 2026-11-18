@@ -307,7 +307,7 @@ impl Translator {
                 }
             }
         }
-        Ok(segs)
+        Ok(polite(&cfg.target_lang, segs))
     }
 
     fn translate_inner(
@@ -967,6 +967,25 @@ fn split_icon_tags(segs: Segments, icons: &[String]) -> Segments {
 }
 
 /// Spoken forms translators don't know, in their plain form ("C'mon" -> "Come on").
+/// Words never shown, and the milder ones used instead, per target language: the stem, so every
+/// form follows ("العاهرة", "كالعاهرة", "عاهرات" → "الساقطة", "كالساقطة", "ساقطات").
+const POLITE: &[(&str, &str, &str)] = &[("ar", "عاهر", "ساقط")];
+
+/// The translation with its harsh words replaced by milder ones (also for lines from the memory,
+/// saved before a word was added).
+pub fn polite(lang: &str, mut segs: Segments) -> Segments {
+    for (l, from, to) in POLITE {
+        if *l == lang {
+            for s in segs.iter_mut().filter(|s| !is_icon(s)) {
+                if s.0.contains(from) {
+                    s.0 = s.0.replace(from, to);
+                }
+            }
+        }
+    }
+    segs
+}
+
 pub fn expand_slang(line: &str) -> String {
     let mut out = line.to_string();
     for (from, to) in [("C'mon", "Come on"), ("c'mon", "come on"), ("C\u{2019}mon", "Come on"), ("c\u{2019}mon", "come on")] {
@@ -1030,6 +1049,17 @@ mod term_tests {
     }
 
     use super::protect_terms as p;
+    use super::polite;
+    #[test]
+    fn harsh_words_are_softened() {
+        let segs = vec![("لكنه يقود كالعاهرة، لذا...".to_string(), None), ("العاهرات".to_string(), Some("#ff0000".to_string()))];
+        let out = polite("ar", segs.clone());
+        assert_eq!(out[0].0, "لكنه يقود كالساقطة، لذا...");
+        assert_eq!(out[1], ("الساقطات".to_string(), Some("#ff0000".to_string())));
+        // other languages: as they are
+        assert_eq!(polite("fr", segs.clone()), segs);
+    }
+
     #[test]
     fn game_terms_are_kept() {
         let (t, terms) = p("In addition to the monthly GTA$500,000 deposited, GTA+ Members who've signed up get GTA Online cars. Visit rsg.ms/gtaplus for more.");

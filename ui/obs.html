@@ -48,10 +48,7 @@
             areasEl.appendChild(band);
             AS.anchor(band, a.placement, a);
             AS.renderBox(box, ev.segments, AS.styleOf(a, state.style), k, a.font_scale, a.placement, a, AS.matchedPx(a, ev.line_h, H));
-            if (a.placement === "under_text") {
-              if (ev.text_box) AS.placeUnderText(box, ev.text_box, ev.line_h, W, H, r.x, r.y);
-              else Object.assign(box.style, { position: "absolute", left: "0", top: `${px.h}px`, margin: "0" });
-            }
+            if (AS.atText(a.placement)) AS.placeAtText(box, a.placement, ev.text_box, ev.line_h, W, H, r.x, r.y, px.w, px.h, ev.game_box);
           }
         }
         AS.renderScreen(screenEl, state.screen, state.reason || [], state.profile_opts);

@@ -30,6 +30,9 @@ window.AS = (() => {
     return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0];
   };
 
+  // The game draws the other speaker's subtitle line in grey.
+  const DIM = "#9a9a9a";
+
   // Segments -> HTML. Colour segments become coloured spans; "icon:<png>" segments become the game's
   // button icon, sized to the text (1.2em) and sitting on the line like a letter.
   function segHtml(segments, keepColors = true) {
@@ -37,6 +40,10 @@ window.AS = (() => {
       .map(([t, c]) => {
         // two speakers' lines: each on its own line, as in the game
         if (t === "\n" && !c) return "<br>";
+        // the other speaker's line: grey like the game's, also with highlight colours off
+        if (c === "dim") return `<span style="color:${DIM}">${esc(t)}</span>`;
+        // a speaker name ("Dobbs:"): in the game's colour for it, also with highlight colours off
+        if (c && c.startsWith("name:")) return `<span style="color:${esc(c.slice(5))}">${esc(t)}</span>`;
         if (c && c.startsWith("icon:")) {
           // "icon:<height vs English text>|<png>" — keep the icon's size relative to the text, as in the game
           let src = c.slice(5);
@@ -73,6 +80,12 @@ window.AS = (() => {
       const w = Math.min(Math.max(a.w, 50), cw);
       return { x: Math.min(Math.max(a.x, 0), cw - w), y: Math.min(Math.max(a.y, 0), ch - h), w, h };
     }
+    if (placement === "above_text") {
+      // the read area and room above it (the Arabic sits right above the game's text)
+      const h = Math.min(a.h + Math.floor(ch * 0.4), ch);
+      const w = Math.min(Math.max(a.w, 50), cw);
+      return { x: Math.min(Math.max(a.x, 0), cw - w), y: Math.min(Math.max(a.y + a.h - h, 0), ch - h), w, h };
+    }
     const band = Math.floor(ch * 0.4);
     const side = Math.floor(cw * 0.35);
     let r;
@@ -94,6 +107,7 @@ window.AS = (() => {
   // Where the text box sits inside its region: {v: top|middle|bottom, h: left|center|right}.
   function alignOf(placement, area) {
     if (placement === "under_text") return { v: "top", h: "left" };
+    if (placement === "above_text") return { v: "bottom", h: "center" };
     if (placement === "custom" && area) return { v: area.out_valign || "bottom", h: area.out_halign || "center" };
     if (area && area.text_pos) {
       const [v, h] = area.text_pos.split("-");
@@ -109,8 +123,8 @@ window.AS = (() => {
   function anchor(container, placement, area) {
     const al = alignOf(placement, area);
     const s = container.style;
-    if (placement === "under_text") {
-      s.display = "block"; // the box is placed exactly by placeUnderText
+    if (atText(placement)) {
+      s.display = "block"; // the box is placed exactly by placeAtText
       return;
     }
     s.display = "flex";
@@ -166,14 +180,16 @@ window.AS = (() => {
       overflowWrap: "anywhere",
     });
     if (bgMode === "none") {
-      // Like the game's own subtitles: no box, white text with a thin dark outline and soft shadow.
-      const o = Math.max(style.outline_width, 1.3) * k;
+      // Like the game's own text: no box, a soft shadow, and a thin dark outline unless the style
+      // says none (GTA VI's subtitles and instructions have only the shadow).
+      const o = style.outline_width * k;
       const ring = [];
-      for (let i = 0; i < 16; i++) {
+      for (let i = 0; o > 0 && i < 16; i++) {
         const a = (i / 16) * Math.PI * 2;
         ring.push(`${(Math.cos(a) * o).toFixed(2)}px ${(Math.sin(a) * o).toFixed(2)}px 0 ${style.outline_color || "#000"}`);
       }
       ring.push(`0 ${2 * k}px ${5 * k}px rgba(0,0,0,0.9)`);
+      if (o <= 0) ring.push(`0 0 ${2 * k}px rgba(0,0,0,0.6)`); // (keeps it readable over a bright floor)
       Object.assign(box.style, { background: "transparent", padding: `${2 * k}px ${4 * k}px`, borderRadius: "0", textShadow: ring.join(", ") });
     } else if (bgMode === "game") {
       // Like GTA's help box: dark, see-through, square corners.
@@ -415,6 +431,56 @@ window.AS = (() => {
   // same width (long Arabic wraps onto more lines, growing downward).
   // tb: English text block [x, y, w, h] as fractions of the frame; lineH: English line height
   // (fraction); W, H: frame size in CSS px; ox, oy: where the box's container starts (CSS px).
+  // Placements that follow the game's own text on screen (from the English text block).
+  const atText = (placement) => placement === "under_text" || placement === "above_text";
+
+  // "Just above the game's text": the Arabic's bottom right above the English, centred on it, as
+  // wide as the area at most.
+  function placeAboveText(box, tb, lineH, W, H, ox, oy, maxW) {
+    const lh = (lineH || tb[3]) * H;
+    Object.assign(box.style, {
+      position: "absolute",
+      left: `${(tb[0] + tb[2] / 2) * W - ox}px`,
+      top: `${tb[1] * H - BOX_PAD.gap * lh - oy}px`,
+      transform: "translate(-50%, -100%)",
+      margin: "0",
+      width: "max-content",
+      maxWidth: `${Math.max(maxW, 60)}px`,
+      boxSizing: "border-box",
+    });
+  }
+
+  // Place `box` at the game's text for these placements. tb: the English text block (fractions of
+  // the frame; null when not known: then at the read area's edge). areaW, areaH: the read area's
+  // size in CSS px; the box's container starts at the area's top (under_text) or ends at its
+  // bottom (above_text).
+  // gb: the game's own box around the text when the app found its edges ([x, y, w, h] fractions)
+  function placeAtText(box, placement, tb, lineH, W, H, ox, oy, areaW, areaH, gb) {
+    if (placement === "under_text") {
+      if (gb) placeUnderGameBox(box, gb, lineH || (tb && tb[3]) || 0.03, W, H, ox, oy);
+      else if (tb) placeUnderText(box, tb, lineH, W, H, ox, oy);
+      else Object.assign(box.style, { position: "absolute", left: "0", top: `${areaH}px`, margin: "0" });
+    } else if (tb) {
+      placeAboveText(box, tb, lineH, W, H, ox, oy, areaW);
+    } else {
+      Object.assign(box.style, { position: "absolute", left: "50%", bottom: `${areaH}px`, transform: "translateX(-50%)", margin: "0", width: "max-content", maxWidth: `${Math.max(areaW, 60)}px` });
+    }
+  }
+
+  // Right under the game's box, with exactly its left and right edges (the text wraps inside).
+  function placeUnderGameBox(box, gb, lineH, W, H, ox, oy) {
+    const lh = lineH * H;
+    Object.assign(box.style, {
+      position: "absolute",
+      left: `${gb[0] * W - ox}px`,
+      top: `${(gb[1] + gb[3]) * H + BOX_PAD.gap * lh - oy}px`,
+      margin: "0",
+      width: `${Math.max(gb[2] * W, 60)}px`,
+      maxWidth: "none",
+      boxSizing: "border-box",
+    });
+  }
+
   function placeUnderText(box, tb, lineH, W, H, ox, oy) {
     const lh = (lineH || tb[3]) * H;
     const left = tb[0] * W - BOX_PAD.left * lh;
@@ -436,5 +502,5 @@ window.AS = (() => {
   // An area's text style: its own, else the profile's (areas from before had none of their own).
   const styleOf = (area, base) => (area && area.style) || base;
 
-  return { setLang, styleOf, esc, segHtml, rectFor, alignOf, anchor, renderBox, renderScreen, matchedPx, placeUnderText };
+  return { setLang, styleOf, esc, segHtml, rectFor, alignOf, anchor, renderBox, renderScreen, matchedPx, placeUnderText, atText, placeAtText };
 })();

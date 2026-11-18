@@ -50,7 +50,11 @@
 //!    `{count, box}`: how many sampled pixels match (bright = brightest channel, spread = brightest −
 //!    darkest; near/tol: within tol of a colour) and the box around them (or null);
 //!  - `f.ocr(rect, {scale})` → `{text, words: [{text, x, y, w, h}]}` (frame pixels);
-//!  - `f.box(x, y, w, h)` → the same rectangle as fractions of the frame, for layouts.
+//!  - `f.box(x, y, w, h)` → the same rectangle as fractions of the frame, for layouts;
+//!
+//! and `vi.lang()`: the language the player translates into ("ar", "fr" …), for a page's fixed
+//! words the script translates itself (a title's `title_ar`; anything left in English goes to the
+//! translator).
 //!
 //! Scripts come from the server inside the game's layout update, signed with the app's update key
 //! (they're code: an unsigned or changed one never runs). The app also carries its own copy of each
@@ -75,10 +79,13 @@ use crate::capture::FrameData;
 use crate::ocr::{self, Crop, Ocr};
 use crate::screens::ScreenLayout;
 
-/// The scripts the app carries itself, by game (`pages/<game>.js`; none yet: GTA VI's come from the
-/// server). One built in is a starting point that works offline; a newer download replaces it.
-fn bundled(_game: &str) -> Option<&'static str> {
-    None
+/// The scripts the app carries itself, by game (`pages/<game>.js`). One built in is a starting point
+/// that works offline; a newer download replaces it.
+fn built_in(game: &str) -> Option<&'static str> {
+    match game {
+        "gta6" => Some(include_str!("../pages/gta6.js")),
+        _ => None,
+    }
 }
 
 /// Bumped when a layout update saves a new script: the detection loop loads it again.
@@ -296,7 +303,7 @@ pub fn signed(script: &str, sig: &str) -> bool {
 impl Pages {
     /// The pages script for a game: the downloaded one if it's signed and newer than the app's own.
     pub fn for_game(game: &str, data_dir: &Path) -> Option<Pages> {
-        let own = bundled(game);
+        let own = built_in(game);
         let got = downloaded(data_dir, game);
         let (script, origin) = match (own, got) {
             (Some(o), Some(d)) if version_of(&d) > version_of(o) => (d, "downloaded"),
@@ -347,6 +354,7 @@ impl Pages {
             g.set("__icon", Function::new(ctx.clone(), |rect: String, thr: f64| helper_icon(&rect, thr))?)?;
             // (text helpers: bounded input, and "nothing" once the call is out of time, like the frame helpers)
             g.set("__letters", Function::new(ctx.clone(), |s: String| text_helper(&s, 4096, String::new(), || crate::screens::letters(&s)))?)?;
+            g.set("__lang", Function::new(ctx.clone(), || crate::screens::words_lang())?)?;
             g.set("__similar", Function::new(ctx.clone(), |a: String, b: String| {
                 text_helper(&a, 4096, false, || b.len() <= 4096 && ocr::similar(&a, &b))
             })?)?;
@@ -608,6 +616,8 @@ function __frame() {
 // text and the game's word lists (built in, plus layout updates)
 globalThis.vi = Object.freeze({
   letters: (s) => __letters(String(s)),
+  // the language the player translates into ("ar", "fr" …): for words a script translates itself
+  lang: () => __lang(),
   similar: (a, b) => __similar(String(a), String(b)),
   buttonWord: (read) => JSON.parse(__button_word(String(read))),
   tabWord: (read) => JSON.parse(__tab_word(String(read))),
@@ -1266,6 +1276,18 @@ fn helper_ocr(rect: &str, opts: &str) -> String {
     .unwrap_or_else(|| NONE.into())
 }
 
+
+#[cfg(test)]
+mod built_in_tests {
+    use super::*;
+
+    #[test]
+    fn the_built_in_gta6_script_loads() {
+        let p = Pages::load(built_in("gta6").expect("carried")).expect("loads");
+        assert!(p.list.iter().any(|i| i.id == "gta6_wasted"));
+        assert!(p.options.iter().any(|o| o.id == "wasted" && o.on));
+    }
+}
 
 #[cfg(test)]
 mod tests {
