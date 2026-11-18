@@ -27,7 +27,7 @@
 
 ## Download
 
-Get the executable for your system from the [latest release](https://github.com/Eng-Fouad/vi-translator-desktop/releases/latest).
+Get the executable for your system from the [latest release](https://github.com/vi-translator/vi-translator-desktop/releases/latest).
 It's portable, so there's nothing to install:
 
 | System | File |
