@@ -205,9 +205,16 @@ struct TranslationEvent {
 // So the size is measured on the first few lines, then locked to their median — every Arabic line of
 // that kind has the same size. Locked sizes are kept in text-sizes.json for the next sessions, with
 // the picture's resolution: a picture of another resolution (another capture card or source, the
-// card set to another mode) has its text at other sizes, so they're measured again.
+// card set to another mode) has its text at other sizes, so they're measured again. So are they
+// when the player picks another subtitle size in the game (Small, Medium, Large): several lines in
+// a row that are all clearly bigger, or all clearly smaller, than the locked size.
 
 const SIZE_SAMPLES: usize = 5;
+/// Lines in a row, all this much off the locked size on the same side, that lock a new size.
+/// (A single line can be ~30% off by its letters alone: "we are" has no tall ones. Five in a row
+/// aren't; GTA's subtitle sizes are ~20% apart.)
+const SIZE_DRIFT_LINES: usize = 5;
+const SIZE_DRIFT: f64 = 0.15;
 
 #[derive(Serialize, Deserialize, Default)]
 struct SizeLock {
@@ -217,6 +224,9 @@ struct SizeLock {
     res: Option<(u32, u32)>,
     #[serde(skip)]
     samples: HashMap<String, Vec<f64>>,
+    /// Lines since the last one at the locked size, all off it on the same side
+    #[serde(skip)]
+    drift: HashMap<String, Vec<f64>>,
 }
 
 fn sizes_path() -> PathBuf {
@@ -237,11 +247,28 @@ impl SizeLock {
 
     /// The size to use for this kind of text, given this line's measured height (fractions of the frame).
     fn size(&mut self, kind: &str, measured: f64) -> f64 {
-        if let Some(&v) = self.locked.get(kind) {
-            return v;
-        }
         if !Self::plausible(measured) {
-            return 0.0;
+            return self.locked.get(kind).copied().unwrap_or(0.0);
+        }
+        if let Some(&v) = self.locked.get(kind) {
+            let off = measured / v - 1.0;
+            let d = self.drift.entry(kind.into()).or_default();
+            if off.abs() < SIZE_DRIFT || d.last().is_some_and(|&p| (p / v - 1.0).signum() != off.signum()) {
+                d.clear();
+            }
+            if off.abs() >= SIZE_DRIFT {
+                d.push(measured);
+            }
+            if d.len() < SIZE_DRIFT_LINES {
+                return v;
+            }
+            // the game's subtitle size changed: lock the new one
+            let mut sorted = std::mem::take(d);
+            sorted.sort_by(|a, b| a.total_cmp(b));
+            let median = sorted[sorted.len() / 2];
+            self.locked.insert(kind.into(), median);
+            self.store();
+            return median;
         }
         let v = self.samples.entry(kind.into()).or_default();
         v.push(measured);
@@ -266,6 +293,7 @@ impl SizeLock {
         if other {
             self.locked.clear();
             self.samples.clear();
+            self.drift.clear();
         }
         self.res = Some((w, h));
         self.store();
@@ -585,6 +613,8 @@ struct Job {
     en_start: Instant,
     /// The English text block as [x, y, w, h] fractions of the frame
     text_box: Option<[f64; 4]>,
+    /// Two speakers' lines (see ocr::speaker_lines): each part with its brightness; empty = one line
+    parts: Vec<(String, f64)>,
 }
 
 #[derive(Default)]
@@ -1236,7 +1266,7 @@ fn ocr_loop(
                         None => {
                             if !menu_asked.contains(&m.en) && !menu_asked.iter().any(|a| ocr::similar(a, &m.en)) && menu_asked.insert(m.en.clone()) {
                                 seq_counter += 1;
-                                let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: m.en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None });
+                                let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: m.en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, parts: Vec::new() });
                             }
                         }
                     }
@@ -1291,7 +1321,7 @@ fn ocr_loop(
                 let mut ask = |en: &str| {
                     if menu_asked.insert(en.to_string()) {
                         seq_counter += 1;
-                        let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: en.to_string(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None });
+                        let _ = jobs.send(Job { area: MENU_TEXT.into(), seq: seq_counter, en: en.to_string(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, parts: Vec::new() });
                     }
                 };
                 screen_missing = localize_screen(layout, &cache.map, &mut ask);
@@ -1346,7 +1376,7 @@ fn ocr_loop(
                         if !layout.reason_en.is_empty() {
                             seq_counter += 1;
                             latest.lock().unwrap().insert(SCREEN_REASON.into(), seq_counter);
-                            let _ = jobs.send(Job { area: SCREEN_REASON.into(), seq: seq_counter, en: layout.reason_en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None });
+                            let _ = jobs.send(Job { area: SCREEN_REASON.into(), seq: seq_counter, en: layout.reason_en.clone(), phrases: Vec::new(), icons: Vec::new(), line_h: 0.0, en_start: Instant::now(), text_box: None, parts: Vec::new() });
                         }
                     }
                     *shared.screen.lock().unwrap() = serde_json::to_value(&layout).ok();
@@ -1430,6 +1460,11 @@ fn ocr_loop(
                         let (en_icons, icons_found, block) =
                             crop.as_ref().map(|cr| ocr::text_with_icons(cr, &words)).unwrap_or((String::new(), Vec::new(), None));
                         let (en, icons) = if icons_found.is_empty() { (st.current.clone(), Vec::new()) } else { (en_icons, icons_found) };
+                        // two people's lines, white and grey (not with button icons: those are instructions)
+                        let parts = match &crop {
+                            Some(cr) if icons.is_empty() => ocr::speaker_lines(cr, &words),
+                            _ => Vec::new(),
+                        };
                         // the block in frame fractions (the crop starts at the area's top-left)
                         let (cx0, cy0) = ((area.x.clamp(0.0, 1.0) * frame.w as f64) as u32, (area.y.clamp(0.0, 1.0) * frame.h as f64) as u32);
                         let text_box = block.map(|(x, y, w, h)| {
@@ -1455,7 +1490,7 @@ fn ocr_loop(
                         let line_h = sizes.lock().unwrap().size(&area.id, measured);
                         st.current_en = en.clone();
                         st.current_start = Some(en_start);
-                        let _ = jobs.send(Job { area: area.id.clone(), seq: seq_counter, en, phrases, icons, line_h, en_start, text_box });
+                        let _ = jobs.send(Job { area: area.id.clone(), seq: seq_counter, en, phrases, icons, line_h, en_start, text_box, parts });
                     }
                 } else if !st.current.is_empty()
                     && st.last_seen.is_some_and(|s| now - s > Duration::from_millis(clear_after_ms))
@@ -1533,44 +1568,41 @@ fn translate_loop(
         // (the Mission Failed reason too: same game text, same reuse)
         // (from the memory of the job's language only: just after a language switch the memory may
         // not have followed yet, and its lines would be in the other language)
-        let mut remembered = {
-            let m = memory.lock().unwrap();
-            if m.lang() == c.target_lang { m.get(&job.en, &job.icons, &job.phrases) } else { None }
-        }
-;
-        // (not one that mangled a term that must stay, like GTA+ — made before terms were protected)
-        if remembered.as_ref().is_some_and(|(segs, _)| !translate::keeps_terms(&job.en, &segs.iter().map(|s| s.0.as_str()).collect::<String>())) {
-            remembered = None;
-        }
-        // A hand-written phrasebook line beats a machine translation remembered earlier (only an
-        // reviewed line ranks above it).
-        if remembered.as_ref().is_some_and(|(_, src)| src != "reviewed" && src != "phrasebook") {
-            if phrasebook::find(&c.game(), &c.target_lang, &job.en, &job.icons).is_some() {
-                remembered = None; // the translator below answers from the phrasebook, and memory is updated
+        // Two speakers' lines (white and grey) are translated one by one: as one sentence the
+        // translator merges or drops one ("… so... What?" lost the "What?"). Each comes back in its own
+        // line, the other speaker's in grey like the game's.
+        let (result, hit) = if job.parts.len() > 1 {
+            let mut all: translate::Segments = Vec::new();
+            let mut hits = true;
+            let mut err = None;
+            for (i, (en, rel)) in job.parts.iter().enumerate() {
+                let (r, h) = translate_line(&mut tr, &c, &memory, en, &[], &job.phrases, &status);
+                hits &= h;
+                match r {
+                    Ok(segs) => {
+                        if i > 0 {
+                            all.push(("\n".into(), None));
+                        }
+                        // the game's grey, on the plain parts (a highlighted word keeps its colour)
+                        let grey = (*rel < 0.95).then(|| {
+                            let v = (255.0 * rel.clamp(0.55, 1.0)).round() as u8;
+                            format!("#{v:02x}{v:02x}{v:02x}")
+                        });
+                        all.extend(segs.into_iter().map(|(t, col)| (t, col.or_else(|| grey.clone()))));
+                    }
+                    Err(e) => err = Some(e),
+                }
             }
-        }
-        let hit = remembered.is_some();
-        let hit_from = if remembered.is_some() { "memory" } else { "" };
-        let result = match remembered {
-            // (coloured here when the remembered line has no colours but the game highlights a word)
-            Some((segs, _)) => Ok(tr.recolor(&c, segs, &job.phrases, &status)),
-            None => tr.translate(&c, &job.en, &job.phrases, &job.icons, &status),
+            (match err { Some(e) => Err(e), None => Ok(all) }, hits)
+        } else {
+            translate_line(&mut tr, &c, &memory, &job.en, &job.icons, &job.phrases, &status)
         };
+        let hit_from = if hit { "memory" } else { "" };
         // time from the English line appearing to its Arabic being ready
         let ready_ms = job.en_start.elapsed().as_secs_f64() * 1000.0;
         let mem_note = {
             let mut m = memory.lock().unwrap();
-            // (translated for the language in use when the job started: if the player switched since,
-            // it belongs to neither memory)
-            let same_lang = m.lang() == c.target_lang;
-            if let (false, Ok(segs), true) = (hit, &result, same_lang) {
-                // (not one that lost a term that must stay, like GTA+: it would be turned down when reused)
-                if translate::keeps_terms(&job.en, &segs.iter().map(|s| s.0.as_str()).collect::<String>()) {
-                    let source = if phrasebook::find(&c.game(), &c.target_lang, &job.en, &job.icons).is_some() { "phrasebook" } else { c.engine.as_str() };
-                    m.put(&job.en, segs, source);
-                }
-            }
-            if same_lang {
+            if m.lang() == c.target_lang {
                 m.record(hit, ready_ms);
             }
             Some(if hit { format!("{hit_from} hit · ready {ready_ms:.0} ms after the English") } else { format!("ready {ready_ms:.0} ms after the English · saved to memory") })
@@ -1592,7 +1624,19 @@ fn translate_loop(
             continue;
         }
         // the English with its icons, for the live translations; and as text with a small marker
-        let en_segments = english_segments(&job.en, &job.icons);
+        let en_segments = if job.parts.len() > 1 {
+            // (two speakers: the English in two lines too)
+            let mut s: Segments = Vec::new();
+            for (i, p) in job.parts.iter().enumerate() {
+                if i > 0 {
+                    s.push(("\n".into(), None));
+                }
+                s.push((p.0.clone(), None));
+            }
+            s
+        } else {
+            english_segments(&job.en, &job.icons)
+        };
         let job = Job { en: strip_icon_tokens(&job.en), ..job };
         // The Mission Failed reason is only useful while it is current. (Area lines go to the
         // presenter even if a newer line exists: it shows them for their time, then the next.)
@@ -1640,6 +1684,53 @@ fn translate_loop(
             let _ = present.send(PMsg::Ready { seq, en_start, ev });
         }
     }
+}
+
+/// One English line to the target language: from the translation memory when it knows it, else
+/// the translator (and then into the memory). True when it came from the memory.
+fn translate_line(
+    tr: &mut Translator,
+    c: &Config,
+    memory: &Arc<Mutex<memory::Memory>>,
+    en: &str,
+    icons: &[String],
+    phrases: &[(String, String)],
+    status: &dyn Fn(String),
+) -> (anyhow::Result<translate::Segments>, bool) {
+    // (from the memory of the job's language only: just after a language switch the memory may
+    // not have followed yet, and its lines would be in the other language)
+    let mut remembered = {
+        let m = memory.lock().unwrap();
+        if m.lang() == c.target_lang { m.get(en, icons, phrases) } else { None }
+    };
+    // (not one that mangled a term that must stay, like GTA+ — made before terms were protected)
+    if remembered.as_ref().is_some_and(|(segs, _)| !translate::keeps_terms(en, &segs.iter().map(|s| s.0.as_str()).collect::<String>())) {
+        remembered = None;
+    }
+    // A hand-written phrasebook line beats a machine translation remembered earlier (only an
+    // reviewed line ranks above it).
+    if remembered.as_ref().is_some_and(|(_, src)| src != "reviewed" && src != "phrasebook") {
+        if phrasebook::find(&c.game(), &c.target_lang, en, icons).is_some() {
+            remembered = None; // the translator below answers from the phrasebook, and memory is updated
+        }
+    }
+    let hit = remembered.is_some();
+    let result = match remembered {
+        // (coloured here when the remembered line has no colours but the game highlights a word)
+        Some((segs, _)) => Ok(tr.recolor(c, segs, phrases, status)),
+        None => tr.translate(c, en, phrases, icons, status),
+    };
+    if let (false, Ok(segs)) = (hit, &result) {
+        let mut m = memory.lock().unwrap();
+        // (translated for the language in use when the job started: if the player switched since,
+        // it belongs to neither memory)
+        // (not one that lost a term that must stay, like GTA+: it would be turned down when reused)
+        if m.lang() == c.target_lang && translate::keeps_terms(en, &segs.iter().map(|s| s.0.as_str()).collect::<String>()) {
+            let source = if phrasebook::find(&c.game(), &c.target_lang, en, icons).is_some() { "phrasebook" } else { c.engine.as_str() };
+            m.put(en, segs, source);
+        }
+    }
+    (result, hit)
 }
 
 // ------------------------------------------------------------------------------------- test mode
@@ -1691,7 +1782,27 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     }
     let mut tr = Translator::new(model_dir());
     let t = Instant::now();
-    let segs = tr.translate(&cfg, &en_icons, &phrases, &icons, &|s| println!("{s}"))?;
+    // two speakers' lines (white and grey): each translated on its own, as the app does
+    let parts = if icons.is_empty() { ocr::speaker_lines(&crop, &words) } else { Vec::new() };
+    let segs = if parts.len() > 1 {
+        println!("Speakers: {parts:?}");
+        let mut all: translate::Segments = Vec::new();
+        for (i, (en, rel)) in parts.iter().enumerate() {
+            if i > 0 {
+                all.push(("\n".into(), None));
+            }
+            let grey = (*rel < 0.95).then(|| {
+                let v = (255.0 * rel.clamp(0.55, 1.0)).round() as u8;
+                format!("#{v:02x}{v:02x}{v:02x}")
+            });
+            let segs = tr.translate(&cfg, en, &phrases, &[], &|s| println!("{s}"))?;
+            all.extend(segs.into_iter().map(|(t, col)| (t, col.or_else(|| grey.clone()))));
+        }
+        all
+    } else {
+        tr.translate(&cfg, &en_icons, &phrases, &icons, &|s| println!("{s}"))?
+    };
+    println!("Segments: {}", serde_json::to_string(&segs).unwrap_or_default());
     let shown: String = segs
         .iter()
         .map(|(t, c)| match c {
@@ -2068,6 +2179,33 @@ mod size_lock_tests {
         // no picture size (no frame yet): nothing changes
         assert!(!l.at_resolution(0, 0));
         assert_eq!(l.size("subtitles", 0.05), 0.04);
+    }
+
+    #[test]
+    fn another_subtitle_size_in_the_game_measures_again() {
+        let mut l = SizeLock::default();
+        assert_eq!(measured(&mut l, "subtitles", 0.030), 0.030);
+        // a line or two with short letters, or a big one: the locked size stays
+        for v in [0.022, 0.023, 0.030, 0.040, 0.022, 0.031, 0.022, 0.023, 0.024] {
+            assert_eq!(l.size("subtitles", v), 0.030, "{v}");
+        }
+        // off on both sides in turn: not a new size
+        for v in [0.022, 0.040, 0.022, 0.040, 0.022, 0.040] {
+            assert_eq!(l.size("subtitles", v), 0.030, "{v}");
+        }
+        assert_eq!(l.size("subtitles", 0.030), 0.030);
+        // Large in the game's settings: five bigger lines in a row lock the new size
+        for v in [0.037, 0.036, 0.038, 0.036] {
+            assert_eq!(l.size("subtitles", v), 0.030);
+        }
+        assert_eq!(l.size("subtitles", 0.037), 0.037);
+        assert_eq!(l.size("subtitles", 0.030), 0.037, "locked again");
+        // and back to Small
+        let small: Vec<f64> = [0.025, 0.026, 0.024, 0.025, 0.025].iter().map(|&v| l.size("subtitles", v)).collect();
+        assert_eq!(small.last(), Some(&0.025));
+        // other kinds of text keep their own size
+        assert_eq!(measured(&mut l, "help", 0.02), 0.02);
+        assert_eq!(l.size("subtitles", 0.024), 0.025);
     }
 
     #[test]

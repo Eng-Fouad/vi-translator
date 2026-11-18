@@ -60,6 +60,7 @@
       // A line's segments [[text, colour|null], ...] as HTML: "icon:<height>|<png>" is the game's own
       // button icon, sized to the text like a letter (as on the PC); only PNG data URLs are drawn.
       const segs = (list) => list.map(([text, c]) => {
+        if (text === "\n" && !c) return "<br>"; // two speakers' lines, each on its own
         if (!(c && c.startsWith("icon:"))) return esc(text);
         let src = c.slice(5);
         let h = 1.2;

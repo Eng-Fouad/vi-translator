@@ -145,6 +145,92 @@ pub fn clean(words: &[Word]) -> String {
     if letters >= 4 && letters as f64 / total as f64 > 0.5 { fix_contractions(&text) } else { String::new() }
 }
 
+/// GTA VI shows two people's lines as two subtitle lines: the one speaking now in white, the other
+/// in grey ("Do not move." / "Idiot."). Lines whose letters differ clearly in brightness are split
+/// into one part per speaker: (text, brightness relative to the brightest part, 0..1]. A line that
+/// only wrapped (the same speaker, the same brightness) stays one part. Fewer than two parts: empty.
+pub fn speaker_lines(c: &Crop, words: &[Word]) -> Vec<(String, f64)> {
+    if words.len() < 2 {
+        return Vec::new();
+    }
+    let mut hs: Vec<u32> = words.iter().map(|w| w.rect.3).collect();
+    hs.sort_unstable();
+    let mh = hs[hs.len() / 2].max(4) as f64;
+    // the OCR's lines, top to bottom (pieces of one visual line at the same height go together)
+    let mut by_line: std::collections::BTreeMap<u32, Vec<usize>> = std::collections::BTreeMap::new();
+    for (i, w) in words.iter().enumerate() {
+        by_line.entry(w.line).or_default().push(i);
+    }
+    let cy = |i: usize| words[i].rect.1 as f64 + words[i].rect.3 as f64 / 2.0;
+    let mut lines: Vec<(f64, Vec<usize>)> = by_line
+        .into_values()
+        .map(|idx| {
+            let mut ys: Vec<f64> = idx.iter().map(|&i| cy(i)).collect();
+            ys.sort_by(|a, b| a.total_cmp(b));
+            (ys[ys.len() / 2], idx)
+        })
+        .collect();
+    lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut joined: Vec<(f64, Vec<usize>)> = Vec::new();
+    for (y, idx) in lines {
+        match joined.last_mut() {
+            Some(last) if (y - last.0).abs() < 0.5 * mh => last.1.extend(idx),
+            _ => joined.push((y, idx)),
+        }
+    }
+    if joined.len() < 2 {
+        return Vec::new();
+    }
+    // A word's brightness: its bright letter pixels (the 90th percentile; the rest of its box is
+    // the scene behind it). A line's: the median of its words'.
+    let word_lum = |r: (u32, u32, u32, u32)| -> f64 {
+        let (x1, y1) = ((r.0 + r.2).min(c.w), (r.1 + r.3).min(c.h));
+        let mut v: Vec<u8> = Vec::new();
+        for y in r.1..y1 {
+            for x in r.0..x1 {
+                let i = ((y * c.w + x) * 4) as usize;
+                v.push(c.rgba[i].max(c.rgba[i + 1]).max(c.rgba[i + 2]));
+            }
+        }
+        if v.is_empty() {
+            return 0.0;
+        }
+        v.sort_unstable();
+        v[(v.len() * 9 / 10).min(v.len() - 1)] as f64
+    };
+    let line_lum = |idx: &[usize]| {
+        let mut v: Vec<f64> = idx.iter().map(|&i| word_lum(words[i].rect)).collect();
+        v.sort_by(|a, b| a.total_cmp(b));
+        v[v.len() / 2]
+    };
+    // consecutive lines of about the same brightness are one speaker
+    let mut parts: Vec<(Vec<usize>, f64)> = Vec::new();
+    for (_, mut idx) in joined {
+        let l = line_lum(&idx);
+        match parts.last_mut() {
+            Some((pidx, pl)) if l.min(*pl) >= 0.82 * l.max(*pl) => {
+                pidx.append(&mut idx);
+                *pl = pl.max(l);
+            }
+            _ => parts.push((idx, l)),
+        }
+    }
+    if parts.len() < 2 {
+        return Vec::new();
+    }
+    let top = parts.iter().map(|p| p.1).fold(1.0f64, f64::max);
+    let out: Vec<(String, f64)> = parts
+        .into_iter()
+        .map(|(idx, l)| {
+            // (each part's words are already top to bottom, left to right within a line)
+            let text = idx.iter().map(|&i| words[i].text.as_str()).collect::<Vec<_>>().join(" ");
+            (fix_contractions(&text.split_whitespace().collect::<Vec<_>>().join(" ")), l / top)
+        })
+        .filter(|(t, _)| t.chars().any(|ch| ch.is_alphabetic()))
+        .collect();
+    if out.len() < 2 { Vec::new() } else { out }
+}
+
 /// Could this be real English, or is it the OCR spelling out something that isn't English letters
 /// at all — text in another script (the console's Arabic menu "وسائط" read as "bjlwg"), icons, a map?
 /// False only when the line has words made of letters and none of them could be a word: no vowel
@@ -184,6 +270,45 @@ pub fn looks_like_words(text: &str) -> bool {
         .filter(|w| !w.is_empty() && w.chars().all(|c| c.is_alphabetic() || c == '\''))
         .collect();
     words.is_empty() || words.iter().any(|w| plausible(w))
+}
+
+#[cfg(test)]
+mod speaker_tests {
+    use super::*;
+
+    /// A dark picture with "letters" (filled boxes) of the given brightness where the words are.
+    fn picture(words: &[(&str, (u32, u32, u32, u32), u32, u8)]) -> (Crop, Vec<Word>) {
+        let (w, h) = (400u32, 100u32);
+        let mut rgba = vec![30u8; (w * h * 4) as usize];
+        for &(_, r, _, lum) in words {
+            for y in r.1..r.1 + r.3 {
+                for x in r.0..r.0 + r.2 {
+                    let i = ((y * w + x) * 4) as usize;
+                    rgba[i..i + 3].copy_from_slice(&[lum, lum, lum]);
+                }
+            }
+        }
+        let ws = words.iter().map(|&(t, rect, line, _)| Word { text: t.into(), rect, line }).collect();
+        (Crop { w, h, rgba }, ws)
+    }
+
+    #[test]
+    fn a_white_and_a_grey_line_are_two_speakers() {
+        let (c, w) = picture(&[("Do", (100, 10, 30, 20), 0, 210), ("not", (140, 10, 40, 20), 0, 215), ("move.", (190, 10, 60, 20), 0, 205), ("Idiot.", (150, 50, 60, 20), 1, 122)]);
+        let parts = speaker_lines(&c, &w);
+        assert_eq!(parts.iter().map(|p| p.0.as_str()).collect::<Vec<_>>(), ["Do not move.", "Idiot."]);
+        assert_eq!(parts[0].1, 1.0);
+        assert!((0.5..0.65).contains(&parts[1].1), "{}", parts[1].1);
+    }
+
+    #[test]
+    fn a_wrapped_line_is_one_speaker() {
+        let (c, w) = picture(&[("You", (100, 10, 40, 20), 0, 210), ("never", (150, 10, 60, 20), 0, 200), ("listen.", (120, 50, 70, 20), 1, 205)]);
+        assert!(speaker_lines(&c, &w).is_empty());
+        // one line: nothing to split
+        let (c, w) = picture(&[("Okay,", (100, 10, 60, 20), 0, 210), ("pull", (170, 10, 40, 20), 0, 120)]);
+        assert!(speaker_lines(&c, &w).is_empty());
+    }
 }
 
 #[cfg(test)]

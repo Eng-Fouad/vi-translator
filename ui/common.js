@@ -35,6 +35,8 @@ window.AS = (() => {
   function segHtml(segments, keepColors = true) {
     return segments
       .map(([t, c]) => {
+        // two speakers' lines: each on its own line, as in the game
+        if (t === "\n" && !c) return "<br>";
         if (c && c.startsWith("icon:")) {
           // "icon:<height vs English text>|<png>" — keep the icon's size relative to the text, as in the game
           let src = c.slice(5);
