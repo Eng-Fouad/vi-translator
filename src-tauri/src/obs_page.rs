@@ -28,14 +28,19 @@ pub(crate) fn respond(mut s: TcpStream, status: &str, mime: &str, body: &[u8]) {
 
 /// A request's target and the headers that matter here.
 pub(crate) struct Request {
+    pub method: String,
     pub path: String,
     pub query: String,
     pub host: String,
     pub origin: String,
+    /// sent with the X-VIT header (only the VI Translator apps send it: a web page can't, without asking)
+    pub vit: bool,
+    /// the body, up to 4 KB (empty when longer)
+    pub body: Vec<u8>,
 }
 
-/// Read a request's first line and headers: at most 8 KB, 3 s per read (a client that sends more,
-/// or nothing, is dropped).
+/// Read a request's first line, headers and a small body: at most 8 KB, 3 s per read (a client
+/// that sends more, or nothing, is dropped).
 pub(crate) fn read_request(s: &TcpStream) -> Option<Request> {
     let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
     let mut r = BufReader::new(s).take(8192);
@@ -44,9 +49,10 @@ pub(crate) fn read_request(s: &TcpStream) -> Option<Request> {
         return None;
     }
     // "GET /path?query HTTP/1.1"
+    let method = line.split_whitespace().next().unwrap_or("").to_string();
     let target = line.split_whitespace().nth(1).unwrap_or("/").to_string();
     let (path, query) = target.split_once('?').map(|(p, q)| (p.to_string(), q.to_string())).unwrap_or((target, String::new()));
-    let (mut host, mut origin) = (String::new(), String::new());
+    let (mut host, mut origin, mut vit, mut length) = (String::new(), String::new(), false, 0usize);
     loop {
         let mut h = String::new();
         if r.read_line(&mut h).ok()? == 0 || h.trim().is_empty() {
@@ -56,11 +62,20 @@ pub(crate) fn read_request(s: &TcpStream) -> Option<Request> {
             match name.trim().to_ascii_lowercase().as_str() {
                 "host" => host = value.trim().to_string(),
                 "origin" => origin = value.trim().to_string(),
+                "x-vit" => vit = true,
+                "content-length" => length = value.trim().parse().unwrap_or(usize::MAX),
                 _ => {}
             }
         }
     }
-    Some(Request { path, query, host, origin })
+    let mut body = Vec::new();
+    if (1..=4096).contains(&length) {
+        body.resize(length, 0);
+        if r.read_exact(&mut body).is_err() {
+            body.clear();
+        }
+    }
+    Some(Request { method, path, query, host, origin, vit, body })
 }
 
 /// Connections being served at once, at most (each has its own thread).
@@ -315,6 +330,14 @@ X-Other: y
         assert_eq!((r.path.as_str(), r.query.as_str(), r.host.as_str(), r.origin.as_str()), ("/preview", "after=7", "127.0.0.1:8790", "http://tauri.localhost"));
         assert!(app_origin(&r.origin));
         assert!(!app_origin("http://evil.example") && !app_origin("null") && !app_origin(""));
+    }
+
+    #[test]
+    fn reads_a_small_body_and_the_vit_header() {
+        let r = request(b"POST /vit-tv/offer HTTP/1.1\r\nHost: 192.168.1.5:8791\r\nX-VIT: 1\r\nContent-Length: 7\r\n\r\n{\"a\":1}").unwrap();
+        assert_eq!((r.method.as_str(), r.path.as_str(), r.vit, r.body.as_slice()), ("POST", "/vit-tv/offer", true, &b"{\"a\":1}"[..]));
+        let r = request(b"POST /x HTTP/1.1\r\nContent-Length: 99999\r\n\r\nabc").unwrap();
+        assert!(!r.vit && r.body.is_empty(), "too long: not read");
     }
 
     #[test]

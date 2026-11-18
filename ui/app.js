@@ -414,20 +414,40 @@ async function sharingReady() {
   }
   return false;
 }
+// A Samsung TV finds this PC by itself, through the home-network sharing (it can't be called): so
+// sharing is turned on first, and the list keeps growing for a while as such TVs show up.
+const TV_LOOK_MS = 40000;
+let tvLook = 0;
 $("tv-find").addEventListener("click", async () => {
   const box = $("tv-found"), btn = $("tv-find");
+  const run = ++tvLook;
   btn.disabled = true;
-  box.innerHTML = `<div class="hint">${AS.esc(t("Looking for TVs…"))}</div>`;
-  try {
-    const found = (await invoke("find_tvs")).filter((f) => !f.connected);
-    box.innerHTML = found.length
-      ? found.map((f) => `<div class="tv-row" data-address="${AS.esc(f.address)}"><span class="tv-name">📺 ${AS.esc(f.name)}</span>
+  box.innerHTML = `<div class="hint tv-looking">${AS.esc(t("Looking for TVs…"))}</div>`;
+  const row = (f) => `<div class="tv-row" data-address="${AS.esc(f.address)}" data-id="${AS.esc(f.id)}"><span class="tv-name">📺 ${AS.esc(f.name)}</span>
           <input class="tv-code" inputmode="numeric" maxlength="7" dir="ltr" autocomplete="off" placeholder="000 000" title="${AS.esc(t("The code shown on the TV"))}" />
-          <button class="btn tv-connect">${AS.esc(t("Connect"))}</button><div class="tv-msg hint"></div></div>`).join("")
-      : `<div class="hint">${AS.esc(t("No TV is waiting. Open VI Translator on the TV, on the same network as this PC."))}</div>`;
-    box.querySelector(".tv-code")?.focus();
+          <button class="btn tv-connect">${AS.esc(t("Connect"))}</button><div class="tv-msg hint"></div></div>`;
+  try {
+    await sharingReady();
+    const start = Date.now();
+    while (run === tvLook) {
+      const found = (await invoke("find_tvs")).filter((f) => !f.connected);
+      if (run !== tvLook) return;
+      // (new TVs added below: a code being typed in a row stays)
+      const fresh = found.filter((f) => !Array.from(box.querySelectorAll(".tv-row")).some((r) => r.dataset.id === f.id));
+      if (fresh.length) {
+        box.querySelector(".tv-looking, .tv-none")?.remove();
+        box.insertAdjacentHTML("beforeend", fresh.map(row).join(""));
+        if (!box.contains(document.activeElement)) box.querySelector(".tv-code")?.focus();
+      }
+      if (Date.now() - start >= TV_LOOK_MS) break;
+      btn.disabled = false;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    if (run === tvLook && !box.querySelector(".tv-row")) {
+      box.innerHTML = `<div class="hint tv-none">${AS.esc(t("No TV is waiting. Open VI Translator on the TV, on the same network as this PC."))}</div>`;
+    }
   } catch (e) { box.textContent = String(e); }
-  finally { btn.disabled = false; }
+  finally { if (run === tvLook) btn.disabled = false; }
 });
 async function connectTv(row) {
   const msg = row.querySelector(".tv-msg"), b = row.querySelector(".tv-connect");

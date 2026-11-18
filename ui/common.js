@@ -191,7 +191,8 @@ window.AS = (() => {
     const shadow = (fs) => `0 ${(fs * 0.05).toFixed(1)}px ${(fs * 0.08).toFixed(1)}px rgba(0,0,0,0.8)`;
     const mk = (css, html) => {
       const d = document.createElement("div");
-      Object.assign(d.style, { position: "absolute", whiteSpace: "nowrap", direction: dir(), lineHeight: "1.15", ...css });
+      // (no object spread in this file: 2018 Samsung TVs draw it too, Chromium 56)
+      Object.assign(d.style, { position: "absolute", whiteSpace: "nowrap", direction: dir(), lineHeight: "1.15" }, css);
       d.innerHTML = html;
       root.appendChild(d);
       return d;
@@ -250,8 +251,9 @@ window.AS = (() => {
             fontWeight: String(m.weight || 500),
             fontSize: `${fs}px`,
             lineHeight: "1.35",
-            ...(m.shadow ? { textShadow: shadow(fs) } : {}),
-            ...(m.outline ? { WebkitTextStroke: `${(fs * 0.06).toFixed(1)}px ${m.outline}`, paintOrder: "stroke fill" } : {}),
+            textShadow: m.shadow ? shadow(fs) : "",
+            WebkitTextStroke: m.outline ? `${(fs * 0.06).toFixed(1)}px ${m.outline}` : "",
+            paintOrder: m.outline ? "stroke fill" : "",
           },
           `<span>${ltrRuns(m.ar)}</span>`,
         );
@@ -260,7 +262,8 @@ window.AS = (() => {
       mk(
         {
           // keep the English's edge: right-aligned values stay right-aligned, lists stay left
-          ...(m.right ? { right: `${W - (m.rect.x + m.rect.w) * W}px` } : { left: `${m.rect.x * W}px` }),
+          right: m.right ? `${W - (m.rect.x + m.rect.w) * W}px` : "",
+          left: m.right ? "" : `${m.rect.x * W}px`,
           top: `${m.rect.y * H}px`,
           minWidth: `${m.rect.w * W}px`,
           minHeight: `${m.rect.h * H}px`,

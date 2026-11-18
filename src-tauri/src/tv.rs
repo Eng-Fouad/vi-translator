@@ -6,13 +6,19 @@
 //! and from then on asks the home-network server (lan.rs) for the TV page with that key. A TV
 //! without a key, or with a key removed here, gets nothing.
 //!
+//! A Samsung (Tizen) TV can't be reached on the home network (its apps can't listen), so it finds
+//! this PC instead: while it shows a code, it offers it to the home-network server (lan.rs,
+//! `POST /vit-tv/offer`), and shows up among the TVs found here. Once the user types its code here,
+//! its next offer with that code gets this PC's key for it (`Tvs::offer`); the TV keeps the
+//! address it offered at.
+//!
 //! The keys are kept in their own file (tvs.json), not in the settings: the settings window saves
 //! the whole settings back and never needs to see them.
 
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -47,11 +53,42 @@ pub struct FoundTv {
     pub connected: bool,
 }
 
+/// A TV that offered its code lately (a Tizen TV showing a code).
+struct Offered {
+    id: String,
+    name: String,
+    at: Instant,
+}
+
+/// Connecting a TV that offers its code: the code typed here, waiting for the TV's next offer.
+struct Pending {
+    id: String,
+    code: String,
+    token: String,
+    pc_name: String,
+    /// how the offer went (set by `Tvs::offer`, read by `pair_offered`)
+    result: Option<Result<String, PairError>>,
+}
+
 #[derive(Default)]
 pub struct Tvs {
     path: Mutex<Option<PathBuf>>,
     list: Mutex<Vec<PairedTv>>,
+    offered: Mutex<Vec<Offered>>,
+    pending: Mutex<Vec<Pending>>,
+    /// wrong codes in a row, by TV (it's told to show a new code after `TRIES`)
+    wrong: Mutex<Vec<(String, u32)>>,
 }
+
+/// An offer this old is from a TV that stopped showing its code.
+const OFFER_FRESH: Duration = Duration::from_secs(30);
+/// How long connecting waits for the TV's next offer (it offers every 2 seconds).
+const OFFER_WAIT: Duration = Duration::from_secs(12);
+/// Wrong codes in a row before the TV is told to show a new one.
+const TRIES: u32 = 5;
+/// The address `find` gives a TV that offers its code (there's no address to call it at): this,
+/// then its id.
+const OFFERED: &str = "offered:";
 
 impl Tvs {
     /// Read the connected TVs from `path`, and keep them there from now on.
@@ -172,6 +209,11 @@ pub fn find(tvs: &Tvs) -> Vec<FoundTv> {
         .into_iter()
         .map(|(address, h)| FoundTv { connected: connected.contains(&h.id), address, id: h.id, name: h.name })
         .collect();
+    for (id, name) in tvs.offered() {
+        if !out.iter().any(|f| f.id == id) {
+            out.push(FoundTv { connected: connected.contains(&id), address: format!("{OFFERED}{id}"), id, name });
+        }
+    }
     out.sort_by(|x, y| x.name.cmp(&y.name).then(x.address.cmp(&y.address)));
     out
 }
@@ -209,6 +251,9 @@ impl PairError {
 /// Connect the TV at `address` (as `find` gave it) with the code it shows: it gets this PC's
 /// address (`pc`, as "ip:port") and a new key, and is kept as connected. Its name, when it worked.
 pub fn pair(tvs: &Tvs, address: &str, code: &str, pc: &str, pc_name: &str) -> Result<String, PairError> {
+    if let Some(id) = address.strip_prefix(OFFERED) {
+        return pair_offered(tvs, id, code, pc_name);
+    }
     // (an address on the home network as find() gives it: the TV app's port, an IPv4 address)
     let ok_address = address
         .strip_suffix(&format!(":{TV_PORT}"))
@@ -232,6 +277,102 @@ pub fn pair(tvs: &Tvs, address: &str, code: &str, pc: &str, pc_name: &str) -> Re
         403 => Err(PairError::WrongCode),
         429 => Err(PairError::TooMany),
         _ => Err(PairError::NoAnswer),
+    }
+}
+
+impl Tvs {
+    /// The TVs that offered their code lately: id and name.
+    fn offered(&self) -> Vec<(String, String)> {
+        let mut o = self.offered.lock().unwrap();
+        o.retain(|x| x.at.elapsed() < OFFER_FRESH);
+        o.iter().map(|x| (x.id.clone(), x.name.clone())).collect()
+    }
+
+    /// A TV offers the code it shows (`POST /vit-tv/offer`, its JSON body): the HTTP status and
+    /// body to answer. 404 while it isn't being connected here, 403 for another code than the one
+    /// typed, 429 after `TRIES` wrong ones in a row (the TV shows a new code), 200 with this PC's
+    /// key for it when it's the code typed.
+    pub fn offer(&self, body: &[u8]) -> (u16, String) {
+        #[derive(Deserialize)]
+        struct Offer {
+            id: String,
+            #[serde(default)]
+            name: String,
+            code: String,
+        }
+        let Ok(o) = serde_json::from_slice::<Offer>(body) else { return (400, "{}".into()) };
+        let ok_id = !o.id.is_empty() && o.id.len() <= 64 && o.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if !ok_id || o.code.len() != 6 || !o.code.chars().all(|c| c.is_ascii_digit()) {
+            return (400, "{}".into());
+        }
+        let name = match o.name.trim() {
+            "" => "TV".to_string(),
+            n => n.chars().take(60).collect(),
+        };
+        {
+            let mut offered = self.offered.lock().unwrap();
+            offered.retain(|x| x.id != o.id && x.at.elapsed() < OFFER_FRESH);
+            offered.push(Offered { id: o.id.clone(), name: name.clone(), at: Instant::now() });
+        }
+        let mut pending = self.pending.lock().unwrap();
+        let Some(p) = pending.iter_mut().find(|p| p.id == o.id && p.result.is_none()) else { return (404, "{}".into()) };
+        let mut wrong = self.wrong.lock().unwrap();
+        if !same(p.code.as_bytes(), o.code.as_bytes()) {
+            let n = match wrong.iter_mut().find(|(id, _)| *id == o.id) {
+                Some((_, n)) => {
+                    *n += 1;
+                    *n
+                }
+                None => {
+                    wrong.push((o.id.clone(), 1));
+                    1
+                }
+            };
+            if n >= TRIES {
+                wrong.retain(|(id, _)| *id != o.id);
+                p.result = Some(Err(PairError::TooMany));
+                return (429, "{}".into());
+            }
+            p.result = Some(Err(PairError::WrongCode));
+            return (403, "{}".into());
+        }
+        wrong.retain(|(id, _)| *id != o.id);
+        self.add(PairedTv { id: o.id.clone(), name: name.clone(), token: p.token.clone() });
+        self.offered.lock().unwrap().retain(|x| x.id != o.id);
+        p.result = Some(Ok(name));
+        (200, serde_json::json!({ "pc_name": p.pc_name, "token": p.token }).to_string())
+    }
+}
+
+/// Connect a TV that offers its code: wait for its next offer, and answer it with a new key if
+/// it's the code typed here.
+fn pair_offered(tvs: &Tvs, id: &str, code: &str, pc_name: &str) -> Result<String, PairError> {
+    pair_offered_within(tvs, id, code, pc_name, OFFER_WAIT)
+}
+
+fn pair_offered_within(tvs: &Tvs, id: &str, code: &str, pc_name: &str, wait: Duration) -> Result<String, PairError> {
+    let code: String = code.chars().filter(|c| c.is_ascii_digit()).collect();
+    if code.len() != 6 {
+        return Err(PairError::WrongCode);
+    }
+    if !tvs.offered().iter().any(|(o, _)| o == id) {
+        return Err(PairError::NoAnswer);
+    }
+    let token = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+    {
+        let mut pending = tvs.pending.lock().unwrap();
+        pending.retain(|p| p.id != id);
+        pending.push(Pending { id: id.to_string(), code, token: token.clone(), pc_name: pc_name.to_string(), result: None });
+    }
+    let start = Instant::now();
+    loop {
+        std::thread::sleep(Duration::from_millis(50));
+        let mut pending = tvs.pending.lock().unwrap();
+        // (connected again meanwhile: this one was replaced)
+        let Some(i) = pending.iter().position(|p| p.token == token) else { return Err(PairError::NoAnswer) };
+        if pending[i].result.is_some() || start.elapsed() >= wait {
+            return pending.remove(i).result.unwrap_or(Err(PairError::NoAnswer));
+        }
     }
 }
 
@@ -263,6 +404,64 @@ mod tests {
         tvs.add(PairedTv { id: "tv2".into(), name: "Bedroom".into(), token: "k3".into() });
         assert!(tvs.remove_id("tv2") && !tvs.allowed("k3"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A TV offering its code every few milliseconds, as the Tizen app does every 2 seconds.
+    fn offering(tvs: &'static Tvs, code: &'static str) -> std::thread::JoinHandle<Vec<(u16, String)>> {
+        std::thread::spawn(move || {
+            let body = format!(r#"{{"app":"vi-translator-tizen","id":"tz-1","name":"Samsung Q60","code":"{code}"}}"#);
+            let mut answers = Vec::new();
+            for _ in 0..40 {
+                let a = tvs.offer(body.as_bytes());
+                let done = a.0 != 404;
+                answers.push(a);
+                if done {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            answers
+        })
+    }
+
+    #[test]
+    fn a_tv_offering_its_code_is_found_and_connected() {
+        let tvs: &'static Tvs = Box::leak(Box::default());
+        assert_eq!(tvs.offer(b"{}").0, 400);
+        assert_eq!(tvs.offer(br#"{"id":"tz-1","name":"x","code":"12345"}"#).0, 400);
+        // not being connected: 404, and it's among the TVs found
+        assert_eq!(tvs.offer(br#"{"id":"tz-1","name":"Samsung Q60","code":"482913"}"#).0, 404);
+        assert_eq!(tvs.offered(), vec![("tz-1".to_string(), "Samsung Q60".to_string())]);
+        // the wrong code typed: the TV's next offer is 403, and connecting says so
+        let tv = offering(tvs, "482913");
+        assert_eq!(pair_offered_within(tvs, "tz-1", "111 111", "PC", Duration::from_secs(5)), Err(PairError::WrongCode));
+        assert_eq!(tv.join().unwrap().last().unwrap().0, 403);
+        // the right one: 200 with the key, kept as connected
+        let tv = offering(tvs, "482913");
+        assert_eq!(pair_offered_within(tvs, "tz-1", "482 913", "MY-PC", Duration::from_secs(5)), Ok("Samsung Q60".to_string()));
+        let (status, body) = tv.join().unwrap().pop().unwrap();
+        assert_eq!(status, 200);
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["pc_name"], "MY-PC");
+        assert!(tvs.allowed(v["token"].as_str().unwrap()));
+        // a TV that stopped offering: no answer
+        assert_eq!(pair_offered_within(tvs, "tz-2", "482913", "PC", Duration::from_millis(200)), Err(PairError::NoAnswer));
+    }
+
+    #[test]
+    fn too_many_wrong_codes_give_a_new_code() {
+        let tvs: &'static Tvs = Box::leak(Box::default());
+        assert_eq!(tvs.offer(br#"{"id":"tz-1","name":"Samsung Q60","code":"482913"}"#).0, 404);
+        for i in 1..=TRIES {
+            let tv = offering(tvs, "482913");
+            let r = pair_offered_within(tvs, "tz-1", "000000", "PC", Duration::from_secs(5));
+            let last = tv.join().unwrap().last().unwrap().0;
+            if i < TRIES {
+                assert_eq!((r, last), (Err(PairError::WrongCode), 403));
+            } else {
+                assert_eq!((r, last), (Err(PairError::TooMany), 429));
+            }
+        }
     }
 
     #[test]

@@ -154,6 +154,19 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
             shared.tvs.remove_token(param(query, "t"));
             respond(s, "200 OK", "text/plain", b"ok")
         }
+        // a Samsung TV showing a code offers it here (it can't be called: see tv.rs); only the
+        // TV app sends X-VIT (a web page can't, and gets nothing)
+        "/vit-tv/offer" if req.method == "POST" && req.vit => {
+            let (status, body) = shared.tvs.offer(&req.body);
+            let status = match status {
+                200 => "200 OK",
+                400 => "400 Bad Request",
+                403 => "403 Forbidden",
+                429 => "429 Too Many Requests",
+                _ => "404 Not Found",
+            };
+            respond(s, status, "application/json", body.as_bytes())
+        }
         "/common.js" => serve_asset(app, s, "common.js"),
         // the pages' fonts and nothing else
         p if p.starts_with("/fonts/") && !p.contains("..") || p == "/fonts.css" => serve_asset(app, s, p.trim_start_matches('/')),
