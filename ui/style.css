@@ -366,6 +366,9 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin:
 /* a new section in a settings page: a divider line above its title */
 .tab > h3:not(:first-child) { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 .tab > h3 + .muted, .tab > h3 + .field, .tab > h3 + .form, .tab > h3 + .engines, .tab > h3 + .check { margin-top: 4px; }
+/* the Debugging section is wrapped (shown in development builds only): its heading looks like the others */
+#debug-section > h3 { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+#debug-section > h3 + .muted { margin-top: 4px; }
 .tab > .callout { margin-top: 10px; }
 .toolbar .btn:first-child, #add-area-2 { background: var(--sunset); color: #fff; border-color: transparent; }
 .toolbar .btn:first-child:hover, #add-area-2:hover { filter: brightness(1.08); color: #fff; }
