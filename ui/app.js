@@ -1035,7 +1035,7 @@ function log(ev) {
   } else {
     const ar = AS.segHtml(ev.segments);
     const where = area?.name ?? (ev.area === "__screen_reason" ? t("Game page text") : ev.area);
-    el.innerHTML = `<div class="head"><span class="when" title="${AS.esc(when.toLocaleString(I18N.lang))}">${time}</span><span class="en" dir="ltr">${AS.esc(ev.en)}</span></div><div class="ar" dir="auto">${ar}</div><div class="meta">${AS.esc(where)}${ev.stats ? ` · ${AS.esc(ev.stats)}` : ""}</div>`;
+    el.innerHTML = `<div class="head"><span class="when" title="${AS.esc(when.toLocaleString(I18N.lang))}">${time}</span><span class="en" dir="ltr">${ev.en_segments?.length ? AS.segHtml(ev.en_segments, false) : AS.esc(ev.en)}</span></div><div class="ar" dir="auto">${ar}</div><div class="meta">${AS.esc(where)}${ev.stats ? ` · ${AS.esc(ev.stats)}` : ""}</div>`;
   }
   const box = $("log");
   box.prepend(el);

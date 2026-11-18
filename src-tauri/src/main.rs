@@ -205,6 +205,9 @@ fn memory_open_folder(webview: tauri::Webview) -> Result<(), String> {
 struct TranslationEvent {
     area: String,
     en: String,
+    /// The English with the game's button icons in place of its "⟦n⟧" marks, drawn like the
+    /// translation (`en` has 🎮 there instead)
+    en_segments: Segments,
     segments: Segments,
     stats: String,
     error: Option<String>,
@@ -735,7 +738,7 @@ fn present_loop(app: AppHandle, rx: mpsc::Receiver<PMsg>, shared: Arc<Shared>) {
                             .collect();
                         shared.on_screen.lock().unwrap().insert(area.clone(), serde_json::json!({ "en": ev.en, "ar": ar.trim() }));
                         shared.shown.lock().unwrap().insert(area.clone(), serde_json::to_value(&ev).unwrap_or_default());
-                        lan::push(&shared, &area, &ev.en, &ev.segments, ev.at);
+                        lan::push(&shared, &area, &ev.en, &ev.en_segments, &ev.segments, ev.at);
                         let _ = app.emit("translation", ev);
                     }
                 }
@@ -744,7 +747,7 @@ fn present_loop(app: AppHandle, rx: mpsc::Receiver<PMsg>, shared: Arc<Shared>) {
                     shared.shown.lock().unwrap().remove(&area);
                     let _ = app.emit(
                         "translation",
-                        TranslationEvent { area, en: String::new(), segments: Vec::new(), stats: String::new(), error: None, line_h: 0.0, text_box: None, cached: false, at: 0 },
+                        TranslationEvent { area, en: String::new(), en_segments: Vec::new(), segments: Vec::new(), stats: String::new(), error: None, line_h: 0.0, text_box: None, cached: false, at: 0 },
                     );
                 }
             }
@@ -1615,7 +1618,8 @@ fn translate_loop(
             }
             continue;
         }
-        // show icons in the English line of the log as a small marker
+        // the English with its icons, for the live translations; and as text with a small marker
+        let en_segments = english_segments(&job.en, &job.icons);
         let job = Job { en: strip_icon_tokens(&job.en), ..job };
         // The Mission Failed reason is only useful while it is current. (Area lines go to the
         // presenter even if a newer line exists: it shows them for their time, then the next.)
@@ -1627,6 +1631,7 @@ fn translate_loop(
             Ok(segments) => TranslationEvent {
                 area: job.area,
                 en: job.en,
+                en_segments,
                 segments,
                 stats: match &mem_note {
                     Some(n) if hit => n.clone(),
@@ -1642,6 +1647,7 @@ fn translate_loop(
             Err(e) => TranslationEvent {
                 area: job.area,
                 en: job.en,
+                en_segments,
                 segments: Vec::new(),
                 stats: tr.stats(&c),
                 error: Some(format!("{e:#}")),
@@ -1653,7 +1659,7 @@ fn translate_loop(
         };
         if ev.area == SCREEN_REASON && ev.error.is_none() {
             *shared.screen_reason.lock().unwrap() = serde_json::to_value(&ev.segments).unwrap_or_default();
-            lan::push(&shared, SCREEN_REASON, &ev.en, &ev.segments, ev.at);
+            lan::push(&shared, SCREEN_REASON, &ev.en, &ev.en_segments, &ev.segments, ev.at);
         }
         if ev.area == SCREEN_REASON || ev.error.is_some() {
             let _ = app.emit("translation", ev); // errors go straight to the log
@@ -2028,12 +2034,66 @@ fn main() {
 }
 
 
+/// "Press ⟦1⟧ to jump" with its icons -> ["Press ", icon 1, " to jump"]: the English line as segments,
+/// each "⟦n⟧" the game's own button icon (as in the translation). A mark with no icon becomes 🎮.
+fn english_segments(en: &str, icons: &[String]) -> Segments {
+    let mut segs: Segments = Vec::new();
+    let mut text = String::new();
+    let mut rest = en;
+    while let Some(open) = rest.find('⟦') {
+        let after = &rest[open + '⟦'.len_utf8()..];
+        let Some(close) = after.find('⟧') else { break };
+        text.push_str(&rest[..open]);
+        let icon = after[..close].parse::<usize>().ok().and_then(|n| icons.get(n.wrapping_sub(1)));
+        match icon {
+            Some(png) => {
+                if !text.is_empty() {
+                    segs.push((std::mem::take(&mut text), None));
+                }
+                segs.push((String::new(), Some(format!("icon:{png}"))));
+            }
+            None => text.push('🎮'),
+        }
+        rest = &after[close + '⟧'.len_utf8()..];
+    }
+    text.push_str(rest);
+    if !text.is_empty() {
+        segs.push((text, None));
+    }
+    segs
+}
+
 /// "Press ⟦1⟧ to jump" -> "Press 🎮 to jump" (for showing English lines in the log).
 fn strip_icon_tokens(s: &str) -> String {
     s.split_whitespace()
         .map(|t| if t.starts_with('⟦') && t.ends_with('⟧') { "🎮" } else { t })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod english_icon_tests {
+    use super::*;
+
+    fn icon(n: &str) -> (String, Option<String>) {
+        (String::new(), Some(format!("icon:{n}")))
+    }
+
+    #[test]
+    fn the_english_keeps_its_icons() {
+        let icons = vec!["1.1|data:image/png;base64,AAA".to_string(), "data:image/png;base64,BBB".to_string()];
+        assert_eq!(
+            english_segments("Press ⟦1⟧ to jump", &icons),
+            vec![("Press ".to_string(), None), icon("1.1|data:image/png;base64,AAA"), (" to jump".to_string(), None)]
+        );
+        // at the start, at the end, side by side
+        assert_eq!(english_segments("⟦2⟧ ⟦1⟧", &icons), vec![icon("data:image/png;base64,BBB"), (" ".to_string(), None), icon("1.1|data:image/png;base64,AAA")]);
+        // a mark with no icon cut for it: the game pad, as in the text
+        assert_eq!(english_segments("Hold ⟦3⟧", &icons), vec![("Hold 🎮".to_string(), None)]);
+        // no marks: the line as it is
+        assert_eq!(english_segments("Meet me at the docks.", &icons), vec![("Meet me at the docks.".to_string(), None)]);
+        assert!(english_segments("", &icons).is_empty());
+    }
 }
 
 

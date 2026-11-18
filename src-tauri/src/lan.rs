@@ -22,7 +22,9 @@ use crate::obs_page::{read_request, respond, serve_asset, Slot};
 const KEEP: usize = 200;
 
 /// Remember a line that was just shown, for the page.
-pub fn push(shared: &Shared, area: &str, en: &str, segments: &[(String, Option<String>)], at_ms: u64) {
+/// `en_segments` and `segments`: the English and the translation with the game's button icons
+/// (data URLs), for the page to draw them; `en` and "text" have 🎮 in their place.
+pub fn push(shared: &Shared, area: &str, en: &str, en_segments: &[(String, Option<String>)], segments: &[(String, Option<String>)], at_ms: u64) {
     // "Live translations" switched off: the list pauses (and switching it back on doesn't dump what came
     // in meanwhile). Independent of the overlays: with this on, the list keeps filling with them off.
     if shared.live_off.load(std::sync::atomic::Ordering::Relaxed) {
@@ -37,7 +39,7 @@ pub fn push(shared: &Shared, area: &str, en: &str, segments: &[(String, Option<S
     }
     let id = shared.live_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     let mut log = shared.live_log.lock().unwrap();
-    log.push_back(serde_json::json!({ "id": id, "at": at_ms, "area": area, "en": en, "text": text.trim() }));
+    log.push_back(serde_json::json!({ "id": id, "at": at_ms, "area": area, "en": en, "text": text.trim(), "en_segs": en_segments, "segs": segments }));
     while log.len() > KEEP {
         log.pop_front();
     }
@@ -254,13 +256,17 @@ mod tests {
     fn keeps_the_last_lines_with_icons_as_a_game_pad() {
         let shared = Shared::default();
         for i in 0..(KEEP + 5) {
-            push(&shared, "subtitles", &format!("Line {i}"), &[(format!("سطر {i}"), None)], 1000 + i as u64);
+            push(&shared, "subtitles", &format!("Line {i}"), &[], &[(format!("سطر {i}"), None)], 1000 + i as u64);
         }
-        push(&shared, "help", "Press X", &[("اضغط ".into(), None), (String::new(), Some("icon:data:x".into()))], 9);
-        push(&shared, "help", "nothing", &[(" ".into(), None)], 10); // blank: not kept
+        let en_icon = [("Press ".into(), None), (String::new(), Some("icon:data:x".into()))];
+        push(&shared, "help", "Press 🎮", &en_icon, &[("اضغط ".into(), None), (String::new(), Some("icon:data:x".into()))], 9);
+        push(&shared, "help", "nothing", &[], &[(" ".into(), None)], 10); // blank: not kept
         let log = shared.live_log.lock().unwrap();
         assert_eq!(log.len(), KEEP);
         assert_eq!(log.back().unwrap()["text"], "اضغط 🎮");
+        // the icons themselves too, for the page to draw them in both lines
+        assert_eq!(log.back().unwrap()["segs"][1][1], "icon:data:x");
+        assert_eq!(log.back().unwrap()["en_segs"][1][1], "icon:data:x");
         let ids: Vec<u64> = log.iter().map(|l| l["id"].as_u64().unwrap()).collect();
         assert!(ids.windows(2).all(|w| w[0] < w[1]), "ids increase");
         assert_eq!(log.front().unwrap()["en"], "Line 6");

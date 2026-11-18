@@ -57,6 +57,22 @@
       setEn(store("en") !== "0");
       $("en").onclick = () => setEn(document.body.classList.contains("no-en"));
 
+      // A line's segments [[text, colour|null], ...] as HTML: "icon:<height>|<png>" is the game's own
+      // button icon, sized to the text like a letter (as on the PC); only PNG data URLs are drawn.
+      const segs = (list) => list.map(([text, c]) => {
+        if (!(c && c.startsWith("icon:"))) return esc(text);
+        let src = c.slice(5);
+        let h = 1.2;
+        const bar = src.indexOf("|");
+        if (bar > 0 && !src.startsWith("data:")) {
+          const rel = parseFloat(src.slice(0, bar));
+          if (rel > 0) h = Math.min(Math.max(rel / 1.2, 0.4), 1.6);
+          src = src.slice(bar + 1);
+        }
+        if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(src)) return "🎮";
+        return `<img src="${src}" alt="🎮" style="height:${h.toFixed(3)}em;width:auto;vertical-align:${(0.35 - h / 2).toFixed(3)}em;margin:0 0.15em">`;
+      }).join("");
+
       let last = 0;
       let run = null;
       const atBottom = () => { const m = $("list"); return m.scrollHeight - m.scrollTop - m.clientHeight < 80; };
@@ -79,8 +95,8 @@
               const el = document.createElement("div");
               el.className = "line";
               const t = l.at ? new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "";
-              el.innerHTML = `<div class="meta"><span class="when">${t}</span><span class="en">${esc(l.en)}</span></div>
-                <div class="text" dir="${rtl ? "rtl" : "ltr"}">${esc(l.text)}</div>`;
+              el.innerHTML = `<div class="meta"><span class="when">${t}</span><span class="en">${l.en_segs?.length ? segs(l.en_segs) : esc(l.en)}</span></div>
+                <div class="text" dir="${rtl ? "rtl" : "ltr"}">${l.segs?.length ? segs(l.segs) : esc(l.text)}</div>`;
               $("list").appendChild(el);
             }
             while ($("list").children.length > 200) $("list").firstElementChild.remove();
