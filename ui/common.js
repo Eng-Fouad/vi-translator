@@ -431,5 +431,8 @@ window.AS = (() => {
 
   // TEMP (testing the translation memory): colour of Arabic that came from the memory
 
-  return { setLang, esc, segHtml, rectFor, alignOf, anchor, renderBox, renderScreen, matchedPx, placeUnderText };
+  // An area's text style: its own, else the profile's (areas from before had none of their own).
+  const styleOf = (area, base) => (area && area.style) || base;
+
+  return { setLang, styleOf, esc, segHtml, rectFor, alignOf, anchor, renderBox, renderScreen, matchedPx, placeUnderText };
 })();

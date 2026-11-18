@@ -44,7 +44,6 @@ pub struct Entry {
 
 #[derive(Serialize, Clone, Default)]
 pub struct Stats {
-    pub enabled: bool,
     pub entries: usize,
     /// how many of them are reviewed translations
     pub reviewed: usize,
@@ -53,7 +52,6 @@ pub struct Stats {
     /// average time from the English line appearing to its Arabic being ready
     pub avg_hit_ms: f64,
     pub avg_miss_ms: f64,
-    pub file: String,
 }
 
 pub struct Memory {
@@ -359,17 +357,15 @@ impl Memory {
         }
     }
 
-    pub fn stats(&self, enabled: bool) -> Stats {
+    pub fn stats(&self) -> Stats {
         let avg = |sum: f64, n: u64| if n == 0 { 0.0 } else { sum / n as f64 };
         Stats {
-            enabled,
             entries: self.map.len(),
             reviewed: self.map.values().filter(|e| e.source == "reviewed").count(),
             hits: self.hits,
             misses: self.misses,
             avg_hit_ms: avg(self.hit_ms, self.hits),
             avg_miss_ms: avg(self.miss_ms, self.misses),
-            file: self.dir.display().to_string(),
         }
     }
 
@@ -464,15 +460,6 @@ impl Memory {
         if std::fs::write(&tmp, body).is_ok() {
             let _ = std::fs::rename(&tmp, &self.path);
         }
-    }
-
-    /// Re-read the files (e.g. after new reviewed translations); session counters are kept.
-    pub fn reload(&mut self) {
-        let (h, m, hm, mm) = (self.hits, self.misses, self.hit_ms, self.miss_ms);
-        let packs = std::mem::take(&mut self.packs);
-        *self = Self::load(self.dir.clone(), &self.lang);
-        self.take_packs(packs);
-        (self.hits, self.misses, self.hit_ms, self.miss_ms) = (h, m, hm, mm);
     }
 }
 
@@ -571,8 +558,6 @@ mod tests {
         assert!(m3.get("take cover", &[], &[]).is_none());
         m3.set_lang("ar");
         assert_eq!(m3.get("take cover", &[], &[]).unwrap().1, "reviewed");
-        m3.reload();
-        assert_eq!(m3.get("take cover", &[], &[]).unwrap().1, "reviewed", "and through a reload");
         let _ = std::fs::remove_dir_all(&path);
     }
 
@@ -628,7 +613,7 @@ mod tests {
         assert_eq!(text(&m.get("Take cover.", &[], &[]).unwrap().0), "احتمِ.");
         // a reviewed line wins over everything and survives clearing the memory
         std::fs::write(path.join("reviewed.jsonl"), "{\"en\":\"Take cover!\",\"ar\":\"احتمِ بساتر!\",\"source\":\"x\"}\n").unwrap();
-        m.reload();
+        let mut m = Memory::load(path.clone(), "ar");
         let (segs, src) = m.get("take cover", &[], &[]).unwrap();
         assert_eq!((text(&segs).as_str(), src.as_str()), ("احتمِ بساتر!", "reviewed"));
         m.clear();

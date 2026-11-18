@@ -166,8 +166,7 @@ fn main_only(w: &tauri::Webview) -> Result<(), String> {
 /// Translation memory: on/off, size, hits/misses and the time saved.
 #[tauri::command]
 fn memory_status(state: tauri::State<AppState>) -> memory::Stats {
-    let on = state.cfg.lock().unwrap().memory_enabled;
-    state.memory.lock().unwrap().stats(on)
+    state.memory.lock().unwrap().stats()
 }
 
 #[tauri::command]
@@ -175,22 +174,6 @@ fn memory_clear(webview: tauri::Webview, state: tauri::State<AppState>) -> Resul
     main_only(&webview)?;
     state.memory.lock().unwrap().clear();
     Ok(())
-}
-
-/// Re-read the memory files.
-#[tauri::command]
-fn memory_reload(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<(), String> {
-    main_only(&webview)?;
-    state.memory.lock().unwrap().reload();
-    Ok(())
-}
-
-#[tauri::command]
-fn memory_open_folder(webview: tauri::Webview) -> Result<(), String> {
-    main_only(&webview)?;
-    let dir = db_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    debug_frames::open_folder(&dir).map_err(|e| e.to_string())
 }
 
 #[derive(Serialize, Clone)]
@@ -986,14 +969,14 @@ fn ocr_loop(
                 if screen.is_some() {
                     hide_screen(&app, &shared, &latest, &mut screen);
                 }
-                if let (true, Some((r, s0))) = (c.memory_enabled || c.share_lines, reason_on.take()) {
+                if let Some((r, s0)) = reason_on.take() {
                     memory.lock().unwrap().log_line(SCREEN_REASON, &r, unix_ms(s0), unix_ms(since));
                 }
                 for (id, st) in states.iter_mut() {
                     if st.current_seq != 0 {
                         let at = st.last_seen.unwrap_or(since);
                         let _ = present.send(PMsg::Ended { area: id.clone(), seq: st.current_seq, at });
-                        if let (true, Some(s0)) = (c.memory_enabled || c.share_lines, st.current_start) {
+                        if let Some(s0) = st.current_start {
                             memory.lock().unwrap().log_line(id, &st.current_en, unix_ms(s0), unix_ms(at));
                         }
                     }
@@ -1229,9 +1212,10 @@ fn ocr_loop(
                         cache.map.get(&m.en).cloned().or_else(|| cache.map.iter().find(|(k, _)| ocr::similar(k, &m.en)).map(|(_, v)| v.clone()))
                     };
                     let remembered = || {
-                        c.memory_enabled
-                            .then(|| memory.lock().unwrap().get(&m.en, &[], &[]))
-                            .flatten()
+                        memory
+                            .lock()
+                            .unwrap()
+                            .get(&m.en, &[], &[])
                             .map(|(segs, _)| segs.iter().map(|s| s.0.as_str()).collect::<String>())
                             .filter(|ar| translate::keeps_terms(&m.en, ar))
                     };
@@ -1342,7 +1326,7 @@ fn ocr_loop(
                     for (id, st) in states.iter_mut() {
                         if st.current_seq != 0 {
                             let _ = present.send(PMsg::Ended { area: id.clone(), seq: st.current_seq, at: now });
-                            if let (true, Some(s0)) = (c.memory_enabled || c.share_lines, st.current_start) {
+                            if let Some(s0) = st.current_start {
                                 memory.lock().unwrap().log_line(id, &st.current_en, unix_ms(s0), unix_ms(now));
                             }
                         }
@@ -1374,7 +1358,7 @@ fn ocr_loop(
             // Log each page's reason line with its time on screen, like subtitle lines.
             let reason_now = screen.as_ref().map(|s| s.reason_en.clone()).filter(|r| !r.is_empty());
             if reason_on.as_ref().map(|(r, _)| r) != reason_now.as_ref() {
-                if let (true, Some((r, since))) = (c.memory_enabled || c.share_lines, reason_on.take()) {
+                if let Some((r, since)) = reason_on.take() {
                     memory.lock().unwrap().log_line(SCREEN_REASON, &r, unix_ms(since), unix_ms(Instant::now()));
                 }
                 reason_on = reason_now.map(|r| (r, Instant::now()));
@@ -1433,7 +1417,6 @@ fn ocr_loop(
                     // A line the translation memory already knows needn't wait to settle: show it on
                     // first sight. Other lines wait `stable_ms` so a half-faded frame isn't translated.
                     let known = is_new
-                        && c.memory_enabled
                         && crop.as_ref().is_some_and(|cr| {
                             let (t, icons, _) = ocr::text_with_icons(cr, &words);
                             memory.lock().unwrap().knows(if icons.is_empty() { &st.candidate } else { &t })
@@ -1459,7 +1442,7 @@ fn ocr_loop(
                         let en_start = st.candidate_since.unwrap_or(now);
                         if st.current_seq != 0 {
                             let _ = present.send(PMsg::Ended { area: area.id.clone(), seq: st.current_seq, at: en_start });
-                            if let (true, Some(s0)) = (c.memory_enabled || c.share_lines, st.current_start) {
+                            if let Some(s0) = st.current_start {
                                 memory.lock().unwrap().log_line(&area.id, &st.current_en, unix_ms(s0), unix_ms(en_start));
                             }
                         }
@@ -1481,7 +1464,7 @@ fn ocr_loop(
                     // presenter keeps the Arabic up for as long as the English was on screen.
                     if let Some(last) = st.last_seen {
                         let _ = present.send(PMsg::Ended { area: area.id.clone(), seq: st.current_seq, at: last });
-                        if let (true, Some(s0)) = (c.memory_enabled || c.share_lines, st.current_start) {
+                        if let Some(s0) = st.current_start {
                             memory.lock().unwrap().log_line(&area.id, &st.current_en, unix_ms(s0), unix_ms(last));
                         }
                     }
@@ -1546,16 +1529,15 @@ fn translate_loop(
         let status = move |s: String| {
             let _ = status_app.emit("status-msg", s);
         };
-        // Translation memory first (when enabled): a known line needs no translator at all.
+        // Translation memory first: a known line needs no translator at all.
         // (the Mission Failed reason too: same game text, same reuse)
-        let use_memory = c.memory_enabled;
         // (from the memory of the job's language only: just after a language switch the memory may
         // not have followed yet, and its lines would be in the other language)
         let mut remembered = {
             let m = memory.lock().unwrap();
             if m.lang() == c.target_lang { m.get(&job.en, &job.icons, &job.phrases) } else { None }
         }
-        .filter(|(_, src)| use_memory || src == "reviewed");
+;
         // (not one that mangled a term that must stay, like GTA+ — made before terms were protected)
         if remembered.as_ref().is_some_and(|(segs, _)| !translate::keeps_terms(&job.en, &segs.iter().map(|s| s.0.as_str()).collect::<String>())) {
             remembered = None;
@@ -1576,7 +1558,7 @@ fn translate_loop(
         };
         // time from the English line appearing to its Arabic being ready
         let ready_ms = job.en_start.elapsed().as_secs_f64() * 1000.0;
-        let mem_note = if use_memory {
+        let mem_note = {
             let mut m = memory.lock().unwrap();
             // (translated for the language in use when the job started: if the player switched since,
             // it belongs to neither memory)
@@ -1592,8 +1574,6 @@ fn translate_loop(
                 m.record(hit, ready_ms);
             }
             Some(if hit { format!("{hit_from} hit · ready {ready_ms:.0} ms after the English") } else { format!("ready {ready_ms:.0} ms after the English · saved to memory") })
-        } else {
-            None
         };
         // pause-menu text: keep it for the menu page (it appears on the next read)
         if job.area == MENU_TEXT {
@@ -1953,7 +1933,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

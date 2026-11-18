@@ -597,8 +597,7 @@ fn merged<T: serde::Serialize + serde::de::DeserializeOwned>(base: &T, patch: &s
 ///   "words": { "ar": { "menu": { "Hide Menu": "…" }, "buttons": { "Browse": "…" }, "tabs": { "MAP": "…" } } } }
 /// ```
 /// Words always apply (they only add to or fix the built-in lists). Areas and fonts are applied
-/// once per new layout version, and only with "Automatic layout updates" on: the player's own
-/// changes stay until the next new layout.
+/// once per new layout version: the player's own changes stay until the next new layout.
 fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::Value, version: u32, lang: &str, game: &str) {
     // (the built-in word lists are Arabic; a layout can carry words for any language)
     let words = |kind: &str| -> Vec<(String, String)> {
@@ -616,7 +615,7 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
         crate::phrasebook::set_extra(game, lang, phrases);
         crate::ocr::set_fixes(crate::ocr::fixes_from(&layout["ocr"]));
     }
-    if !c.auto_layout || version <= c.layout_versions.get(game).copied().unwrap_or(0) {
+    if version <= c.layout_versions.get(game).copied().unwrap_or(0) {
         return;
     }
     // The update tunes the game's built-in profile (the player's own copies are theirs: untouched).
@@ -631,16 +630,32 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
                     a.as_object_mut().map(|o| o.remove(k));
                 }
             }
+            // the area's own text style: only the parts the layout names, on top of what it has now
+            // (its own style, or the profile's it started from)
+            let style_patch = a.as_object_mut().and_then(|o| o.remove("style")).filter(|s| s.is_object());
             match p.areas.iter_mut().find(|x| x.id == id) {
                 // any of the area's settings (place, alignment, font, background, size …)
                 Some(area) => {
                     if let Some(new) = merged(area, &a) {
                         *area = new;
                     }
+                    if let Some(patch) = &style_patch {
+                        let base = area.style.clone().unwrap_or_else(|| p.style.clone());
+                        if let Some(mut st) = merged(&base, patch) {
+                            st.sanitize();
+                            area.style = Some(st);
+                        }
+                    }
                 }
                 // a new area (with its place)
                 None if ["x", "y", "w", "h"].iter().all(|k| a[*k].is_number()) => {
-                    if let Some(new) = merged(&crate::config::Area::default(), &a) {
+                    if let Some(mut new) = merged(&crate::config::Area::default(), &a) {
+                        if let Some(patch) = &style_patch {
+                            if let Some(mut st) = merged(&p.style, patch) {
+                                st.sanitize();
+                                new.style = Some(st);
+                            }
+                        }
                         p.areas.push(new);
                     }
                 }
@@ -856,6 +871,15 @@ mod tests {
         let moved: crate::config::Area = merged(&area, &serde_json::json!({ "x": 0.2, "font_scale": 1.1 })).unwrap();
         assert_eq!((moved.id.as_str(), moved.x, moved.font_scale), ("subtitles", 0.2, 1.1));
         assert!(merged(&area, &serde_json::json!({ "x": "far" })).is_none(), "a value that doesn't fit changes nothing");
+        // an area's own style: only the parts named change, the rest stays what the area had
+        let base = crate::config::Style { outline_width: 2.0, ..style.clone() };
+        let st: crate::config::Style = merged(&base, &serde_json::json!({ "text_color": "#ffd25a" })).unwrap();
+        assert_eq!((st.text_color.as_str(), st.outline_width, st.font_size), ("#ffd25a", 2.0, style.font_size));
+        // an area without its own style (settings from before): none, and it reads back the same
+        let v = serde_json::to_value(&area).unwrap();
+        assert!(v["style"].is_null());
+        let back: crate::config::Area = serde_json::from_value(serde_json::json!({ "id": "old" })).unwrap();
+        assert!(back.style.is_none());
     }
 
     #[test]

@@ -97,6 +97,9 @@ pub struct Area {
     /// Only read text centred in the picture (game subtitles are): a word elsewhere in the area — a
     /// menu's "Browse" at the bottom right — is not a subtitle.
     pub centered_only: bool,
+    /// This area's own text style (colours, box, outline, size …). None: the profile's style, which
+    /// is what an area starts from (settings and layouts from before areas had their own).
+    pub style: Option<Style>,
 }
 
 impl Area {
@@ -122,6 +125,9 @@ impl Area {
         }
         if self.placement.is_empty() {
             self.placement = d.placement;
+        }
+        if let Some(s) = self.style.as_mut() {
+            s.sanitize();
         }
     }
 }
@@ -149,6 +155,7 @@ impl Default for Area {
             out_h: 0.15,
             out_valign: "bottom".into(),
             out_halign: "center".into(),
+            style: None,
         }
     }
 }
@@ -247,6 +254,11 @@ pub struct Config {
     pub interval_ms: u64,
     pub stable_ms: u64,
     pub clear_after_ms: u64,
+    /// The player chose their own timing (the three values above) instead of the game profile's.
+    /// None only in a settings file from before this setting: worked out once when it is loaded.
+    /// (missing in a file: None, not the default's value, so an older file is recognised)
+    #[serde(default)]
+    pub timing_custom: Option<bool>,
     pub overlays_enabled: bool,
     /// The list of live translations (in the app and on the home-network page) keeps filling,
     /// whether or not the overlays are on.
@@ -257,8 +269,6 @@ pub struct Config {
     pub fps_corner: String,
     /// App window theme: light | dark
     pub theme: String,
-    /// Remember translated lines and reuse them instantly (translation memory).
-    pub memory_enabled: bool,
     /// Help improve translations: share the English lines seen (subtitles, instructions, captions)
     /// with the project server, anonymously, in batches. On by default; off in the Advanced tab.
     pub share_lines: bool,
@@ -266,8 +276,6 @@ pub struct Config {
     pub install_id: String,
     /// Project server; empty = the built-in one.
     pub server_url: String,
-    /// Apply read-area and font updates for the game profile automatically.
-    pub auto_layout: bool,
     /// The profile last used for each game (where switching to a game goes).
     pub game_profiles: std::collections::BTreeMap<String, String>,
     /// Version of the last layout update applied (from before per-game versions; see `layout_versions`).
@@ -479,12 +487,12 @@ impl Default for Config {
             interval_ms: 250,
             stable_ms: 300,
             clear_after_ms: 800,
+            timing_custom: Some(false),
             overlays_enabled: true,
             live_translations: true,
             fps_badge: false,
             fps_corner: "top-right".into(),
             theme: "dark".into(),
-            memory_enabled: false,
             target_lang: "ar".into(),
             ui_lang: "en".into(),
             update_check: true,
@@ -493,7 +501,6 @@ impl Default for Config {
             share_lines: true,
             install_id: String::new(),
             server_url: String::new(),
-            auto_layout: true,
             layout_version: 0,
             layout_versions: Default::default(),
             game_profiles: Default::default(),
@@ -547,6 +554,12 @@ impl Config {
             },
             Err(e) => unusable(e.to_string()),
         };
+        // A settings file from before `timing_custom`: a value moved off the app's default was the
+        // player's own timing (that was the rule then).
+        if c.timing_custom.is_none() {
+            let d = Self::default();
+            c.timing_custom = Some(c.interval_ms != d.interval_ms || c.stable_ms != d.stable_ms || c.clear_after_ms != d.clear_after_ms);
+        }
         c.normalize();
         c
     }
@@ -554,14 +567,15 @@ impl Config {
     /// Reading timing in use (interval, settle, clear after; ms): the player's own where they moved
     /// the slider (Advanced), else the profile's game timing if it has one, else the app's.
     pub fn timing(&self) -> (u64, u64, u64) {
-        let d = Config::default();
         let t = self.builtins.iter().chain(self.profiles.iter()).find(|p| p.id == self.profile).map(|p| p.timing.clone()).unwrap_or_default();
-        let pick = |own: u64, default: u64, game: u64| if own != default || game == 0 { own } else { game };
+        // the player's own timing, or the game profile's (each value it has; 0 = it has none)
+        let own = self.timing_custom == Some(true);
+        let pick = |mine: u64, game: u64| if own || game == 0 { mine } else { game };
         // (within the Advanced sliders' ranges, whatever a settings file or a layout says)
         (
-            pick(self.interval_ms, d.interval_ms, t.interval_ms).clamp(100, 1000),
-            pick(self.stable_ms, d.stable_ms, t.stable_ms).min(1500),
-            pick(self.clear_after_ms, d.clear_after_ms, t.clear_after_ms).clamp(200, 3000),
+            pick(self.interval_ms, t.interval_ms).clamp(100, 1000),
+            pick(self.stable_ms, t.stable_ms).min(1500),
+            pick(self.clear_after_ms, t.clear_after_ms).clamp(200, 3000),
         )
     }
 
@@ -783,9 +797,31 @@ mod profile_tests {
         let d = Config::default();
         assert_eq!(c.timing(), (d.interval_ms, d.stable_ms, d.clear_after_ms));
         c.builtins.iter_mut().find(|p| p.id == c.profile).unwrap().timing = Timing { interval_ms: 0, stable_ms: 120, clear_after_ms: 1500 };
+        assert_eq!(c.timing(), (d.interval_ms, 120, 1500), "the game's, where it has one");
+        // the player's own: all three are theirs
+        c.timing_custom = Some(true);
+        c.clear_after_ms = 900;
+        assert_eq!(c.timing(), (d.interval_ms, d.stable_ms, 900));
+        // back to the game's (their values are kept for later, but not used)
+        c.timing_custom = Some(false);
         assert_eq!(c.timing(), (d.interval_ms, 120, 1500));
-        c.clear_after_ms = 900; // the player's own
-        assert_eq!(c.timing(), (d.interval_ms, 120, 900));
+    }
+
+    #[test]
+    fn older_settings_keep_the_players_own_timing() {
+        let dir = std::env::temp_dir().join(format!("vit-timing-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("config.json");
+        // moved off the default before `timing_custom` existed: their own
+        std::fs::write(&path, r#"{"clear_after_ms": 900}"#).unwrap();
+        assert_eq!(Config::load(&path).timing_custom, Some(true));
+        // never moved: the game's
+        std::fs::write(&path, r#"{}"#).unwrap();
+        assert_eq!(Config::load(&path).timing_custom, Some(false));
+        // chosen since: kept as it is, even with values off the default
+        std::fs::write(&path, r#"{"clear_after_ms": 900, "timing_custom": false}"#).unwrap();
+        assert_eq!(Config::load(&path).timing_custom, Some(false));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

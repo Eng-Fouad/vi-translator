@@ -35,6 +35,17 @@ function save(redraw = true) {
 function openTab(name) {
   document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== `tab-${name}`));
+  document.body.dataset.tab = name;
+  editingChanged();
+}
+
+// The read areas are edited on the preview only in Setup with the Read areas tab open: their boxes,
+// the translation regions' handles, the sample text and the bar above the preview show then only.
+const editingAreas = () => document.body.dataset.mode === "setup" && document.body.dataset.tab === "areas";
+function editingChanged() {
+  document.body.classList.toggle("editing-areas", editingAreas());
+  drawLayer();
+  requestAnimationFrame(fitFrame); // (the bar above the preview came or went)
 }
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => openTab(b.dataset.tab)));
 
@@ -50,7 +61,7 @@ function setMode(mode) {
   });
   try { localStorage.setItem("mode", mode); } catch {}
   if (mode === "play") updateGlance();
-  requestAnimationFrame(fitFrame);
+  editingChanged();
 }
 document.querySelectorAll(".modes button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 // "Change" on a Play card: open that part of Setup
@@ -136,7 +147,7 @@ function drawLayer() {
     const px = { x: a.x * shown.w, y: a.y * shown.h, w: a.w * shown.w, h: a.h * shown.h };
     // Arabic region (same placement maths as the real overlay). Drag it to place the Arabic anywhere.
     if (a.enabled) {
-      const segs = !overlays ? [] : lastSegs[a.id]?.length ? lastSegs[a.id] : $("show-sample").checked && document.body.dataset.mode !== "play" ? sampleSegments() : [];
+      const segs = !overlays ? [] : lastSegs[a.id]?.length ? lastSegs[a.id] : $("show-sample").checked && editingAreas() ? sampleSegments() : [];
       const r = AS.rectFor(a.placement, px, shown.w, shown.h, a);
       const band = document.createElement("div");
       band.className = `band${a.id === selected ? " selected" : ""}`;
@@ -147,7 +158,7 @@ function drawLayer() {
       AS.anchor(band, a.placement, a);
       // matched size only for real translations (the sample text has no English line to match)
       const fontPx = lastSegs[a.id]?.length ? AS.matchedPx(a, lastLineH[a.id], shown.h) : 0;
-      AS.renderBox(box, segs, cfg.style, k, a.font_scale, a.placement, a, fontPx);
+      AS.renderBox(box, segs, AS.styleOf(a, cfg.style), k, a.font_scale, a.placement, a, fontPx);
       if (a.placement === "under_text") {
         const tb = lastSegs[a.id]?.length ? lastTextBox[a.id] : null;
         if (tb) AS.placeUnderText(box, tb, lastLineH[a.id], shown.w, shown.h, r.x, r.y);
@@ -267,7 +278,7 @@ function startDrag(e, area, mode, kind = "read") {
 const round = (v) => Math.round(v * 10000) / 10000;
 
 $("show-sample").addEventListener("change", drawLayer);
-$("sample-text").addEventListener("input", () => { drawLayer(); drawStyleSample(); });
+$("sample-text").addEventListener("input", () => drawLayer());
 
 // ------------------------------------------------------------------------------------- source
 
@@ -534,7 +545,6 @@ function renderLang() {
       for (const k of Object.keys(lastSegs)) delete lastSegs[k];
       renderLang();
       renderEngines();
-      renderStyleForm();
       renderAreas();
       renderProfile();
       renderPages();
@@ -637,11 +647,11 @@ function renderAreas() {
       </div>
       <div class="row field inline-label">
         <label>${t("Font")}</label>
-        <select class="ff grow">${fontOptions(a.font_family, t("Main font ({font})", { font: cfg.style.font_family }))}</select>
+        <select class="ff grow">${fontOptions(a.font_family, t("Main font ({font})", { font: AS.styleOf(a, cfg.style).font_family }))}</select>
       </div>
       <div class="row field inline-label">
         <label>${t("Background")}</label>
-        <select class="bgm grow">${[["", "Main style (Text style tab)"], ["none", "None — outlined text, like game subtitles"], ["game", "Game-style dark box"]]
+        <select class="bgm grow">${[["", "Its text style's box"], ["none", "None — outlined text, like game subtitles"], ["game", "Game-style dark box"]]
           .map(([v, txt]) => `<option value="${v}" ${(a.background || "") === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select>
       </div>
       <label class="check"><input type="checkbox" class="ms" ${a.match_size !== false ? "checked" : ""}/> ${t("Match the game's text size")}</label>
@@ -651,6 +661,7 @@ function renderAreas() {
         <input type="range" class="fs" min="0.5" max="2" step="0.05" value="${a.font_scale}" />
         <span class="val fsv">${Math.round(a.font_scale * 100)}%</span>
       </div>
+      <details class="area-style"${styleOpen.has(a.id) ? " open" : ""}><summary>${t("Text style")}</summary><div class="form"></div></details>
       <div class="sub">${t("Read area")}</div>
       ${posGrid(a, { x: "x", y: "y", w: "w", h: "h" }, "n")}
       ${a.placement !== "custom" ? `
@@ -685,6 +696,9 @@ function renderAreas() {
       c.querySelector(".ha").addEventListener("change", (e) => { a.out_halign = e.target.value; save(); });
     }
     c.querySelector(".bgm").addEventListener("change", (e) => { a.background = e.target.value; save(); });
+    const det = c.querySelector(".area-style");
+    det.addEventListener("toggle", () => { if (det.open) styleOpen.add(a.id); else styleOpen.delete(a.id); });
+    renderStyleForm(det.querySelector(".form"), a);
     c.querySelector(".ms").addEventListener("change", (e) => { a.match_size = e.target.checked; renderAreas(); save(); });
     c.querySelector(".co").addEventListener("change", (e) => { a.centered_only = e.target.checked; save(); });
     const ff = c.querySelector(".ff");
@@ -796,24 +810,26 @@ const STYLE_FIELDS = [
   ["shadow", "Text shadow", "check"],
 ];
 
-function renderStyleForm() {
-  const form = $("style-form");
+// Read areas whose Text style section is open (kept open when the list is drawn again).
+const styleOpen = new Set();
+
+function renderStyleForm(form, a) {
   form.innerHTML = "";
-  const s = cfg.style;
+  const s = AS.styleOf(a, cfg.style);
+  // the area's own style from its first change on (it starts from the profile's)
+  const setStyle = (key, value) => {
+    if (!a.style) a.style = clone(cfg.style);
+    a.style[key] = value;
+    drawLayer();
+    save();
+  };
   for (const [key, label, type, min, max, step] of STYLE_FIELDS) {
+    if (type === "font") continue; // (the card's own Font choice)
     const f = document.createElement("div");
     f.className = "field";
     if (type === "check") {
       f.innerHTML = `<label class="check" style="color:var(--text)"><input type="checkbox" ${s[key] ? "checked" : ""}/> ${t(label)}</label>`;
       f.querySelector("input").addEventListener("change", (e) => setStyle(key, e.target.checked));
-    } else if (type === "font") {
-      f.innerHTML = `<label>${t(label)}</label><select class="grow">${fontOptions(s.font_family)}</select>
-        <div class="muted small" style="margin:4px 0 0">${t("{n} installed fonts can write {language} (listed first). Each read area can also use its own font.", { n: FONT_LIST.filter(fitsLang).length, language: langNative() })}</div>`;
-      const sel = f.querySelector("select");
-      paintFonts(sel);
-      const showFont = () => (sel.style.fontFamily = `${fontCss(sel.value)}, 'Segoe UI'`);
-      showFont();
-      sel.addEventListener("change", () => { showFont(); setStyle(key, sel.value); renderAreas(); });
     } else if (type === "size") {
       // slider + exact number, kept in sync
       f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${AS.esc(s[key])}" />
@@ -835,30 +851,20 @@ function renderStyleForm() {
     }
     form.appendChild(f);
   }
-  const reset = document.createElement("button");
-  reset.className = "btn";
-  reset.textContent = t("Reset to defaults");
-  reset.addEventListener("click", () => {
-    cfg.style = { font_family: "Segoe UI", font_size: 26, bold: true, text_color: "#ffffff", bg_color: "#000000", bg_opacity: 0.65,
-      outline_color: "#000000", outline_width: 0, shadow: true, padding: 10, radius: 10, line_height: 1.5, keep_colors: true };
-    renderStyleForm();
-    save();
-  });
-  form.appendChild(reset);
-  drawStyleSample();
+  // back to the style the profile gives its areas
+  if (a.style) {
+    const reset = document.createElement("button");
+    reset.className = "btn";
+    reset.textContent = t("Reset to defaults");
+    reset.addEventListener("click", () => {
+      a.style = null;
+      renderStyleForm(form, a);
+      drawLayer();
+      save();
+    });
+    form.appendChild(reset);
+  }
   lockControls();
-}
-function setStyle(key, value) {
-  cfg.style[key] = value;
-  drawStyleSample();
-  save();
-}
-function drawStyleSample() {
-  if (!cfg) return;
-  const wrap = $("style-sample-wrap");
-  AS.anchor(wrap, "over");
-  wrap.style.justifyContent = "center";
-  AS.renderBox($("style-sample"), sampleSegments(), cfg.style, 0.75, 1, "above");
 }
 
 // ------------------------------------------------------------------------------------- timing
@@ -894,37 +900,57 @@ function renderTiming() {
     ["stable_ms", "Wait for text to settle before translating (ms)", 0, 1500, 50, "Avoids translating half-faded lines."],
     ["clear_after_ms", "Treat the English as gone after (ms)", 200, 3000, 100, "Ignores short OCR blinks. The translation then stays as long as the English was on screen, and switches to the next line as soon as it is ready."],
   ];
+  // The last three: the game profile's timing unless the player chose their own (Config::timing).
+  const TIMED = ["interval_ms", "stable_ms", "clear_after_ms"];
+  const game = activeProfile()?.timing || {};
+  const gameHas = TIMED.some((k) => game[k] > 0);
+  const inUse = (k) => (cfg.timing_custom === true || !(game[k] > 0) ? cfg[k] : game[k]);
   for (const [key, label, min, max, step, help] of fields) {
+    const timed = TIMED.includes(key);
+    const v = timed ? inUse(key) : cfg[key];
     const f = document.createElement("div");
     f.className = "field";
-    f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${cfg[key]}" /><span class="val">${cfg[key]}</span></div>${help ? `<div class="muted small" style="margin:4px 0 0">${t(help)}</div>` : ""}`;
-    f.querySelector("input").addEventListener("input", (e) => { cfg[key] = Number(e.target.value); f.querySelector(".val").textContent = e.target.value; save(false); });
+    f.innerHTML = `<label>${t(label)}</label><div class="inline"><input type="range" min="${min}" max="${max}" step="${step}" value="${v}" /><span class="val">${v}</span></div>${help ? `<div class="muted small" style="margin:4px 0 0">${t(help)}</div>` : ""}`;
+    f.querySelector("input").addEventListener("input", (e) => {
+      // moving one of the three: the player's own timing from now on, starting from what was in use
+      if (timed && cfg.timing_custom !== true) {
+        for (const k of TIMED) cfg[k] = inUse(k);
+        cfg.timing_custom = true;
+        if (gameHas) renderTimingReset(form);
+      }
+      cfg[key] = Number(e.target.value);
+      f.querySelector(".val").textContent = e.target.value;
+      save(false);
+    });
     form.appendChild(f);
   }
-  const note = document.createElement("div");
-  note.className = "hint";
-  note.textContent = t("Left as they are, the last three follow the game profile's own timing when it has one.");
-  form.appendChild(note);
+  if (gameHas && cfg.timing_custom === true) renderTimingReset(form);
+}
+
+// "Use the game's timing": back to the game profile's own (shown while the player's is in use).
+function renderTimingReset(form) {
+  if (form.querySelector(".timing-reset")) return;
+  const row = document.createElement("div");
+  row.className = "timing-reset";
+  row.innerHTML = `<button class="btn" type="button">${t("Use the game's timing")}</button>`;
+  row.querySelector("button").addEventListener("click", () => {
+    cfg.timing_custom = false;
+    save(false);
+    renderTiming();
+  });
+  form.appendChild(row);
 }
 
 // ------------------------------------------------------------------------------------- translation memory
 
 function renderMemory() {
   $("memory-form").innerHTML = `
-    <label class="check" style="color:var(--text);font-weight:600"><input type="checkbox" id="mem-on" ${cfg.memory_enabled ? "checked" : ""}/> ${t("Use translation memory")}</label>
     <div class="callout" id="mem-stats" style="margin:0"></div>
-    <div class="row"><button class="btn" id="mem-open">${t("Open its folder")}</button><button class="btn" id="mem-reload">${t("Reload")}</button><button class="btn danger" id="mem-clear">${t("Clear memory")}</button></div>
-    <div class="hint">${t("Text sizes are measured on the first {n} lines of each kind, and again when the picture's resolution changes.", { n: 5 })}</div>
+    <div class="row"><button class="btn danger" id="mem-clear">${t("Clear memory")}</button></div>
     <label class="check" style="color:var(--text);font-weight:600;margin-top:10px"><input type="checkbox" id="share-on" ${cfg.share_lines !== false ? "checked" : ""}/> ${t("Help improve translations")}</label>
     <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions) with the VI Translator server occasionally, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
-    <label class="check" style="color:var(--text)"><input type="checkbox" id="layout-auto" ${cfg.auto_layout !== false ? "checked" : ""}/> ${t("Automatic layout updates")}</label>
-    <div class="hint">${t("Keeps the game profile's read areas, fonts, text style and timing up to date.")}</div>
 `;
-  $("mem-reload").addEventListener("click", async () => { await invoke("memory_reload"); updateMemory(); });
-  $("mem-on").addEventListener("change", (e) => { cfg.memory_enabled = e.target.checked; save(false); updateMemory(); });
   $("share-on").addEventListener("change", (e) => { cfg.share_lines = e.target.checked; save(false); });
-  $("layout-auto").addEventListener("change", (e) => { cfg.auto_layout = e.target.checked; save(false); });
-  $("mem-open").addEventListener("click", () => invoke("memory_open_folder").catch((e) => log({ error: String(e) })));
   $("mem-clear").addEventListener("click", async () => {
     if (!(await ask(t("Forget all remembered translations?"), t("Clear memory")))) return;
     await invoke("memory_clear");
@@ -938,7 +964,7 @@ async function updateMemory() {
   if (!el) return;
   try {
     const m = await invoke("memory_status");
-    const lines = [t("{n} remembered line(s)", { n: m.entries }), t("Folder: {path}", { path: m.file })];
+    const lines = [t("{n} remembered line(s)", { n: m.entries })];
     if (m.hits + m.misses > 0) {
       const rate = Math.round((100 * m.hits) / (m.hits + m.misses));
       lines.push(t("This session: {hits} from memory, {misses} translated ({rate}% hits)", { hits: m.hits, misses: m.misses, rate }));
@@ -946,7 +972,7 @@ async function updateMemory() {
         a: m.hits ? Math.round(m.avg_hit_ms) + " ms" : "—", b: m.misses ? Math.round(m.avg_miss_ms) + " ms" : "—" }));
       if (m.hits && m.misses) lines.push(t("Saved about {ms} ms per remembered line", { ms: Math.round(m.avg_miss_ms - m.avg_hit_ms) }));
     } else {
-      lines.push(m.enabled ? t("No lines seen yet this session.") : t("Off — turn it on to start remembering."));
+      lines.push(t("No lines seen yet this session."));
     }
     el.innerHTML = lines.map(AS.esc).join("<br>");
   } catch (e) {
@@ -1303,6 +1329,7 @@ listen("config", (e) => {
     if (newLayout) renderPages(); // (a layout update can bring a new pages script)
     return;
   }
+  renderTiming(); // (a layout update can bring the game's own timing)
   if (locked()) {
     const p = activeProfile();
     Object.assign(cfg, { areas: clone(p.areas), style: clone(p.style), profile_opts: clone(p.pages) });
@@ -1376,7 +1403,7 @@ function renderAll() {
   renderProfile();
   renderPages();
   renderAreas();
-  renderStyleForm();
+  renderTiming(); // (the game's timing may differ: the sliders show what's in use)
   drawLayer();
   updateGlance();
 }
@@ -1490,7 +1517,7 @@ function applyTheme() {
 // can't be reached with the keyboard either.
 function lockControls() {
   const on = locked();
-  document.querySelectorAll("#tab-areas, #tab-style, #tab-pages").forEach((tab) =>
+  document.querySelectorAll("#tab-areas, #tab-pages").forEach((tab) =>
     tab.querySelectorAll("input, select, textarea, button:not([data-copy])").forEach((el) => { el.disabled = on; }));
   $("add-area").disabled = on;
   // (its boxes can't be moved or resized, so the hint about doing that is gone too)
@@ -1535,7 +1562,6 @@ function lockControls() {
   renderProfile();
   renderPages();
   renderAreas();
-  renderStyleForm();
   renderTiming();
   renderPreviewForm();
   renderMemory();

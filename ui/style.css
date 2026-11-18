@@ -176,10 +176,12 @@ body[data-mode="play"] .stage { display: contents; }
 body[data-mode="play"] .viewport { grid-area: preview; flex: none; aspect-ratio: 16 / 9; }
 body[data-mode="play"] .log-wrap { grid-area: log; height: auto !important; min-height: 0; }
 body[data-mode="play"] .play-side { grid-area: side; }
-/* nothing to edit while playing: the preview only shows the picture and the translations */
-body[data-mode="play"] #layer .area { display: none; }
-body[data-mode="play"] .band { outline: none !important; background: none !important; pointer-events: none; }
-body[data-mode="play"] .band .tag, body[data-mode="play"] .band .handle { display: none !important; }
+/* nothing to edit outside the Read areas tab (and while playing): the preview only shows the
+   picture and the translations, and the bar above it goes */
+body:not(.editing-areas) .toolbar { display: none; }
+body:not(.editing-areas) #layer .area { display: none; }
+body:not(.editing-areas) .band { outline: none !important; background: none !important; pointer-events: none; }
+body:not(.editing-areas) .band .tag, body:not(.editing-areas) .band .handle { display: none !important; }
 body:not([data-mode]) main { visibility: hidden; }
 
 /* left rail */
@@ -404,6 +406,8 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin:
 .badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ui); margin-inline-start: 6px; }
 
 .form { display: grid; gap: 14px; }
+#timing-form { gap: 24px; }
+#timing-form .timing-reset { margin-top: -6px; } /* (each setting has a long explanation: more room between them) */
 .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; font-weight: 600; }
 .field .inline { display: flex; align-items: center; gap: 8px; }
 .field input[type="range"] { flex: 1; accent-color: var(--accent-ui); }
@@ -469,3 +473,8 @@ dialog.ask { border: 1px solid var(--line); border-radius: 14px; background: var
 dialog.ask::backdrop { background: rgba(0, 0, 0, 0.45); }
 dialog.ask p { margin: 0 0 16px; line-height: 1.5; }
 dialog.ask .row { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* a read area's own text style (a fold-out section in its card) */
+.card .area-style { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.card .area-style > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--text); user-select: none; }
+.card .area-style > .form { margin-top: 10px; }
