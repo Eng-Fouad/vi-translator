@@ -236,12 +236,7 @@ fn preview_frame(shared: &Shared, mut s: TcpStream, query: &str, origin: Option<
 /// sent as one part. Preview frames are only made while at least one stream is open.
 fn stream_preview(shared: &Shared, mut s: TcpStream) {
     use std::sync::atomic::Ordering;
-    let head = "HTTP/1.1 200 OK
-Content-Type: multipart/x-mixed-replace; boundary=frame
-Cache-Control: no-store
-Connection: close
-
-";
+    let head = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
     if s.write_all(head.as_bytes()).is_err() {
         return;
     }
@@ -262,13 +257,8 @@ Connection: close
             Some((seq, jpeg)) => {
                 sent = seq;
                 sent_at = std::time::Instant::now();
-                let part = format!("--frame
-Content-Type: image/jpeg
-Content-Length: {}
-
-", jpeg.len());
-                if s.write_all(part.as_bytes()).and_then(|_| s.write_all(&jpeg)).and_then(|_| s.write_all(b"
-")).is_err() {
+                let part = format!("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n", jpeg.len());
+                if s.write_all(part.as_bytes()).and_then(|_| s.write_all(&jpeg)).and_then(|_| s.write_all(b"\r\n")).is_err() {
                     break; // the picture was closed
                 }
             }

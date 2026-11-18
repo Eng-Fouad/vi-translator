@@ -193,15 +193,7 @@ fn tv_state(cfg: &Mutex<Config>, shared: &Shared, mut s: TcpStream, seen: &str) 
         let version = format!("{:016x}", h.finish());
         if version != seen {
             let head = format!(
-                "HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Content-Length: {}
-X-State: {version}
-Cache-Control: no-store
-X-Content-Type-Options: nosniff
-Connection: close
-
-",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nX-State: {version}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
                 body.len()
             );
             let _ = s.set_nodelay(true);
@@ -209,12 +201,7 @@ Connection: close
             return;
         }
         if start.elapsed() >= Duration::from_secs(1) {
-            let _ = s.write_all(b"HTTP/1.1 204 No Content
-Cache-Control: no-store
-Content-Length: 0
-Connection: close
-
-");
+            let _ = s.write_all(b"HTTP/1.1 204 No Content\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             return;
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -233,6 +220,21 @@ fn host_is_address(host: &str) -> bool {
 
 #[cfg(test)]
 mod host_tests {
+    // Every answer written by hand ends its header lines in CRLF: a line break inside the literal
+    // would be a bare LF on the wire (browsers take it, strict HTTP clients don't).
+    #[test]
+    fn hand_written_answers_use_crlf() {
+        for (file, src) in [("lan.rs", include_str!("lan.rs")), ("obs_page.rs", include_str!("obs_page.rs"))] {
+            for line in src.lines() {
+                // (the patterns split, so this line isn't one)
+                let starts_answer = [concat!("\"HTTP", "/1.1 "), concat!("\"--", "frame")].iter().any(|a| line.contains(a));
+                if starts_answer {
+                    assert!(line.contains("\\r\\n"), "{file}: a header line without \\r\\n: {}", line.trim());
+                }
+            }
+        }
+    }
+
     #[test]
     fn the_phone_page_answers_addresses_only() {
         for ok in ["192.168.1.20:8791", "192.168.1.20", "127.0.0.1:8791", "localhost:8791", "[::1]:8791", "[fe80::1]:8791"] {
