@@ -274,5 +274,19 @@ I18N.add("nl", {
   "Downloading the free translation model: {file} ...": "Het gratis vertaalmodel downloaden: {file} ...",
   "Loading the translation model ...": "Het vertaalmodel laden ...",
   "Free local translator ready.": "De gratis lokale vertaler is klaar.",
-  "OCR unavailable: {error}": "OCR niet beschikbaar: {error}"
+  "OCR unavailable: {error}": "OCR niet beschikbaar: {error}",
+  "Show on a TV": "Op een tv tonen",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "De vertalingen over het spel op een Google TV of Android TV, met de app VI Translator TV. Open de app op de tv en koppel hem hier met de code die hij toont.",
+  "Connect a TV": "Tv koppelen",
+  "Connected TVs": "Gekoppelde tv's",
+  "Remove": "Verwijderen",
+  "Looking for TVs…": "Tv's zoeken…",
+  "The code shown on the TV": "De code op de tv",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Er wacht geen tv. Open VI Translator TV op de tv, op hetzelfde netwerk als deze pc.",
+  "Connecting…": "Koppelen…",
+  "Connected to {name}": "Gekoppeld aan {name}",
+  "Wrong code. Check the code on the TV.": "Verkeerde code. Controleer de code op de tv.",
+  "Too many tries: the TV shows a new code.": "Te veel pogingen: de tv toont een nieuwe code.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "De tv antwoordde niet. Is VI Translator TV er nog open?",
+  "Sharing on the home network couldn't start.": "Delen op het thuisnetwerk kon niet starten."
 });

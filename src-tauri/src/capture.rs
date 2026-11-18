@@ -75,6 +75,8 @@ pub struct Shared {
     pub lan_running: std::sync::atomic::AtomicBool,
     /// why the phone page couldn't start listening (shown in the window)
     pub lan_error: Mutex<Option<String>>,
+    /// TVs connected to show the overlays (the VI Translator TV app), with their keys
+    pub tvs: crate::tv::Tvs,
     /// the header's "Live translations" switch is off: the home-network page gets no lines meanwhile
     pub live_off: std::sync::atomic::AtomicBool,
     /// ms between full frames (for reading text) and between preview frames (0 = default)

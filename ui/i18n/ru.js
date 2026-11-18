@@ -274,5 +274,19 @@ I18N.add("ru", {
   "Downloading the free translation model: {file} ...": "Загрузка бесплатной модели перевода: {file} ...",
   "Loading the translation model ...": "Загрузка модели перевода ...",
   "Free local translator ready.": "Бесплатный локальный переводчик готов.",
-  "OCR unavailable: {error}": "OCR недоступно: {error}"
+  "OCR unavailable: {error}": "OCR недоступно: {error}",
+  "Show on a TV": "Показать на телевизоре",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Переводы поверх игры на Google TV или Android TV, с приложением VI Translator TV. Откройте приложение на телевизоре, затем подключите его здесь по коду, который он показывает.",
+  "Connect a TV": "Подключить телевизор",
+  "Connected TVs": "Подключённые телевизоры",
+  "Remove": "Удалить",
+  "Looking for TVs…": "Поиск телевизоров…",
+  "The code shown on the TV": "Код на экране телевизора",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Ни один телевизор не ждёт. Откройте VI Translator TV на телевизоре в той же сети, что и этот ПК.",
+  "Connecting…": "Подключение…",
+  "Connected to {name}": "Подключено к {name}",
+  "Wrong code. Check the code on the TV.": "Неверный код. Проверьте код на телевизоре.",
+  "Too many tries: the TV shows a new code.": "Слишком много попыток: телевизор показывает новый код.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "Телевизор не ответил. VI Translator TV на нём всё ещё открыто?",
+  "Sharing on the home network couldn't start.": "Не удалось запустить общий доступ в домашней сети."
 });

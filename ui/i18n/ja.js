@@ -274,5 +274,19 @@ I18N.add("ja", {
   "Downloading the free translation model: {file} ...": "無料の翻訳モデルをダウンロードしています: {file} ...",
   "Loading the translation model ...": "翻訳モデルを読み込んでいます ...",
   "Free local translator ready.": "無料のローカル翻訳の準備ができました。",
-  "OCR unavailable: {error}": "OCR を使用できません: {error}"
+  "OCR unavailable: {error}": "OCR を使用できません: {error}",
+  "Show on a TV": "テレビに表示",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Google TV または Android TV で、ゲームの上に翻訳を表示します（VI Translator TV アプリ）。テレビでアプリを開き、表示されたコードでここから接続してください。",
+  "Connect a TV": "テレビを接続",
+  "Connected TVs": "接続済みのテレビ",
+  "Remove": "削除",
+  "Looking for TVs…": "テレビを探しています…",
+  "The code shown on the TV": "テレビに表示されたコード",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "待機中のテレビがありません。この PC と同じネットワークで、テレビの VI Translator TV を開いてください。",
+  "Connecting…": "接続中…",
+  "Connected to {name}": "{name} に接続しました",
+  "Wrong code. Check the code on the TV.": "コードが違います。テレビのコードを確認してください。",
+  "Too many tries: the TV shows a new code.": "試行回数が多すぎます。テレビに新しいコードが表示されます。",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "テレビが応答しません。VI Translator TV は開いたままですか？",
+  "Sharing on the home network couldn't start.": "ホームネットワークでの共有を開始できませんでした。"
 });

@@ -274,5 +274,19 @@ I18N.add("el", {
   "Downloading the free translation model: {file} ...": "Λήψη του δωρεάν μοντέλου μετάφρασης: {file} ...",
   "Loading the translation model ...": "Φόρτωση του μοντέλου μετάφρασης ...",
   "Free local translator ready.": "Ο δωρεάν τοπικός μεταφραστής είναι έτοιμος.",
-  "OCR unavailable: {error}": "Το OCR δεν είναι διαθέσιμο: {error}"
+  "OCR unavailable: {error}": "Το OCR δεν είναι διαθέσιμο: {error}",
+  "Show on a TV": "Προβολή σε τηλεόραση",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Οι μεταφράσεις πάνω από το παιχνίδι σε Google TV ή Android TV, με την εφαρμογή VI Translator TV. Ανοίξτε την εφαρμογή στην τηλεόραση και συνδέστε την εδώ με τον κωδικό που δείχνει.",
+  "Connect a TV": "Σύνδεση τηλεόρασης",
+  "Connected TVs": "Συνδεδεμένες τηλεοράσεις",
+  "Remove": "Αφαίρεση",
+  "Looking for TVs…": "Αναζήτηση τηλεοράσεων…",
+  "The code shown on the TV": "Ο κωδικός στην τηλεόραση",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Καμία τηλεόραση δεν περιμένει. Ανοίξτε το VI Translator TV στην τηλεόραση, στο ίδιο δίκτυο με αυτόν τον υπολογιστή.",
+  "Connecting…": "Σύνδεση…",
+  "Connected to {name}": "Συνδέθηκε με {name}",
+  "Wrong code. Check the code on the TV.": "Λάθος κωδικός. Ελέγξτε τον κωδικό στην τηλεόραση.",
+  "Too many tries: the TV shows a new code.": "Πάρα πολλές προσπάθειες: η τηλεόραση δείχνει νέο κωδικό.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "Η τηλεόραση δεν απάντησε. Είναι ακόμη ανοιχτό το VI Translator TV;",
+  "Sharing on the home network couldn't start.": "Η κοινή χρήση στο οικιακό δίκτυο δεν ξεκίνησε."
 });

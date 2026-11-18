@@ -274,5 +274,19 @@ I18N.add("mr", {
   "Downloading the free translation model: {file} ...": "मोफत भाषांतर मॉडेल डाउनलोड होत आहे: {file} ...",
   "Loading the translation model ...": "भाषांतर मॉडेल लोड होत आहे ...",
   "Free local translator ready.": "मोफत स्थानिक भाषांतरकार तयार आहे.",
-  "OCR unavailable: {error}": "OCR उपलब्ध नाही: {error}"
+  "OCR unavailable: {error}": "OCR उपलब्ध नाही: {error}",
+  "Show on a TV": "टीव्हीवर दाखवा",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Google TV किंवा Android TV वर गेमवर भाषांतरे, VI Translator TV अॅपसह. टीव्हीवर अॅप उघडा, मग टीव्हीवर दिसणाऱ्या कोडने तो इथे जोडा.",
+  "Connect a TV": "टीव्ही जोडा",
+  "Connected TVs": "जोडलेले टीव्ही",
+  "Remove": "काढा",
+  "Looking for TVs…": "टीव्ही शोधत आहे…",
+  "The code shown on the TV": "टीव्हीवर दिसणारा कोड",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "कोणताही टीव्ही वाट पाहत नाही. या पीसीच्या नेटवर्कवर टीव्हीमध्ये VI Translator TV उघडा.",
+  "Connecting…": "जोडत आहे…",
+  "Connected to {name}": "{name} शी जोडले",
+  "Wrong code. Check the code on the TV.": "चुकीचा कोड. टीव्हीवरचा कोड तपासा.",
+  "Too many tries: the TV shows a new code.": "खूप प्रयत्न झाले: टीव्ही नवीन कोड दाखवत आहे.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "टीव्हीने उत्तर दिले नाही. त्यावर VI Translator TV अजून उघडे आहे का?",
+  "Sharing on the home network couldn't start.": "होम नेटवर्कवर शेअरिंग सुरू होऊ शकले नाही."
 });

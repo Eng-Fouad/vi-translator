@@ -22,6 +22,7 @@ mod screens;
 mod pagescript;
 mod sync;
 mod translate;
+mod tv;
 mod updater;
 
 use std::collections::HashMap;
@@ -325,6 +326,47 @@ fn lan_info(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<la
     main_only(&webview)?;
     let c = state.cfg.lock().unwrap().clone();
     Ok(lan::info(&c, &state.shared))
+}
+
+/// TVs on the home network waiting to be connected (the VI Translator TV app), and whether each is
+/// connected already.
+#[tauri::command]
+async fn find_tvs(webview: tauri::Webview, state: tauri::State<'_, AppState>) -> Result<Vec<tv::FoundTv>, String> {
+    main_only(&webview)?;
+    let shared = state.shared.clone();
+    tauri::async_runtime::spawn_blocking(move || tv::find(&shared.tvs)).await.map_err(|e| e.to_string())
+}
+
+/// Connect the TV at `address` with the code it shows. Its name, or why not ("wrong_code",
+/// "too_many", "no_answer", "not_sharing").
+#[tauri::command]
+async fn connect_tv(webview: tauri::Webview, state: tauri::State<'_, AppState>, address: String, code: String) -> Result<String, String> {
+    main_only(&webview)?;
+    let (c, shared) = (state.cfg.lock().unwrap().clone(), state.shared.clone());
+    // the TV loads its page from the home-network sharing, which has to be on (the window turns it on first)
+    let running = shared.lan_running.load(std::sync::atomic::Ordering::Relaxed);
+    let ip = lan::lan_ip();
+    let (true, true, Some(ip)) = (c.lan_page, running, ip) else { return Err(tv::PairError::NotSharing.code().into()) };
+    let pc = format!("{ip}:{}", c.lan_port);
+    tauri::async_runtime::spawn_blocking(move || tv::pair(&shared.tvs, &address, &code, &pc, &tv::pc_name()))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.code().to_string())
+}
+
+/// The connected TVs (names only).
+#[tauri::command]
+fn list_tvs(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<Vec<tv::TvInfo>, String> {
+    main_only(&webview)?;
+    Ok(state.shared.tvs.list())
+}
+
+/// Disconnect a TV: its key stops working, and the TV shows a new code.
+#[tauri::command]
+fn remove_tv(webview: tauri::Webview, state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    main_only(&webview)?;
+    state.shared.tvs.remove_id(&id);
+    Ok(())
 }
 
 /// Opens the home-network page in the default browser (only that address: the page passes none).
@@ -1906,11 +1948,13 @@ fn main() {
     let saver = Arc::new(debug_frames::SaverState::default());
     let memory = Arc::new(Mutex::new(memory::Memory::load(db_dir(), &cfg.lock().unwrap().target_lang)));
     let shared = Arc::new(Shared::default());
+    // the TVs connected to show the overlays, and their keys (their own file, not the settings)
+    shared.tvs.load(data_dir().join("tvs.json"));
     let update: Arc<Mutex<Option<updater::Update>>> = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, open_lan_page, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

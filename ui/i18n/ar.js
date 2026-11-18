@@ -274,5 +274,19 @@ I18N.add("ar", {
   "Downloading the free translation model: {file} ...": "جارٍ تنزيل نموذج الترجمة المجاني: {file} ...",
   "Loading the translation model ...": "جارٍ تحميل نموذج الترجمة ...",
   "Free local translator ready.": "المترجم المحلي المجاني جاهز.",
-  "OCR unavailable: {error}": "قراءة النص غير متاحة: {error}"
+  "OCR unavailable: {error}": "قراءة النص غير متاحة: {error}",
+  "Show on a TV": "العرض على التلفاز",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "الترجمة فوق اللعبة على تلفاز Google TV أو Android TV، مع تطبيق VI Translator TV. افتح التطبيق على التلفاز، ثم اربطه هنا بالرمز الذي يظهره.",
+  "Connect a TV": "ربط تلفاز",
+  "Connected TVs": "أجهزة التلفاز المرتبطة",
+  "Remove": "إزالة",
+  "Looking for TVs…": "جارٍ البحث عن أجهزة التلفاز…",
+  "The code shown on the TV": "الرمز الظاهر على التلفاز",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "لا يوجد تلفاز بانتظار الربط. افتح VI Translator TV على التلفاز، على نفس شبكة هذا الكمبيوتر.",
+  "Connecting…": "جارٍ الربط…",
+  "Connected to {name}": "تم الربط بـ {name}",
+  "Wrong code. Check the code on the TV.": "رمز خاطئ. تحقق من الرمز على التلفاز.",
+  "Too many tries: the TV shows a new code.": "محاولات كثيرة: يعرض التلفاز رمزًا جديدًا.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "لم يرد التلفاز. هل ما زال VI Translator TV مفتوحًا عليه؟",
+  "Sharing on the home network couldn't start.": "تعذّر بدء المشاركة على الشبكة المنزلية."
 });

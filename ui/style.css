@@ -371,7 +371,16 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin:
 .toolbar .btn:first-child:hover, #add-area-2:hover { filter: brightness(1.08); color: #fff; }
 .callout { margin-top: 12px; padding: 11px 12px; border-radius: var(--radius-sm); background: var(--panel-2); color: var(--muted); font-size: 13px;
   border-inline-start: 3px solid var(--accent-ui); }
-.callout:empty { display: none; }/* OBS canvas size under the Browser Source address */
+.callout:empty { display: none; }
+/* TVs in the Source tab: found ones (with the code box) and connected ones */
+.tv-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.tv-list:empty { display: none; }
+.tv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 11px; border-radius: var(--radius-sm); background: var(--panel-2); }
+.tv-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tv-code { width: 9.5em; height: var(--ctl-h); letter-spacing: .25em; text-align: center; font-variant-numeric: tabular-nums; }
+.tv-msg { flex-basis: 100%; }
+.tv-msg:empty { display: none; }
+.tv-msg.err { color: var(--err); }/* OBS canvas size under the Browser Source address */
 .canvas-size { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 10px; font-size: 13px; }
 .canvas-size b { font-size: 15px; color: var(--accent-ui); font-variant-numeric: tabular-nums; unicode-bidi: isolate; }
 .canvas-size .muted { margin: 0; flex-basis: 100%; }

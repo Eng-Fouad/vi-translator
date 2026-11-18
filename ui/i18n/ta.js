@@ -274,5 +274,19 @@ I18N.add("ta", {
   "Downloading the free translation model: {file} ...": "இலவச மொழிபெயர்ப்பு மாதிரி பதிவிறக்கப்படுகிறது: {file} ...",
   "Loading the translation model ...": "மொழிபெயர்ப்பு மாதிரி ஏற்றப்படுகிறது ...",
   "Free local translator ready.": "இலவச உள்ளூர் மொழிபெயர்ப்பாளர் தயார்.",
-  "OCR unavailable: {error}": "OCR கிடைக்கவில்லை: {error}"
+  "OCR unavailable: {error}": "OCR கிடைக்கவில்லை: {error}",
+  "Show on a TV": "டிவியில் காட்டு",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Google TV அல்லது Android TV-இல் விளையாட்டின் மேல் மொழிபெயர்ப்புகள், VI Translator TV செயலியுடன். டிவியில் செயலியைத் திறந்து, அது காட்டும் குறியீட்டால் இங்கே இணைக்கவும்.",
+  "Connect a TV": "டிவியை இணை",
+  "Connected TVs": "இணைக்கப்பட்ட டிவிகள்",
+  "Remove": "அகற்று",
+  "Looking for TVs…": "டிவிகளைத் தேடுகிறது…",
+  "The code shown on the TV": "டிவியில் காட்டப்படும் குறியீடு",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "எந்த டிவியும் காத்திருக்கவில்லை. இந்த கணினியின் அதே நெட்வொர்க்கில் டிவியில் VI Translator TV-ஐத் திறக்கவும்.",
+  "Connecting…": "இணைக்கிறது…",
+  "Connected to {name}": "{name} உடன் இணைந்தது",
+  "Wrong code. Check the code on the TV.": "தவறான குறியீடு. டிவியில் உள்ள குறியீட்டைச் சரிபார்க்கவும்.",
+  "Too many tries: the TV shows a new code.": "அதிக முயற்சிகள்: டிவி புதிய குறியீட்டைக் காட்டுகிறது.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "டிவி பதிலளிக்கவில்லை. அதில் VI Translator TV இன்னும் திறந்திருக்கிறதா?",
+  "Sharing on the home network couldn't start.": "வீட்டு நெட்வொர்க்கில் பகிர்வைத் தொடங்க முடியவில்லை."
 });

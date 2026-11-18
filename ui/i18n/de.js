@@ -274,5 +274,19 @@ I18N.add("de", {
   "Downloading the free translation model: {file} ...": "Das kostenlose Übersetzungsmodell wird heruntergeladen: {file} ...",
   "Loading the translation model ...": "Das Übersetzungsmodell wird geladen ...",
   "Free local translator ready.": "Der kostenlose lokale Übersetzer ist bereit.",
-  "OCR unavailable: {error}": "OCR nicht verfügbar: {error}"
+  "OCR unavailable: {error}": "OCR nicht verfügbar: {error}",
+  "Show on a TV": "Auf einem Fernseher zeigen",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Die Übersetzungen über dem Spiel auf einem Google TV oder Android TV, mit der App VI Translator TV. Öffne die App auf dem Fernseher und verbinde ihn dann hier mit dem Code, den er zeigt.",
+  "Connect a TV": "Fernseher verbinden",
+  "Connected TVs": "Verbundene Fernseher",
+  "Remove": "Entfernen",
+  "Looking for TVs…": "Fernseher werden gesucht…",
+  "The code shown on the TV": "Der Code auf dem Fernseher",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Kein Fernseher wartet. Öffne VI Translator TV auf dem Fernseher, im selben Netzwerk wie dieser PC.",
+  "Connecting…": "Wird verbunden…",
+  "Connected to {name}": "Verbunden mit {name}",
+  "Wrong code. Check the code on the TV.": "Falscher Code. Prüfe den Code auf dem Fernseher.",
+  "Too many tries: the TV shows a new code.": "Zu viele Versuche: Der Fernseher zeigt einen neuen Code.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "Der Fernseher hat nicht geantwortet. Ist VI Translator TV dort noch geöffnet?",
+  "Sharing on the home network couldn't start.": "Die Freigabe im Heimnetz konnte nicht starten."
 });

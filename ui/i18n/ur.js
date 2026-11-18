@@ -274,5 +274,19 @@ I18N.add("ur", {
   "Downloading the free translation model: {file} ...": "مفت ترجمہ ماڈل ڈاؤن لوڈ ہو رہا ہے: {file} ...",
   "Loading the translation model ...": "ترجمہ ماڈل لوڈ ہو رہا ہے ...",
   "Free local translator ready.": "مفت مقامی مترجم تیار ہے۔",
-  "OCR unavailable: {error}": "OCR دستیاب نہیں: {error}"
+  "OCR unavailable: {error}": "OCR دستیاب نہیں: {error}",
+  "Show on a TV": "ٹی وی پر دکھائیں",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Google TV یا Android TV پر گیم کے اوپر ترجمے، VI Translator TV ایپ کے ساتھ۔ ٹی وی پر ایپ کھولیں، پھر اس کے دکھائے گئے کوڈ سے اسے یہاں جوڑیں۔",
+  "Connect a TV": "ٹی وی جوڑیں",
+  "Connected TVs": "جڑے ہوئے ٹی وی",
+  "Remove": "ہٹائیں",
+  "Looking for TVs…": "ٹی وی تلاش کیے جا رہے ہیں…",
+  "The code shown on the TV": "ٹی وی پر دکھایا گیا کوڈ",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "کوئی ٹی وی انتظار میں نہیں۔ اس پی سی والے نیٹ ورک پر ٹی وی میں VI Translator TV کھولیں۔",
+  "Connecting…": "جوڑا جا رہا ہے…",
+  "Connected to {name}": "{name} سے جڑ گیا",
+  "Wrong code. Check the code on the TV.": "غلط کوڈ۔ ٹی وی پر کوڈ دیکھیں۔",
+  "Too many tries: the TV shows a new code.": "بہت زیادہ کوششیں: ٹی وی نیا کوڈ دکھا رہا ہے۔",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "ٹی وی نے جواب نہیں دیا۔ کیا اس پر VI Translator TV ابھی تک کھلا ہے؟",
+  "Sharing on the home network couldn't start.": "ہوم نیٹ ورک پر شیئرنگ شروع نہیں ہو سکی۔"
 });

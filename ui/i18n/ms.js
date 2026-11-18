@@ -274,5 +274,19 @@ I18N.add("ms", {
   "Downloading the free translation model: {file} ...": "Memuat turun model terjemahan percuma: {file} ...",
   "Loading the translation model ...": "Memuatkan model terjemahan ...",
   "Free local translator ready.": "Penterjemah tempatan percuma sedia.",
-  "OCR unavailable: {error}": "OCR tidak tersedia: {error}"
+  "OCR unavailable: {error}": "OCR tidak tersedia: {error}",
+  "Show on a TV": "Tunjukkan pada TV",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Terjemahan di atas permainan pada Google TV atau Android TV, dengan aplikasi VI Translator TV. Buka aplikasi pada TV, kemudian sambungkannya di sini dengan kod yang ditunjukkannya.",
+  "Connect a TV": "Sambungkan TV",
+  "Connected TVs": "TV yang disambungkan",
+  "Remove": "Alih keluar",
+  "Looking for TVs…": "Mencari TV…",
+  "The code shown on the TV": "Kod yang ditunjukkan pada TV",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Tiada TV yang menunggu. Buka VI Translator TV pada TV, dalam rangkaian yang sama dengan PC ini.",
+  "Connecting…": "Menyambung…",
+  "Connected to {name}": "Disambungkan ke {name}",
+  "Wrong code. Check the code on the TV.": "Kod salah. Semak kod pada TV.",
+  "Too many tries: the TV shows a new code.": "Terlalu banyak cubaan: TV menunjukkan kod baharu.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "TV tidak menjawab. Adakah VI Translator TV masih dibuka padanya?",
+  "Sharing on the home network couldn't start.": "Perkongsian pada rangkaian rumah tidak dapat dimulakan."
 });

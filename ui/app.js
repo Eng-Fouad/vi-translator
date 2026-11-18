@@ -391,7 +391,76 @@ $("lan-info").addEventListener("click", (e) => {
   invoke("open_lan_page").catch((err) => log({ error: String(err) }));
 });
 $("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
-setInterval(() => { if (cfg && !$("tab-source").classList.contains("hidden")) updateLan(); }, 3000);
+setInterval(() => { if (cfg && !$("tab-source").classList.contains("hidden")) { updateLan(); updateTvs(); } }, 3000);
+
+// TVs (the VI Translator TV app): find the ones waiting on the home network, connect one with the
+// code it shows, remove a connected one.
+async function updateTvs() {
+  const box = $("tv-connected");
+  let tvs;
+  try { tvs = await invoke("list_tvs"); } catch (e) { box.textContent = String(e); return; }
+  const html = tvs.length
+    ? `<div class="hint">${AS.esc(t("Connected TVs"))}</div>` + tvs.map((tv) => `<div class="tv-row"><span class="tv-name">📺 ${AS.esc(tv.name)}</span>
+        <button class="btn danger" data-remove-tv="${AS.esc(tv.id)}">${AS.esc(t("Remove"))}</button></div>`).join("")
+    : "";
+  if (box.innerHTML !== html) box.innerHTML = html;
+}
+// The TV loads its page from the home-network sharing: turned on if it's off, and waited for.
+async function sharingReady() {
+  if (!cfg.lan_page) { cfg.lan_page = true; save(false); }
+  for (let i = 0; i < 25; i++) {
+    try { if ((await invoke("lan_info")).url) { updateLan(); return true; } } catch (e) { /* not yet */ }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+}
+$("tv-find").addEventListener("click", async () => {
+  const box = $("tv-found"), btn = $("tv-find");
+  btn.disabled = true;
+  box.innerHTML = `<div class="hint">${AS.esc(t("Looking for TVs…"))}</div>`;
+  try {
+    const found = (await invoke("find_tvs")).filter((f) => !f.connected);
+    box.innerHTML = found.length
+      ? found.map((f) => `<div class="tv-row" data-address="${AS.esc(f.address)}"><span class="tv-name">📺 ${AS.esc(f.name)}</span>
+          <input class="tv-code" inputmode="numeric" maxlength="7" dir="ltr" autocomplete="off" placeholder="000 000" title="${AS.esc(t("The code shown on the TV"))}" />
+          <button class="btn tv-connect">${AS.esc(t("Connect"))}</button><div class="tv-msg hint"></div></div>`).join("")
+      : `<div class="hint">${AS.esc(t("No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC."))}</div>`;
+    box.querySelector(".tv-code")?.focus();
+  } catch (e) { box.textContent = String(e); }
+  finally { btn.disabled = false; }
+});
+async function connectTv(row) {
+  const msg = row.querySelector(".tv-msg"), b = row.querySelector(".tv-connect");
+  b.disabled = true;
+  msg.className = "tv-msg hint";
+  msg.textContent = t("Connecting…");
+  try {
+    if (!(await sharingReady())) throw "not_sharing";
+    const name = await invoke("connect_tv", { address: row.dataset.address, code: row.querySelector(".tv-code").value });
+    row.remove();
+    updateTvs();
+    log({ info: t("Connected to {name}", { name }) });
+  } catch (err) {
+    const why = {
+      wrong_code: () => t("Wrong code. Check the code on the TV."),
+      too_many: () => t("Too many tries: the TV shows a new code."),
+      no_answer: () => t("The TV didn't answer. Is VI Translator TV still open on it?"),
+      not_sharing: () => t("Sharing on the home network couldn't start."),
+    }[String(err)];
+    msg.className = "tv-msg err";
+    msg.textContent = why ? why() : String(err);
+    b.disabled = false;
+  }
+}
+$("tv-found").addEventListener("click", (e) => { const b = e.target.closest(".tv-connect"); if (b) connectTv(b.closest(".tv-row")); });
+$("tv-found").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.classList.contains("tv-code")) connectTv(e.target.closest(".tv-row")); });
+$("tv-connected").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-remove-tv]");
+  if (!b) return;
+  b.disabled = true;
+  try { await invoke("remove_tv", { id: b.dataset.removeTv }); } catch (err) { log({ error: String(err) }); }
+  updateTvs();
+});
 
 // save pending edits (e.g. the OBS password just typed) before asking OBS for its sources
 $("refresh-windows").addEventListener("click", async () => {
@@ -1468,6 +1537,7 @@ function lockControls() {
   document.fonts.ready.then(drawLayer); // re-measure once the bundled fonts have loaded
   renderObs();
   updateLan();
+  updateTvs();
   invoke("app_version").then((v) => { $("app-version").textContent = "v" + v; document.title = "VI Translator " + v; }).catch(() => {});
   invoke("update_status").then(showUpdate).catch(() => {});
   $("log").dataset.empty = t("Translations appear here as the game shows text.");

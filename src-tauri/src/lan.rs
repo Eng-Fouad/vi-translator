@@ -1,9 +1,11 @@
 //! Live translations on other devices: a small read-only web page on the home network
-//! (http://<this PC>:<port>/), for a phone, tablet or another computer.
+//! (http://<this PC>:<port>/), for a phone, tablet or another computer, and the overlays for a TV
+//! (http://<this PC>:<port>/tv, drawn by the VI Translator TV app over the game picture).
 //!
-//! Off by default. While "lan_page" is on, it listens on all addresses but serves only the page,
-//! its fonts and the list of recent translations: never settings, the picture or the OBS page
-//! (those stay on the 127.0.0.1-only server in obs_page.rs).
+//! Off by default. While "lan_page" is on, it listens on all addresses but serves only the pages,
+//! their fonts and drawing code, the list of recent translations and what the overlays show now:
+//! never settings beyond the overlays' own places and style, the picture or the OBS page (those
+//! stay on the 127.0.0.1-only server in obs_page.rs).
 
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -108,10 +110,10 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
                     // (too many at once: closed)
                     let Some(slot) = Slot::take(&ACTIVE) else { continue };
                     let _ = s.set_nonblocking(false);
-                    let (a, sh) = (app.clone(), shared.clone());
+                    let (a, c, sh) = (app.clone(), cfg.clone(), shared.clone());
                     std::thread::spawn(move || {
                         let _slot = slot;
-                        handle(&a, &sh, s);
+                        handle(&a, &c, &sh, s);
                     });
                 }
                 std::thread::sleep(Duration::from_millis(60));
@@ -121,7 +123,7 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>) {
     }
 }
 
-fn handle(app: &AppHandle, shared: &Shared, s: TcpStream) {
+fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
     let Some(req) = read_request(&s) else { return };
     // Asked for by an address (this PC's, as the phone opens it), not a name: a website can't point a
     // name of its own at this PC and read the page from the browser ("DNS rebinding").
@@ -140,9 +142,69 @@ fn handle(app: &AppHandle, shared: &Shared, s: TcpStream) {
             let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live });
             respond(s, "200 OK", "application/json; charset=utf-8", body.to_string().as_bytes());
         }
-        // the page's fonts and nothing else
+        // the TV app's page: the overlays over the whole picture, as on the OBS page, for a TV
+        // connected in the main window only (its key in t=)
+        "/tv" | "/tv.json" | "/tv/forget" if !shared.tvs.allowed(param(query, "t")) => {
+            respond(s, "403 Forbidden", "text/plain", b"not connected")
+        }
+        "/tv" => serve_asset(app, s, "tv.html"),
+        "/tv.json" => tv_state(cfg, shared, s, param(query, "h")),
+        // the TV disconnected itself: its key is forgotten
+        "/tv/forget" => {
+            shared.tvs.remove_token(param(query, "t"));
+            respond(s, "200 OK", "text/plain", b"ok")
+        }
+        "/common.js" => serve_asset(app, s, "common.js"),
+        // the pages' fonts and nothing else
         p if p.starts_with("/fonts/") && !p.contains("..") || p == "/fonts.css" => serve_asset(app, s, p.trim_start_matches('/')),
         _ => respond(s, "404 Not Found", "text/plain", b"not found"),
+    }
+}
+
+/// A query parameter's value ("" when it isn't there).
+fn param<'a>(query: &'a str, name: &str) -> &'a str {
+    query.split('&').find_map(|kv| kv.split_once('=').filter(|(k, _)| *k == name).map(|(_, v)| v)).unwrap_or("")
+}
+
+/// What the overlays show now, for the TV page, with its version in `X-State`: when the page
+/// already has this version (`seen`), the answer waits up to a second for a change (a new line is
+/// on the TV at once, and nothing is sent while nothing changes), then is 204 if there was none.
+fn tv_state(cfg: &Mutex<Config>, shared: &Shared, mut s: TcpStream, seen: &str) {
+    use std::hash::{Hash, Hasher};
+    use std::io::Write;
+    let start = std::time::Instant::now();
+    loop {
+        let body = crate::obs_page::overlay_state(cfg, shared).to_string();
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        body.hash(&mut h);
+        let version = format!("{:016x}", h.finish());
+        if version != seen {
+            let head = format!(
+                "HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Content-Length: {}
+X-State: {version}
+Cache-Control: no-store
+X-Content-Type-Options: nosniff
+Connection: close
+
+",
+                body.len()
+            );
+            let _ = s.set_nodelay(true);
+            let _ = s.write_all(head.as_bytes()).and_then(|_| s.write_all(body.as_bytes()));
+            return;
+        }
+        if start.elapsed() >= Duration::from_secs(1) {
+            let _ = s.write_all(b"HTTP/1.1 204 No Content
+Cache-Control: no-store
+Content-Length: 0
+Connection: close
+
+");
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 
@@ -187,6 +249,20 @@ mod tests {
         let ids: Vec<u64> = log.iter().map(|l| l["id"].as_u64().unwrap()).collect();
         assert!(ids.windows(2).all(|w| w[0] < w[1]), "ids increase");
         assert_eq!(log.front().unwrap()["en"], "Line 6");
+    }
+
+    #[test]
+    fn the_tv_state_has_the_overlays_only() {
+        let c = Mutex::new(Config { deepl_key: "secret-deepl-key".into(), claude_key: "secret-claude-key".into(), ..Config::default() });
+        let shared = Shared::default();
+        *shared.status.lock().unwrap() = "status-for-troubleshooting".into();
+        let v = crate::obs_page::overlay_state(&c, &shared);
+        let text = v.to_string();
+        assert!(!text.contains("secret-") && !text.contains("status-for-troubleshooting"), "{text}");
+        for key in ["areas", "style", "shown", "screen", "overlays", "lang"] {
+            assert!(v.get(key).is_some(), "{key}");
+        }
+        assert!(v.get("status").is_none() && v.get("frame").is_none() && v.get("preview").is_none());
     }
 
     #[test]

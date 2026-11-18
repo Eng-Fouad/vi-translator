@@ -274,5 +274,19 @@ I18N.add("th", {
   "Downloading the free translation model: {file} ...": "กำลังดาวน์โหลดโมเดลแปลภาษาฟรี: {file} ...",
   "Loading the translation model ...": "กำลังโหลดโมเดลแปลภาษา ...",
   "Free local translator ready.": "ตัวแปลภาษาในเครื่องแบบฟรีพร้อมใช้งานแล้ว",
-  "OCR unavailable: {error}": "ใช้ OCR ไม่ได้: {error}"
+  "OCR unavailable: {error}": "ใช้ OCR ไม่ได้: {error}",
+  "Show on a TV": "แสดงบนทีวี",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "คำแปลบนเกมในทีวี Google TV หรือ Android TV ด้วยแอป VI Translator TV เปิดแอปบนทีวี แล้วเชื่อมต่อที่นี่ด้วยรหัสที่ทีวีแสดง",
+  "Connect a TV": "เชื่อมต่อทีวี",
+  "Connected TVs": "ทีวีที่เชื่อมต่อแล้ว",
+  "Remove": "นำออก",
+  "Looking for TVs…": "กำลังค้นหาทีวี…",
+  "The code shown on the TV": "รหัสที่แสดงบนทีวี",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "ไม่มีทีวีที่รออยู่ เปิด VI Translator TV บนทีวี ในเครือข่ายเดียวกับพีซีนี้",
+  "Connecting…": "กำลังเชื่อมต่อ…",
+  "Connected to {name}": "เชื่อมต่อกับ {name} แล้ว",
+  "Wrong code. Check the code on the TV.": "รหัสไม่ถูกต้อง ตรวจสอบรหัสบนทีวี",
+  "Too many tries: the TV shows a new code.": "ลองหลายครั้งเกินไป: ทีวีแสดงรหัสใหม่",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "ทีวีไม่ตอบสนอง VI Translator TV ยังเปิดอยู่บนทีวีหรือไม่",
+  "Sharing on the home network couldn't start.": "ไม่สามารถเริ่มการแชร์ในเครือข่ายภายในบ้านได้"
 });

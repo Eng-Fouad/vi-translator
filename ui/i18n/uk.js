@@ -274,5 +274,19 @@ I18N.add("uk", {
   "Downloading the free translation model: {file} ...": "Завантаження безкоштовної моделі перекладу: {file} ...",
   "Loading the translation model ...": "Завантаження моделі перекладу ...",
   "Free local translator ready.": "Безкоштовний локальний перекладач готовий.",
-  "OCR unavailable: {error}": "OCR недоступне: {error}"
+  "OCR unavailable: {error}": "OCR недоступне: {error}",
+  "Show on a TV": "Показати на телевізорі",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Переклади поверх гри на Google TV або Android TV, із застосунком VI Translator TV. Відкрийте застосунок на телевізорі, а потім підключіть його тут за кодом, який він показує.",
+  "Connect a TV": "Підключити телевізор",
+  "Connected TVs": "Підключені телевізори",
+  "Remove": "Вилучити",
+  "Looking for TVs…": "Пошук телевізорів…",
+  "The code shown on the TV": "Код на екрані телевізора",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Жоден телевізор не чекає. Відкрийте VI Translator TV на телевізорі в тій самій мережі, що й цей ПК.",
+  "Connecting…": "Підключення…",
+  "Connected to {name}": "Підключено до {name}",
+  "Wrong code. Check the code on the TV.": "Неправильний код. Перевірте код на телевізорі.",
+  "Too many tries: the TV shows a new code.": "Забагато спроб: телевізор показує новий код.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "Телевізор не відповів. VI Translator TV на ньому досі відкритий?",
+  "Sharing on the home network couldn't start.": "Не вдалося запустити спільний доступ у домашній мережі."
 });

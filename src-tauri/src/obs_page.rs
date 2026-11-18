@@ -97,20 +97,33 @@ pub(crate) fn build_id() -> u64 {
     *ID.get_or_init(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0))
 }
 
-fn state_json(cfg: &Mutex<Config>, shared: &Shared) -> Vec<u8> {
-    let c = cfg.lock().unwrap().clone();
-    let v = serde_json::json!({
+/// What a page needs to draw the overlays over the whole game picture (this OBS page, and the TV
+/// page on the home network, lan.rs): where the areas are, their style, and what each shows now.
+/// Never settings beyond that (keys, passwords) or the picture; private screen text is never in
+/// `screen` (it's taken out before a page is shown).
+pub(crate) fn overlay_state(cfg: &Mutex<Config>, shared: &Shared) -> serde_json::Value {
+    let (areas, style, profile_opts, memory_tint, overlays, lang) = {
+        let c = cfg.lock().unwrap();
+        (c.areas.clone(), c.style.clone(), c.profile_opts.clone(), c.memory_tint, c.overlays_enabled, c.target_lang.clone())
+    };
+    serde_json::json!({
         "build": build_id(),
-        "areas": c.areas,
-        "style": c.style,
-        "profile_opts": c.profile_opts,
-        "memory_tint": c.memory_tint,
+        "areas": areas,
+        "style": style,
+        "profile_opts": profile_opts,
+        "memory_tint": memory_tint,
         // the header's Overlays switch: off = draw nothing
-        "overlays": c.overlays_enabled,
-        "lang": c.target_lang,
+        "overlays": overlays,
+        "lang": lang,
         "shown": shared.shown.lock().unwrap().clone(),
         "screen": shared.screen.lock().unwrap().clone(),
         "reason": shared.screen_reason.lock().unwrap().clone(),
+    })
+}
+
+fn state_json(cfg: &Mutex<Config>, shared: &Shared) -> Vec<u8> {
+    let mut v = overlay_state(cfg, shared);
+    let extra = serde_json::json!({
         // for troubleshooting
         "status": shared.status.lock().unwrap().clone(),
         "frame": shared.latest().map(|f| [f.w, f.h, f.seq as u32]),
@@ -121,6 +134,9 @@ fn state_json(cfg: &Mutex<Config>, shared: &Shared) -> Vec<u8> {
             "jpeg_seq": shared.preview_seq.load(std::sync::atomic::Ordering::Relaxed),
         },
     });
+    if let (Some(o), serde_json::Value::Object(e)) = (v.as_object_mut(), extra) {
+        o.extend(e);
+    }
     serde_json::to_vec(&v).unwrap_or_default()
 }
 

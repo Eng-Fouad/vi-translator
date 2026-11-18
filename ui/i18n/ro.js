@@ -274,5 +274,19 @@ I18N.add("ro", {
   "Downloading the free translation model: {file} ...": "Se descarcă modelul de traducere gratuit: {file} ...",
   "Loading the translation model ...": "Se încarcă modelul de traducere ...",
   "Free local translator ready.": "Traducătorul local gratuit este gata.",
-  "OCR unavailable: {error}": "OCR indisponibil: {error}"
+  "OCR unavailable: {error}": "OCR indisponibil: {error}",
+  "Show on a TV": "Afișează pe un televizor",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Traducerile peste joc pe un Google TV sau Android TV, cu aplicația VI Translator TV. Deschide aplicația pe televizor, apoi conectează-l aici cu codul pe care îl arată.",
+  "Connect a TV": "Conectează un televizor",
+  "Connected TVs": "Televizoare conectate",
+  "Remove": "Elimină",
+  "Looking for TVs…": "Se caută televizoare…",
+  "The code shown on the TV": "Codul afișat pe televizor",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Niciun televizor nu așteaptă. Deschide VI Translator TV pe televizor, în aceeași rețea cu acest PC.",
+  "Connecting…": "Se conectează…",
+  "Connected to {name}": "Conectat la {name}",
+  "Wrong code. Check the code on the TV.": "Cod greșit. Verifică codul de pe televizor.",
+  "Too many tries: the TV shows a new code.": "Prea multe încercări: televizorul arată un cod nou.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "Televizorul nu a răspuns. Mai este deschisă VI Translator TV pe el?",
+  "Sharing on the home network couldn't start.": "Partajarea în rețeaua de acasă nu a putut porni."
 });

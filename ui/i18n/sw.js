@@ -274,5 +274,19 @@ I18N.add("sw", {
   "Downloading the free translation model: {file} ...": "Inapakua modeli ya bure ya kutafsiri: {file} ...",
   "Loading the translation model ...": "Inapakia modeli ya kutafsiri ...",
   "Free local translator ready.": "Mtafsiri wa bure wa ndani yuko tayari.",
-  "OCR unavailable: {error}": "OCR haipatikani: {error}"
+  "OCR unavailable: {error}": "OCR haipatikani: {error}",
+  "Show on a TV": "Onyesha kwenye TV",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "Tafsiri juu ya mchezo kwenye Google TV au Android TV, kwa programu ya VI Translator TV. Fungua programu kwenye TV, kisha iunganishe hapa kwa msimbo inaouonyesha.",
+  "Connect a TV": "Unganisha TV",
+  "Connected TVs": "TV zilizounganishwa",
+  "Remove": "Ondoa",
+  "Looking for TVs…": "Inatafuta TV…",
+  "The code shown on the TV": "Msimbo unaoonyeshwa kwenye TV",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "Hakuna TV inayosubiri. Fungua VI Translator TV kwenye TV, kwenye mtandao mmoja na kompyuta hii.",
+  "Connecting…": "Inaunganisha…",
+  "Connected to {name}": "Imeunganishwa na {name}",
+  "Wrong code. Check the code on the TV.": "Msimbo si sahihi. Angalia msimbo kwenye TV.",
+  "Too many tries: the TV shows a new code.": "Majaribio mengi mno: TV inaonyesha msimbo mpya.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "TV haikujibu. Je, VI Translator TV bado iko wazi juu yake?",
+  "Sharing on the home network couldn't start.": "Kushiriki kwenye mtandao wa nyumbani hakukuweza kuanza."
 });

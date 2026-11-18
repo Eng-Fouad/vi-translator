@@ -274,5 +274,19 @@ I18N.add("fa", {
   "Downloading the free translation model: {file} ...": "در حال دانلود مدل ترجمهٔ رایگان: {file} ...",
   "Loading the translation model ...": "در حال بارگذاری مدل ترجمه ...",
   "Free local translator ready.": "مترجم محلی رایگان آماده است.",
-  "OCR unavailable: {error}": "OCR در دسترس نیست: {error}"
+  "OCR unavailable: {error}": "OCR در دسترس نیست: {error}",
+  "Show on a TV": "نمایش روی تلویزیون",
+  "The translations over the game on a Google TV or Android TV, with the VI Translator TV app. Open the app on the TV, then connect it here with the code it shows.": "ترجمه‌ها روی بازی در Google TV یا Android TV، با برنامه VI Translator TV. برنامه را روی تلویزیون باز کنید، سپس آن را اینجا با کدی که نشان می‌دهد وصل کنید.",
+  "Connect a TV": "اتصال یک تلویزیون",
+  "Connected TVs": "تلویزیون‌های متصل",
+  "Remove": "حذف",
+  "Looking for TVs…": "در حال جستجوی تلویزیون‌ها…",
+  "The code shown on the TV": "کد نمایش‌داده‌شده روی تلویزیون",
+  "No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC.": "هیچ تلویزیونی منتظر نیست. VI Translator TV را روی تلویزیون، در همان شبکه این رایانه، باز کنید.",
+  "Connecting…": "در حال اتصال…",
+  "Connected to {name}": "به {name} وصل شد",
+  "Wrong code. Check the code on the TV.": "کد اشتباه است. کد روی تلویزیون را بررسی کنید.",
+  "Too many tries: the TV shows a new code.": "تلاش‌های زیاد: تلویزیون کد جدیدی نشان می‌دهد.",
+  "The TV didn't answer. Is VI Translator TV still open on it?": "تلویزیون پاسخ نداد. آیا VI Translator TV هنوز روی آن باز است؟",
+  "Sharing on the home network couldn't start.": "اشتراک‌گذاری در شبکه خانگی شروع نشد."
 });

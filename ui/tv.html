@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ar">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VI Translator for TV</title>
+    <link rel="stylesheet" href="fonts.css" />
+    <style>
+      /* The VI Translator TV app shows this page, transparent, over the game picture on the TV:
+         only the translation is drawn, where the overlays would be (as on the OBS page). */
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      #areas, #screen { position: fixed; inset: 0; }
+      .band { position: absolute; }
+    </style>
+  </head>
+  <body>
+    <div id="areas"></div>
+    <div id="screen"></div>
+    <script src="common.js"></script>
+    <script>
+      // The same drawing as obs.html; the state comes from tv.json, which waits for a change
+      // (each answer says its version, sent back as h=), so a new line shows at once.
+      const areasEl = document.getElementById("areas");
+      const screenEl = document.getElementById("screen");
+      let state = null;
+      let version = "";
+      let build = null; // the app's run this page's code came from
+      // this TV's key, given when it was connected in the app (the page answers connected TVs only)
+      const key = new URLSearchParams(location.search).get("t") || "";
+
+      function clear() {
+        areasEl.innerHTML = "";
+        screenEl.innerHTML = "";
+      }
+
+      function draw() {
+        if (!state) return;
+        const W = window.innerWidth, H = window.innerHeight;
+        const k = H / 1080; // style sizes are for 1080p
+        areasEl.innerHTML = "";
+        // Overlays switched off in the app: nothing on the TV either
+        if (state.overlays === false) {
+          screenEl.innerHTML = "";
+          return;
+        }
+        if (!state.screen) {
+          for (const a of state.areas) {
+            const ev = state.shown[a.id];
+            if (!a.enabled || !ev || !ev.segments || !ev.segments.length) continue;
+            const px = { x: a.x * W, y: a.y * H, w: a.w * W, h: a.h * H };
+            const r = AS.rectFor(a.placement, px, W, H, a);
+            const band = document.createElement("div");
+            band.className = "band";
+            Object.assign(band.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+            const box = document.createElement("div");
+            band.appendChild(box);
+            areasEl.appendChild(band);
+            AS.anchor(band, a.placement, a);
+            AS.renderBox(box, ev.segments, state.style, k, a.font_scale, a.placement, a, AS.matchedPx(a, ev.line_h, H));
+            if (a.placement === "under_text") {
+              if (ev.text_box) AS.placeUnderText(box, ev.text_box, ev.line_h, W, H, r.x, r.y);
+              else Object.assign(box.style, { position: "absolute", left: "0", top: `${px.h}px`, margin: "0" });
+            }
+            if (ev.cached && state.memory_tint !== false) box.style.color = AS.CACHED_TINT; // lines from the memory
+          }
+        }
+        AS.renderScreen(screenEl, state.screen, state.reason || [], state.profile_opts);
+      }
+
+      async function poll() {
+        let wait = 0;
+        try {
+          const r = await fetch(`tv.json?t=${encodeURIComponent(key)}&h=${encodeURIComponent(version)}`, { cache: "no-store" });
+          if (r.status === 200) {
+            const next = await r.json();
+            version = r.headers.get("X-State") || "";
+            // the app was restarted (maybe updated): load its current code
+            if (build !== null && next.build !== build) { location.reload(); return; }
+            build = next.build;
+            state = next;
+            AS.setLang(state.lang);
+            draw();
+          } else if (r.status !== 204) {
+            // (sharing switched off, this TV removed in the app, or an older app without this page)
+            if (state) { state = null; version = ""; clear(); }
+            wait = 2000;
+          }
+        } catch (e) {
+          // the app is closed or the PC is off: show nothing, keep trying
+          if (state) { state = null; version = ""; clear(); }
+          wait = 1000;
+        }
+        setTimeout(poll, wait);
+      }
+      window.addEventListener("resize", draw);
+      document.fonts.ready.then(draw);
+      poll();
+    </script>
+  </body>
+</html>
