@@ -438,7 +438,8 @@ body.no-preview .fs-btn { display: none; }
 .rail-group { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding: 4px 0; position: relative;
   border-block: 1px solid var(--line); }
 /* a built-in profile in use: the parts it can't change show a small lock */
-body.locked .rail-group button:not([data-tab="profile"]) span::after { content: " 🔒"; font-size: 9px; }
+/* the lock on its own line under the name, whether the name wraps or not ("Text style" fits on one) */
+body.locked .rail-group button:not([data-tab="profile"]) span::after { content: "🔒"; display: block; font-size: 9px; margin-top: 2px; }
 
 /* "… is built in and can't be changed. [Make a copy]" at the top of each part */
 .lock-note:empty { display: none; }
