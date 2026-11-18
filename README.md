@@ -15,7 +15,7 @@
   through automatic updates.
 - Works with a **game window**, a **capture card**, or an **OBS source**. It never touches the game.
 - Keeps highlighted words in their **colours** and button **icons** in place.
-- Shows the live translations on a **phone or tablet** on your home network (Advanced tab, off by default).
+- Shows the live translations on a **phone or tablet** on your home network (Show on tab, off by default).
 - **Updates itself**: when a new version is out it asks first, then checks its signature and restarts.
 
 ## Languages
@@ -51,7 +51,7 @@ It's portable, so there's nothing to install:
 
 ## Privacy
 
-*Help improve translations* (Advanced tab) is **on by default**. Every few minutes it sends the
+*Help improve translations* (Translator tab) is **on by default**. Every few minutes it sends the
 English lines you saw (subtitles, instructions, captions) to the project server, so they can be
 translated better for everyone. It's anonymous: a random install ID, no account, no screenshots,
 and never menus (that's where player names appear). Each batch says which game the lines are from

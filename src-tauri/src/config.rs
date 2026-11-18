@@ -270,7 +270,7 @@ pub struct Config {
     /// App window theme: light | dark
     pub theme: String,
     /// Help improve translations: share the English lines seen (subtitles, instructions, captions)
-    /// with the project server, anonymously, in batches. On by default; off in the Advanced tab.
+    /// with the project server, anonymously, in batches. On by default; off in the Translator tab.
     pub share_lines: bool,
     /// Random id of this install (no account), made on first start.
     pub install_id: String,
@@ -350,7 +350,7 @@ pub struct Timing {
 }
 
 impl Timing {
-    /// Within the Advanced sliders' ranges (0 = the app's own value).
+    /// Within the Timing sliders' ranges (0 = the app's own value).
     pub fn sanitize(&mut self) {
         let fit = |v: u64, lo: u64, hi: u64| if v == 0 { 0 } else { v.clamp(lo, hi) };
         self.interval_ms = fit(self.interval_ms, 100, 1000);
@@ -565,13 +565,13 @@ impl Config {
     }
 
     /// Reading timing in use (interval, settle, clear after; ms): the player's own where they moved
-    /// the slider (Advanced), else the profile's game timing if it has one, else the app's.
+    /// the slider (Source → Timing), else the profile's game timing if it has one, else the app's.
     pub fn timing(&self) -> (u64, u64, u64) {
         let t = self.builtins.iter().chain(self.profiles.iter()).find(|p| p.id == self.profile).map(|p| p.timing.clone()).unwrap_or_default();
         // the player's own timing, or the game profile's (each value it has; 0 = it has none)
         let own = self.timing_custom == Some(true);
         let pick = |mine: u64, game: u64| if own || game == 0 { mine } else { game };
-        // (within the Advanced sliders' ranges, whatever a settings file or a layout says)
+        // (within the Timing sliders' ranges, whatever a settings file or a layout says)
         (
             pick(self.interval_ms, t.interval_ms).clamp(100, 1000),
             pick(self.stable_ms, t.stable_ms).min(1500),

@@ -308,7 +308,7 @@ fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
-/// A development build (`cargo tauri dev`, debug): the Advanced tab shows the tools for developing
+/// A development build (`cargo tauri dev`, debug): the Show on tab shows the tools for developing
 /// the app. Releases never do.
 #[tauri::command]
 fn dev_build() -> bool {

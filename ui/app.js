@@ -37,6 +37,7 @@ function openTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("hidden", t.id !== `tab-${name}`));
   document.body.dataset.tab = name;
   editingChanged();
+  if (name === "show" && cfg) { updateLan(); updateTvs(); } // (at once, not at the next 3-second refresh)
 }
 
 // The read areas are edited on the preview only in Setup with the Read areas tab open: their boxes,
@@ -185,7 +186,9 @@ function areaBox(a) {
 }
 
 function addHandles(el, area, kind) {
-  for (const c of ["nw", "ne", "sw", "se"]) {
+  // corners resize both ways; the middle of each side resizes only the height (top, bottom) or
+  // only the width (left, right)
+  for (const c of ["nw", "ne", "sw", "se", "n", "s", "e", "w"]) {
     const h = document.createElement("div");
     h.className = `handle ${c}`;
     h.addEventListener("mousedown", (e) => startDrag(e, area, c, kind));
@@ -318,7 +321,7 @@ async function loadWindows() {
       <b dir="ltr">${obs.canvas.w} × ${obs.canvas.h}</b>
       <span class="muted small">${AS.esc(t("Set in OBS: Settings → Video → Base (Canvas) Resolution"))}</span>`;
   } else {
-    cv.innerHTML = `<span class="muted small">${AS.esc(t("Connect to OBS above to see your canvas size here."))}</span>`;
+    cv.innerHTML = `<span class="muted small">${AS.esc(t("Connect to OBS in the Source tab to see your canvas size here."))}</span>`;
   }
   const og = group(obs.ok ? t("OBS sources") : t("OBS sources (not connected)"));
   if (obs.ok) for (const s of obs.sources) add(og, `📺 ${iso(`${short(s.name, 36)}  —  ${s.kind}`)}`, `obs:${s.name}`, `${s.name}  —  ${s.kind}`);
@@ -400,7 +403,7 @@ $("lan-info").addEventListener("click", (e) => {
   invoke("open_lan_page").catch((err) => log({ error: String(err) }));
 });
 $("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
-setInterval(() => { if (cfg && !$("tab-source").classList.contains("hidden")) { updateLan(); updateTvs(); } }, 3000);
+setInterval(() => { if (cfg && !$("tab-show").classList.contains("hidden")) { updateLan(); updateTvs(); } }, 3000);
 
 // TVs (the VI Translator app on the TV): find the ones waiting on the home network, connect one with the
 // code it shows, remove a connected one.
@@ -869,7 +872,7 @@ function renderStyleForm(form, a) {
 
 // ------------------------------------------------------------------------------------- timing
 
-// The preview's fps badge: shown or not, and which corner (Advanced → Preview).
+// The preview's fps badge: shown or not, and which corner (Show on → Preview).
 const FPS_CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]];
 function applyFpsBadge() {
   const corner = FPS_CORNERS.some(([v]) => v === cfg.fps_corner) ? cfg.fps_corner : "top-right";
@@ -979,7 +982,7 @@ async function updateMemory() {
     el.textContent = String(e);
   }
 }
-setInterval(() => { if (!$("tab-advanced").classList.contains("hidden")) updateMemory(); }, 2000);
+setInterval(() => { if (!$("tab-translator").classList.contains("hidden")) updateMemory(); }, 2000);
 
 // ------------------------------------------------------------------------------------- debugging
 

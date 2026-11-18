@@ -263,6 +263,9 @@ html.fullscreen .fs-btn:hover { opacity: 1; }
 .handle { position: absolute; width: 12px; height: 12px; background: var(--accent); border: 2px solid #000; border-radius: 3px; }
 .handle.nw { left: -7px; top: -7px; cursor: nwse-resize; } .handle.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
 .handle.ne { right: -7px; top: -7px; cursor: nesw-resize; } .handle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+/* the middle of each side: height only (top, bottom) or width only (left, right) */
+.handle.n { left: calc(50% - 6px); top: -7px; cursor: ns-resize; } .handle.s { left: calc(50% - 6px); bottom: -7px; cursor: ns-resize; }
+.handle.w { top: calc(50% - 6px); left: -7px; cursor: ew-resize; } .handle.e { top: calc(50% - 6px); right: -7px; cursor: ew-resize; }
 /* translation region: blue, so it is easy to tell apart from the yellow read areas. */
 .band { position: absolute; line-height: normal; cursor: move; z-index: 1;
   outline: 1.5px dashed rgba(93, 182, 229, 0.45); outline-offset: -1px; }
@@ -444,6 +447,8 @@ body.no-preview .fs-btn { display: none; }
 /* the left menu's profile group: Game profile and its parts, framed together */
 .rail-group { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding: 4px 0; position: relative;
   border-block: 1px solid var(--line); }
+/* (last in the menu: nothing below it to separate from) */
+.rail-group:last-child { border-bottom: 0; }
 /* a built-in profile in use: the parts it can't change show a small lock */
 /* the lock on its own line under the name, whether the name wraps or not ("Text style" fits on one) */
 body.locked .rail-group button:not([data-tab="profile"]) span::after { content: "🔒"; display: block; font-size: 9px; margin-top: 2px; }
