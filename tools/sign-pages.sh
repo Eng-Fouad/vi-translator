@@ -20,7 +20,7 @@ if [ "${1:-}" = "--test" ]; then
   [ "${1:-}" = "--" ] && shift
 fi
 script="${1:?usage: sign-pages.sh [--test [install-id ...] --] <script.js> [key.pem]}"
-key="${2:-$HOME/.vi-translator-keys/update-signing.pem}"
+key="${2:-/c/dev/vitranslator.app/desktop/update-signing.pem}"
 [ -f "$key" ] || { echo "no signing key at $key" >&2; exit 1; }
 # (N from 1 to 999999999: the app reads it as a 32-bit number, and runs no script without one)
 head -1 "$script" | tr -d '\r' | grep -Eqx '// pages-version: [1-9][0-9]{0,8}' || { echo "the script's first line must be exactly // pages-version: N (N from 1 to 999999999)" >&2; exit 1; }
