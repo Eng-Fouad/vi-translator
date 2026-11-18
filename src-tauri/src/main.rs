@@ -1439,6 +1439,17 @@ fn ocr_loop(
                         text.clear();
                     }
                 }
+                // An area of the game's own box (GTA VI's help): no box around the text, no text here.
+                if area.needs_box && !text.is_empty() {
+                    let found = crop.as_ref().zip(ocr::text_with_icons_block(crop.as_ref(), &words)).and_then(|(cr, b)| {
+                        let mut hs: Vec<u32> = words.iter().map(|w| w.rect.3).collect();
+                        hs.sort_unstable();
+                        ocr::box_around(cr, b, hs.get(hs.len() / 2).copied().unwrap_or(20))
+                    });
+                    if found.is_none() {
+                        text.clear();
+                    }
+                }
                 // Not English at all (another script, icons, a map read as letters): no text here.
                 if !ocr::looks_like_words(&text) {
                     text.clear();
@@ -1873,6 +1884,167 @@ fn read_video(file: &str, fps: f64, from: f64, to: f64) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// One English line translated outside the running app (--test-image, --translate-frames) the way
+/// the app does it: a speaker name or "In Spanish:" kept apart, the memory and the downloaded reviewed
+/// lines first, then the translator; harsh words softened.
+fn offline_line(
+    tr: &mut Translator,
+    cfg: &Config,
+    mem: &memory::Memory,
+    en: &str,
+    icons: &[String],
+    phrases: &[(String, String)],
+    log: &dyn Fn(String),
+) -> anyhow::Result<translate::Segments> {
+    let one = |tr: &mut Translator, line: &str, phrases: &[(String, String)]| -> anyhow::Result<translate::Segments> {
+        Ok(match mem.get(line, icons, phrases) {
+            Some((segs, src)) => {
+                log(format!("From memory ({src})"));
+                translate::polite(&cfg.target_lang, tr.recolor(cfg, segs, phrases, log))
+            }
+            None => tr.translate(cfg, line, phrases, icons, log)?,
+        })
+    };
+    let named = speaker::split(en, phrases);
+    let (line, phrases) = match &named {
+        Some((name, color, rest)) => {
+            log(format!("Speaker: {name} ({color})"));
+            (*rest, speaker::phrases_without(phrases, name))
+        }
+        None => (en, phrases.to_vec()),
+    };
+    let segs = match speaker::language_tag(line) {
+        Some((language, sentence)) => {
+            log(format!("Language: {language}"));
+            let segs = one(tr, sentence, &phrases)?;
+            let tag = speaker::language_in(&cfg.target_lang, &language).unwrap_or_else(|| format!("In {language}:"));
+            speaker::with_language(&tag, segs)
+        }
+        None => one(tr, line, &phrases)?,
+    };
+    Ok(match named {
+        Some((name, color, _)) => {
+            let reviewed = mem.get(&name, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(s, _)| s.iter().map(|x| x.0.as_str()).collect());
+            speaker::with_name(&speaker::name_in(&cfg.target_lang, &name, reviewed), &color, segs)
+        }
+        None => segs,
+    })
+}
+
+/// `--translate-frames <video> <times file> <out dir>`: the frames at those times (seconds, one per
+/// line) read and translated as the app would, each saved as <out dir>/<time>.jpg with a JSON line on
+/// stdout: {"t", "file", "w", "h", "areas": [{"id", "segs", "line_h", "text_box", "game_box"}]}.
+/// The frames come from ffmpeg in order (2 per second), so a whole stream is decoded once.
+fn translate_frames(file: &str, times_file: &str, out_dir: &str) -> anyhow::Result<()> {
+    use std::io::{Read, Write};
+    let cfg = Config::load(&config_path());
+    let areas: Vec<_> = cfg.areas.iter().filter(|a| a.enabled).cloned().collect();
+    let mut wanted: Vec<f64> = std::fs::read_to_string(times_file)?.lines().filter_map(|l| l.trim().parse().ok()).collect();
+    wanted.sort_by(|a, b| a.total_cmp(b));
+    std::fs::create_dir_all(out_dir)?;
+    let probe = std::process::Command::new("ffprobe")
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file])
+        .output()?;
+    let dims = String::from_utf8_lossy(&probe.stdout).trim().to_string();
+    let (w, h) = dims.split_once(',').and_then(|(a, b)| Some((a.trim().parse::<u32>().ok()?, b.trim().parse::<u32>().ok()?))).ok_or_else(|| anyhow::anyhow!("no video size in {dims:?}"))?;
+    let fps = 2.0;
+    // (several of these can share a video: each starts at its own first frame)
+    let start = wanted.first().map(|t| (t * fps).floor() / fps).unwrap_or(0.0);
+    let mut child = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-ss", &format!("{start}"), "-i", file, "-an", "-vf", "fps=2", "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
+        .stdout(std::process::Stdio::piped())
+        .spawn()?;
+    let mut pipe = child.stdout.take().ok_or_else(|| anyhow::anyhow!("no ffmpeg output"))?;
+    Ocr::init_thread();
+    let ocr = Ocr::new()?;
+    let mut tr = Translator::new(model_dir());
+    let mut mem = memory::Memory::load(db_dir(), &cfg.target_lang);
+    if let Some(entries) = sync::kept_pack_in(&data_dir(), &cfg.game(), &cfg.target_lang) {
+        mem.set_shared(&cfg.target_lang, entries);
+    }
+    let quiet = |_: String| {};
+    let mut frame = vec![0u8; (w * h * 4) as usize];
+    let out = std::io::stdout();
+    let mut out = out.lock();
+    let (mut n, mut next) = (0u64, 0usize);
+    while next < wanted.len() && pipe.read_exact(&mut frame).is_ok() {
+        let t = start + n as f64 / fps;
+        n += 1;
+        if (t - wanted[next]).abs() > 0.01 {
+            continue;
+        }
+        next += 1;
+        let mut shown = Vec::new();
+        for area in &areas {
+            let Some(crop) = Crop::from_frame(&frame, w, h, area.x, area.y, area.w, area.h) else { continue };
+            let (words, sure) = ocr.recognize_checked(&crop)?;
+            let en = ocr::clean(&words);
+            // (a reading the app isn't sure of, text still fading in, is one it would wait out)
+            if en.is_empty() || (!sure && area.id != "subtitles") {
+                continue;
+            }
+            let (en_icons, icons, block) = ocr::text_with_icons(&crop, &words);
+            // instructions and help: only lines the reviewed translations know (a half-faded
+            // "Follow the p" isn't a line; the app would show the whole one a moment later)
+            if area.id != "subtitles" && !mem.knows(if icons.is_empty() { &en } else { &en_icons }) {
+                continue;
+            }
+            let (cx0, cy0) = ((area.x.clamp(0.0, 1.0) * w as f64) as u32, (area.y.clamp(0.0, 1.0) * h as f64) as u32);
+            let to_frame = |(x, y, bw, bh): (u32, u32, u32, u32)| [(cx0 + x) as f64 / w as f64, (cy0 + y) as f64 / h as f64, bw as f64 / w as f64, bh as f64 / h as f64];
+            // (areas that read only centred text skip a menu's hint at the side, as the app does)
+            if area.centered_only {
+                if let Some((x, _, bw, _)) = block {
+                    if ((cx0 + x + bw / 2) as f64 / w as f64 - 0.5).abs() > 0.04 {
+                        continue;
+                    }
+                }
+            }
+            let phrases = ocr::colored_phrases(&crop, &words);
+            let mut hs: Vec<u32> = words.iter().map(|wd| wd.rect.3).collect();
+            hs.sort_unstable();
+            let lh = hs.get(hs.len() / 2).copied().unwrap_or(20);
+            if area.needs_box && block.and_then(|b| ocr::box_around(&crop, b, lh)).is_none() {
+                continue;
+            }
+            let parts = if icons.is_empty() && area.centered_only { ocr::speaker_lines(&crop, &words) } else { Vec::new() };
+            let segs = if parts.len() > 1 {
+                let mut all: translate::Segments = Vec::new();
+                for (i, (p, rel)) in parts.iter().enumerate() {
+                    if i > 0 {
+                        all.push(("\n".into(), None));
+                    }
+                    let grey = (*rel < 0.95).then(|| "dim".to_string());
+                    let segs = offline_line(&mut tr, &cfg, &mem, p, &[], &phrases, &quiet)?;
+                    all.extend(segs.into_iter().map(|(t, col)| (t, col.or_else(|| grey.clone()))));
+                }
+                all
+            } else {
+                let line = if icons.is_empty() { en.clone() } else { en_icons.clone() };
+                offline_line(&mut tr, &cfg, &mem, &line, &icons, &phrases, &quiet)?
+            };
+            let game_box = match block {
+                Some(b) if area.placement == "under_text" => ocr::box_around(&crop, b, lh).map(to_frame),
+                _ => None,
+            };
+            shown.push(serde_json::json!({
+                "id": area.id, "en": en, "segs": segs, "line_h": lh as f64 / h as f64,
+                "text_box": block.map(to_frame), "game_box": game_box,
+            }));
+        }
+        let name = format!("{:07.1}.jpg", t);
+        let img = image::RgbaImage::from_raw(w, h, frame.clone()).ok_or_else(|| anyhow::anyhow!("frame"))?;
+        image::DynamicImage::ImageRgba8(img).to_rgb8().save_with_format(std::path::Path::new(out_dir).join(&name), image::ImageFormat::Jpeg)?;
+        writeln!(out, "{}", serde_json::json!({ "t": t, "file": name, "w": w, "h": h, "areas": shown }))?;
+        out.flush()?;
+        if next % 100 == 0 {
+            eprintln!("translate-frames: {next}/{}", wanted.len());
+        }
+    }
+    let _ = child.kill();
+    eprintln!("translate-frames: {next} frames");
+    Ok(())
+}
+
 fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     let cfg = Config::load(&config_path());
     let mut area = cfg.areas.iter().find(|a| a.id == area_id).cloned().ok_or_else(|| anyhow::anyhow!("no area {area_id}"))?;
@@ -1931,38 +2103,7 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     if let Some(entries) = sync::kept_pack_in(&data_dir(), &cfg.game(), &cfg.target_lang) {
         mem.set_shared(&cfg.target_lang, entries);
     }
-    let line = |tr: &mut Translator, en: &str, icons: &[String]| -> anyhow::Result<translate::Segments> {
-        // "In Spanish:" in front: the sentence alone, the tag in front (as `translate_spoken` does)
-        if speaker::split(en, &phrases).is_none() {
-            if let Some((language, sentence)) = speaker::language_tag(en) {
-                println!("Language: {language}");
-                let segs = match mem.get(sentence, icons, &phrases) {
-                    Some((segs, _)) => tr.recolor(&cfg, segs, &phrases, &|s| println!("{s}")),
-                    None => tr.translate(&cfg, sentence, &phrases, icons, &|s| println!("{s}"))?,
-                };
-                let tag = speaker::language_in(&cfg.target_lang, &language).unwrap_or_else(|| format!("In {language}:"));
-                return Ok(speaker::with_language(&tag, translate::polite(&cfg.target_lang, segs)));
-            }
-        }
-        // a speaker name in front: only the sentence is translated (as `translate_spoken` does)
-        if let Some((name, color, rest)) = speaker::split(en, &phrases) {
-            let ph = speaker::phrases_without(&phrases, &name);
-            let segs = match mem.get(rest, icons, &ph) {
-                Some((segs, _)) => tr.recolor(&cfg, segs, &ph, &|s| println!("{s}")),
-                None => tr.translate(&cfg, rest, &ph, icons, &|s| println!("{s}"))?,
-            };
-            let reviewed = mem.get(&name, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(s, _)| s.iter().map(|x| x.0.as_str()).collect());
-            println!("Speaker: {name} ({color})");
-            return Ok(speaker::with_name(&speaker::name_in(&cfg.target_lang, &name, reviewed), &color, translate::polite(&cfg.target_lang, segs)));
-        }
-        match mem.get(en, icons, &phrases) {
-            Some((segs, src)) => {
-                println!("From memory ({src})");
-                Ok(translate::polite(&cfg.target_lang, tr.recolor(&cfg, segs, &phrases, &|s| println!("{s}"))))
-            }
-            None => tr.translate(&cfg, en, &phrases, icons, &|s| println!("{s}")),
-        }
-    };
+    let line = |tr: &mut Translator, en: &str, icons: &[String]| offline_line(tr, &cfg, &mem, en, icons, &phrases, &|s| println!("{s}"));
     let t = Instant::now();
     // two speakers' lines (white and grey): each translated on its own, as the app does
     let parts = if icons.is_empty() && area.centered_only { ocr::speaker_lines(&crop, &words) } else { Vec::new() };
@@ -2201,6 +2342,17 @@ fn main() {
         let num = |name: &str, def: f64| args.iter().position(|a| a == name).and_then(|j| args.get(j + 1)).and_then(|v| v.parse().ok()).unwrap_or(def);
         if let Err(e) = read_video(file, num("--fps", 2.0), num("--from", 0.0), num("--to", 0.0)) {
             eprintln!("read-video: {e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--translate-frames") {
+        let (Some(video), Some(times), Some(out)) = (args.get(i + 1), args.get(i + 2), args.get(i + 3)) else {
+            eprintln!("usage: --translate-frames <video> <times file> <out dir>");
+            std::process::exit(2);
+        };
+        if let Err(e) = translate_frames(video, times, out) {
+            eprintln!("translate-frames: {e:#}");
             std::process::exit(1);
         }
         return;

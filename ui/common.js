@@ -188,7 +188,8 @@ window.AS = (() => {
         const a = (i / 16) * Math.PI * 2;
         ring.push(`${(Math.cos(a) * o).toFixed(2)}px ${(Math.sin(a) * o).toFixed(2)}px 0 ${style.outline_color || "#000"}`);
       }
-      ring.push(`0 ${2 * k}px ${5 * k}px rgba(0,0,0,0.9)`);
+      // a soft shadow only when the style asks for one (GTA VI's subtitles have a border and no shadow)
+      if (style.shadow) ring.push(`0 ${2 * k}px ${5 * k}px rgba(0,0,0,0.9)`);
       if (o <= 0) ring.push(`0 0 ${2 * k}px rgba(0,0,0,0.6)`); // (keeps it readable over a bright floor)
       Object.assign(box.style, { background: "transparent", padding: `${2 * k}px ${4 * k}px`, borderRadius: "0", textShadow: ring.join(", ") });
     } else if (bgMode === "game") {

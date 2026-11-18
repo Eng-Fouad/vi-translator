@@ -284,19 +284,25 @@ impl Memory {
                 }
             }
         }
-        let need = (words.len() * 7).div_ceil(10).max(1);
+        // (half the words in common: OCR noise breaks a word or two of a line — "Yepr", "cometo")
+        let need = words.len().div_ceil(2).max(1);
         let mut cands: Vec<(&str, usize)> = shared.into_iter().filter(|(_, n)| *n >= need).collect();
         cands.sort_unstable_by(|a, b| b.1.cmp(&a.1));
         let icons = key.matches('{').count();
         let len = key.chars().count() as f64;
         let mut best: Option<(f64, &Entry)> = None;
+        // compared without spaces (a lost or extra space is no difference); long lines may differ a
+        // little more than short ones, where one letter can change the meaning
+        let bare = |t: &str| t.replace(' ', "");
+        let key_bare = bare(key);
+        let need_sim = if key_bare.chars().count() >= 12 { 0.86 } else { 0.92 };
         for (k, _) in cands.into_iter().take(20) {
             let kl = k.chars().count() as f64;
-            if (kl - len).abs() > len * 0.1 + 2.0 || k.matches('{').count() != icons {
-                continue; // can't reach 92 % anyway
+            if (kl - len).abs() > len * 0.15 + 2.0 || k.matches('{').count() != icons {
+                continue; // can't be that alike anyway
             }
-            let s = similarity(k, key);
-            if s >= 0.92 && best.is_none_or(|(b, _)| s > b) {
+            let s = similarity(&bare(k), &key_bare);
+            if s >= need_sim && best.is_none_or(|(b, _)| s > b) {
                 best = Some((s, &self.map[k]));
             }
         }

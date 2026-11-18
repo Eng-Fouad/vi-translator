@@ -268,10 +268,15 @@ fn name_words(words: &[Word]) -> Option<(usize, String, (u32, u32, u32, u32))> {
     Some((n, line[..n].iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" "), (x0, y0, x1 - x0, y1 - y0)))
 }
 
+/// The text block (crop pixels) of a reading, words and icons together; None without a crop or words.
+pub fn text_with_icons_block(c: Option<&Crop>, words: &[Word]) -> Option<(u32, u32, u32, u32)> {
+    c.and_then(|c| text_with_icons(c, words).2)
+}
+
 /// The game's own box around a text block (GTA's see-through help box): its edges found where the
 /// brightness leaves the box's own level, scanning out from the text (crop pixels: x, y, w, h). The
 /// level inside is the median brightness of the block's columns (letters are a minority of each
-/// column); an edge is the first of 3 columns (rows) in a row that differ from it by 25 or more,
+/// column); an edge is the first of 3 columns (rows) in a row that differ from it by 14 or more,
 /// within 3 line heights of the text. None when an edge isn't clear (no box, or busy scenery).
 pub fn box_around(c: &Crop, block: (u32, u32, u32, u32), line_h: u32) -> Option<(u32, u32, u32, u32)> {
     let (bx, by, bw, bh) = block;
@@ -291,7 +296,7 @@ pub fn box_around(c: &Crop, block: (u32, u32, u32, u32), line_h: u32) -> Option<
     let (x0, x1) = (bx, (bx + bw).min(c.w));
     let reach = 3 * line_h.max(4);
     // walks out from the text: the box's own level is taken right next to it (its padding; the box
-    // is lighter over a bright sky), and the edge is the first of 3 values in a row 25 or more off it
+    // is lighter over a bright sky), and the edge is the first of 3 values in a row 14 or more off it
     let edge = |steps: Vec<u32>, at: &dyn Fn(u32) -> i32| -> Option<u32> {
         if steps.len() < 8 {
             return None;
@@ -299,7 +304,7 @@ pub fn box_around(c: &Crop, block: (u32, u32, u32, u32), line_h: u32) -> Option<
         let inside = median(steps[1..4].iter().map(|&s| at(s)).collect());
         let mut run = 0;
         for (i, &s) in steps.iter().enumerate().skip(1) {
-            if (at(s) - inside).abs() >= 25 {
+            if (at(s) - inside).abs() >= 14 {
                 run += 1;
                 if run == 3 {
                     return Some(steps[i - 2]);
@@ -310,12 +315,24 @@ pub fn box_around(c: &Crop, block: (u32, u32, u32, u32), line_h: u32) -> Option<
         }
         None
     };
+    // The left edge must be clear (GTA VI's box has a darker rim there): no box, no edge — credits or
+    // scenery read as text have none. The game pads the text alike on both sides, so a right or bottom
+    // edge lost in dark scenery (a step of only ~15) is taken from that padding.
     let left = edge((x0.saturating_sub(reach)..x0).rev().collect(), &col)?; // first column outside, going left
-    let right = edge((x1..(x1 + reach).min(c.w)).collect(), &col)?; // first column outside, going right
-    let (lx, rx) = (left + 1, right);
+    let lx = left + 1;
+    let pad = x0.saturating_sub(lx);
+    let lh = line_h.max(4) as f64;
+    if !(0.3 * lh..=2.5 * lh).contains(&(pad as f64)) {
+        return None; // not a box's padding
+    }
+    let rx = edge((x1..(x1 + reach).min(c.w)).collect(), &col)
+        .filter(|&r| r.saturating_sub(x1) <= 2 * pad + 4)
+        .unwrap_or((x1 + pad).min(c.w));
     let row = |y: u32| median((lx..rx).step_by(2).map(|x| lum(x, y)).collect());
-    let bottom = edge((y1..(y1 + reach).min(c.h)).collect(), &row)?;
-    let top = edge((y0.saturating_sub(reach)..y0).rev().collect(), &row).map(|t| t + 1).unwrap_or(y0);
+    let bottom = edge((y1..(y1 + reach).min(c.h)).collect(), &row)
+        .filter(|&b| b.saturating_sub(y1) <= 2 * pad + 4)
+        .unwrap_or((y1 + pad * 3 / 5).min(c.h));
+    let top = edge((y0.saturating_sub(reach)..y0).rev().collect(), &row).map(|t| t + 1).unwrap_or(y0.saturating_sub(pad * 3 / 5));
     (rx > lx && bottom > top).then_some((lx, top, rx - lx, bottom - top))
 }
 
@@ -750,20 +767,27 @@ pub fn colored_phrases(crop: &Crop, words: &[Word]) -> Vec<(String, String)> {
     let word_color = |rect: (u32, u32, u32, u32)| -> Option<(i32, i32, i32)> {
         let (x0, y0) = (rect.0 as usize, rect.1 as usize);
         let (x1, y1) = ((x0 + rect.2 as usize).min(w), (y0 + rect.3 as usize).min(h));
-        let (mut letters, mut colored) = (0usize, Vec::new());
+        // the letters' own pixels: the brightest quarter of the bright ones (by r+g+b), so a bright
+        // coloured background inside the word's box (an orange shirt behind white text with no
+        // outline, as in GTA VI) isn't taken for the letters' colour: white text outshines it
+        let mut bright: Vec<(i32, i32, i32)> = Vec::new();
         for y in y0..y1 {
             for x in x0..x1 {
                 let i = y * w + x;
                 if near[i] && maxc[i] > 150 {
-                    letters += 1;
-                    if maxc[i] as i32 - minc[i] as i32 > 60 {
-                        let p = &crop.rgba[i * 4..i * 4 + 3];
-                        colored.push((p[0] as i32, p[1] as i32, p[2] as i32));
-                    }
+                    let p = &crop.rgba[i * 4..i * 4 + 3];
+                    bright.push((p[0] as i32, p[1] as i32, p[2] as i32));
                 }
             }
         }
-        if letters < 12 || (colored.len() as f64) < 0.5 * letters as f64 {
+        if bright.len() < 12 {
+            return None;
+        }
+        bright.sort_by_key(|p| -(p.0 + p.1 + p.2));
+        bright.truncate((bright.len() / 4).max(12));
+        let letters = bright.len();
+        let colored: Vec<(i32, i32, i32)> = bright.into_iter().filter(|p| p.0.max(p.1).max(p.2) - p.0.min(p.1).min(p.2) > 60).collect();
+        if (colored.len() as f64) < 0.5 * letters as f64 {
             return None;
         }
         let med = |f: fn(&(i32, i32, i32)) -> i32| {
@@ -891,17 +915,16 @@ pub fn icon_png(c: &Crop, r: (u32, u32, u32, u32), thr: u8) -> Option<String> {
     // line goes halfway between the icon's brightest and the background around it, or nothing at all
     // would count as icon and it would come out fully transparent.
     let brightest = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).map(|(x, y)| lum(x, y)).max().unwrap_or(0);
-    let thr = if brightest > thr {
-        thr
-    } else {
-        let mut edge: Vec<u8> = (x0..x1).flat_map(|x| [lum(x, y0), lum(x, y1 - 1)]).chain((y0..y1).flat_map(|y| [lum(x0, y), lum(x1 - 1, y)])).collect();
-        edge.sort_unstable();
-        let bg = edge[edge.len() / 2];
-        if brightest < bg.saturating_add(40) {
-            return None; // no shape that stands out: nothing to cut
-        }
-        ((brightest as u32 + bg as u32) / 2) as u8
-    };
+    // The cut-out line is halfway between the icon's brightest and the background around it, or the
+    // line's own threshold if that is lower: a thin ring (✕ ⓧ) a video's compression dims to ~200 would
+    // otherwise come out as a few dots, and a dim icon (a grey L2 ~185) fully transparent.
+    let mut edge: Vec<u8> = (x0..x1).flat_map(|x| [lum(x, y0), lum(x, y1 - 1)]).chain((y0..y1).flat_map(|y| [lum(x0, y), lum(x1 - 1, y)])).collect();
+    edge.sort_unstable();
+    let bg = edge[edge.len() / 2];
+    if brightest < bg.saturating_add(40) {
+        return None; // no shape that stands out: nothing to cut
+    }
+    let thr = thr.min(((brightest as u32 + bg as u32) / 2) as u8);
     let mut img = image::RgbaImage::new(x1 - x0, y1 - y0);
     for y in y0..y1 {
         let first = (x0..x1).find(|&x| lum(x, y) > thr);
@@ -915,6 +938,25 @@ pub fn icon_png(c: &Crop, r: (u32, u32, u32, u32), thr: u8) -> Option<String> {
                 _ => 0,
             };
             img.put_pixel(x - x0, y - y0, image::Rgba([rr, g, b, a]));
+        }
+    }
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).ok()?;
+    Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png)))
+}
+
+/// A button found by the space it leaves between words: its square cut out as it is (opaque).
+fn icon_png_plain(c: &Crop, r: (u32, u32, u32, u32)) -> Option<String> {
+    use base64::Engine as _;
+    let (x0, y0, w, h) = r;
+    if w == 0 || h == 0 || x0 + w > c.w || y0 + h > c.h {
+        return None;
+    }
+    let mut img = image::RgbaImage::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            let i = (((y0 + y) * c.w + x0 + x) * 4) as usize;
+            img.put_pixel(x, y, image::Rgba([c.rgba[i], c.rgba[i + 1], c.rgba[i + 2], 255]));
         }
     }
     let mut png = Vec::new();
@@ -1031,6 +1073,7 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
         text_boxes.iter().any(|&(bx, by, bw, bh)| x + 2 >= bx && x <= bx + bw + 2 && y + 2 >= by && y <= by + bh + 2)
     };
     let mut found_icons: Vec<(u32, u32, u32, u32)> = Vec::new(); // x0, y0, x1, y1 of accepted icons
+    let mut plain_icons: Vec<(u32, u32, u32, u32)> = Vec::new(); // buttons found by their gap: cut as they are
     for (cy, items) in lines.iter_mut() {
         // icons are about as tall as the text; a taller band would reach past GTA's help box
         let y0 = (*cy - 0.85 * mh).max(0.0) as u32;
@@ -1164,6 +1207,39 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
             items.push((s, Err((s, ty, w, h))));
         }
         items.sort_by_key(|(x, _)| *x);
+        // A button the shape test missed (a grey ✕ disc on a bright, glowing floor): a gap between two
+        // words about one button wide (normal spaces are ~0.3 of the text height, a menu's columns far
+        // wider) with something drawn in its middle. Its picture is cut as it is, background and all.
+        let mut gaps = Vec::new();
+        for pair in items.windows(2) {
+            let (Ok(a), Ok(b)) = (&pair[0].1, &pair[1].1) else { continue };
+            let (ra, rb) = (words[*a].rect, words[*b].rect);
+            let (ge0, gs1) = (ra.0 + ra.2, rb.0);
+            if gs1 <= ge0 {
+                continue;
+            }
+            let gap = (gs1 - ge0) as f64;
+            if !(1.1 * mh..=3.2 * mh).contains(&gap) {
+                continue;
+            }
+            // the button's square, centred in the gap on the line
+            let side = (1.1 * mh) as u32;
+            let gx = ge0 + ((gs1 - ge0).saturating_sub(side)) / 2;
+            let gy = ((*cy - side as f64 / 2.0).max(0.0) as u32).min(c.h.saturating_sub(side));
+            if gx + side > c.w || side < 6 {
+                continue;
+            }
+            let vals: Vec<f64> = (gy..gy + side).flat_map(|y| (gx..gx + side).map(move |x| (x, y))).map(|(x, y)| lum(x, y) as f64).collect();
+            let mean = vals.iter().sum::<f64>() / vals.len() as f64;
+            let sd = (vals.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / vals.len() as f64).sqrt();
+            if sd < 30.0 {
+                continue; // nothing drawn there: just a wide space
+            }
+            gaps.push((gx, Err((gx, gy, side, side))));
+            plain_icons.push((gx, gy, side, side));
+        }
+        items.extend(gaps);
+        items.sort_by_key(|(x, _)| *x);
     }
     lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
@@ -1186,7 +1262,8 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
                 }
                 Err(r) => {
                     grow(*r);
-                    if let Some(png) = icon_png(c, *r, thr_used) {
+                    let png = if plain_icons.contains(r) { icon_png_plain(c, *r) } else { icon_png(c, *r, thr_used) };
+                    if let Some(png) = png {
                         // "<height relative to the text>|<png>": the Arabic draws it at the same proportion
                         // (GTA's L2/R2 are smaller than the text, ✕/△ discs a bit larger)
                         // (+4: the cut-out has a 2 px transparent margin above and below the icon)

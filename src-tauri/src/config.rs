@@ -97,6 +97,10 @@ pub struct Area {
     /// Only read text centred in the picture (game subtitles are): a word elsewhere in the area — a
     /// menu's "Browse" at the bottom right — is not a subtitle.
     pub centered_only: bool,
+    /// Only read text inside the game's own box (GTA VI's help box): text with no box around it —
+    /// the credits' names, a sign — is not this area's. The translation also takes the box's edges.
+    #[serde(default)]
+    pub needs_box: bool,
     /// This area's own text style (colours, box, outline, size …). None: the profile's style, which
     /// is what an area starts from (settings and layouts from before areas had their own).
     pub style: Option<Style>,
@@ -146,6 +150,7 @@ impl Default for Area {
             font_scale: 1.0,
             match_size: true,
             centered_only: false,
+            needs_box: false,
             font_family: String::new(),
             text_pos: String::new(),
             background: String::new(),
@@ -400,6 +405,11 @@ fn gta6_text() -> Style {
     Style { font_family: "Noto Sans Arabic Medium".into(), bold: false, outline_width: 0.0, shadow: true, ..Style::default() }
 }
 
+/// GTA VI's subtitles and objectives: white with a thin dark border, no shadow (like the game's own).
+fn gta6_bordered() -> Style {
+    Style { outline_width: 1.2, outline_color: "#000000".into(), shadow: false, ..gta6_text() }
+}
+
 /// A built-in profile as the app ships it.
 pub fn builtin_profile(id: &str) -> Option<Profile> {
     let gta_areas = || {
@@ -420,7 +430,7 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 // doesn't jump when a line or an instruction comes or goes.
                 placement: "custom".into(),
                 out_x: 0.10,
-                out_y: 0.56,
+                out_y: 0.585,
                 out_w: 0.80,
                 out_h: 0.20,
                 out_valign: "bottom".into(),
@@ -428,7 +438,7 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 text_pos: "bottom-center".into(),
                 background: "none".into(),
                 font_family: "Noto Sans Arabic Medium".into(),
-                style: Some(gta6_text()),
+                style: Some(gta6_bordered()),
                 // matched size × 104% looks the same as GTA's subtitles (calibrated on real frames)
                 font_scale: 1.04,
                 ..Area::default()
@@ -450,6 +460,8 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 background: "game".into(),
                 // matched size × 92% looks the same as GTA's instruction text
                 font_scale: 0.92,
+                // the opening credits' names in this corner have no box: not help text
+                needs_box: true,
                 ..Area::default()
             },
             Area {
@@ -473,7 +485,7 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 out_halign: "center".into(),
                 background: "none".into(), // like the game: no box, white with pink words
                 font_family: "Noto Sans Arabic Medium".into(),
-                style: Some(gta6_text()),
+                style: Some(gta6_bordered()),
                 font_scale: 0.92,
                 ..Area::default()
             },
