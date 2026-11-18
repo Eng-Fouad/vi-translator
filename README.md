@@ -2,7 +2,7 @@
   <img src="src-tauri/icons/icon.png" alt="VI Translator logo" width="160" />
 </p>
 
-<h1 align="center">VI Translator</h1>
+<h1 align="center">VI Translator - Desktop</h1>
 
 <p align="center">Live subtitles in your language for Grand Theft Auto VI, read straight from the screen.</p>
 
@@ -27,7 +27,7 @@
 
 ## Download
 
-Get the executable for your system from the [latest release](https://github.com/Eng-Fouad/vi-translator/releases/latest).
+Get the executable for your system from the [latest release](https://github.com/Eng-Fouad/vi-translator-desktop/releases/latest).
 It's portable, so there's nothing to install:
 
 | System | File |

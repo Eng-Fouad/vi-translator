@@ -328,7 +328,7 @@ fn lan_info(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<la
     Ok(lan::info(&c, &state.shared))
 }
 
-/// TVs on the home network waiting to be connected (the VI Translator TV app), and whether each is
+/// TVs on the home network waiting to be connected (the VI Translator app on the TV), and whether each is
 /// connected already.
 #[tauri::command]
 async fn find_tvs(webview: tauri::Webview, state: tauri::State<'_, AppState>) -> Result<Vec<tv::FoundTv>, String> {

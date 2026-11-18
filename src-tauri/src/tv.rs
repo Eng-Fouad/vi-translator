@@ -1,4 +1,4 @@
-//! TVs that show the overlays over the game: the VI Translator TV app on a Google TV or Android TV.
+//! TVs that show the overlays over the game: the VI Translator app on the TV on a Google TV or Android TV.
 //!
 //! Connecting starts here, in the main window: the app finds the TVs on the home network (the TV
 //! app answers on `TV_PORT` while it waits to be connected), and the user types the code the TV

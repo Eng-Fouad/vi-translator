@@ -393,7 +393,7 @@ $("lan-info").addEventListener("click", (e) => {
 $("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
 setInterval(() => { if (cfg && !$("tab-source").classList.contains("hidden")) { updateLan(); updateTvs(); } }, 3000);
 
-// TVs (the VI Translator TV app): find the ones waiting on the home network, connect one with the
+// TVs (the VI Translator app on the TV): find the ones waiting on the home network, connect one with the
 // code it shows, remove a connected one.
 async function updateTvs() {
   const box = $("tv-connected");
@@ -424,7 +424,7 @@ $("tv-find").addEventListener("click", async () => {
       ? found.map((f) => `<div class="tv-row" data-address="${AS.esc(f.address)}"><span class="tv-name">📺 ${AS.esc(f.name)}</span>
           <input class="tv-code" inputmode="numeric" maxlength="7" dir="ltr" autocomplete="off" placeholder="000 000" title="${AS.esc(t("The code shown on the TV"))}" />
           <button class="btn tv-connect">${AS.esc(t("Connect"))}</button><div class="tv-msg hint"></div></div>`).join("")
-      : `<div class="hint">${AS.esc(t("No TV is waiting. Open VI Translator TV on the TV, on the same network as this PC."))}</div>`;
+      : `<div class="hint">${AS.esc(t("No TV is waiting. Open VI Translator on the TV, on the same network as this PC."))}</div>`;
     box.querySelector(".tv-code")?.focus();
   } catch (e) { box.textContent = String(e); }
   finally { btn.disabled = false; }
@@ -444,7 +444,7 @@ async function connectTv(row) {
     const why = {
       wrong_code: () => t("Wrong code. Check the code on the TV."),
       too_many: () => t("Too many tries: the TV shows a new code."),
-      no_answer: () => t("The TV didn't answer. Is VI Translator TV still open on it?"),
+      no_answer: () => t("The TV didn't answer. Is VI Translator still open on it?"),
       not_sharing: () => t("Sharing on the home network couldn't start."),
     }[String(err)];
     msg.className = "tv-msg err";

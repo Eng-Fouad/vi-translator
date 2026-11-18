@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter};
 use crate::config::Config;
 
 /// Where releases are published.
-const RELEASES: &str = "https://api.github.com/repos/Eng-Fouad/vi-translator/releases/latest";
+const RELEASES: &str = "https://api.github.com/repos/Eng-Fouad/vi-translator-desktop/releases/latest";
 /// Ed25519 public key that release files are signed with (base64 of the 32 raw bytes).
 pub(crate) const PUBLIC_KEY: &str = "kQ2qBATJSRXwW3PtomkxkIUplaHqPHwoq+z3zJjTpWk=";
 const CHECK_EVERY: Duration = Duration::from_secs(60 * 60);

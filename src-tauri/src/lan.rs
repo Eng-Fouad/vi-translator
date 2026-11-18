@@ -1,6 +1,6 @@
 //! Live translations on other devices: a small read-only web page on the home network
 //! (http://<this PC>:<port>/), for a phone, tablet or another computer, and the overlays for a TV
-//! (http://<this PC>:<port>/tv, drawn by the VI Translator TV app over the game picture).
+//! (http://<this PC>:<port>/tv, drawn by the VI Translator app on the TV over the game picture).
 //!
 //! Off by default. While "lan_page" is on, it listens on all addresses but serves only the pages,
 //! their fonts and drawing code, the list of recent translations and what the overlays show now:
