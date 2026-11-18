@@ -1,4 +1,4 @@
-//! Translation memory (experiment): remember every translated line, reuse it instantly next time.
+//! Translation memory: remember every translated line, reuse it instantly next time.
 //!
 //! Keys are normalised English (lower-case, no punctuation, button icons as `{1}`, `{2}`), so the same
 //! game line matches whatever icon images or punctuation OCR produced. The Arabic is stored as a
@@ -92,7 +92,7 @@ fn rank(source: &str) -> u8 {
     match source {
         "reviewed" => 6,
         "phrasebook" => 5,
-        "claude" => 4,
+        "claude" | "openai" => 4,
         "deepl" | "azure" | "google" => 3,
         "libre" => 2,
         _ => 1, // local model

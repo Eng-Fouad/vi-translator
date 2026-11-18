@@ -220,7 +220,7 @@ impl Default for Style {
 pub struct Config {
     /// Exact title of the window to capture.
     pub window_title: String,
-    /// local | deepl | azure | google | libre | claude
+    /// local | deepl | azure | google | libre | claude | openai
     pub engine: String,
     /// Language to translate into (see `langs::LANGS`): "ar", "hi", "tr" …
     pub target_lang: String,
@@ -239,6 +239,9 @@ pub struct Config {
     pub libre_key: String,
     pub claude_key: String,
     pub claude_model: String,
+    /// ChatGPT (OpenAI API)
+    pub openai_key: String,
+    pub openai_model: String,
     /// Claude only: msa | egyptian | gulf | levantine
     pub dialect: String,
     pub interval_ms: u64,
@@ -254,10 +257,8 @@ pub struct Config {
     pub fps_corner: String,
     /// App window theme: light | dark
     pub theme: String,
-    /// Experiment: remember translated lines and reuse them instantly (translation memory).
+    /// Remember translated lines and reuse them instantly (translation memory).
     pub memory_enabled: bool,
-    /// Show Arabic that came from the memory in green (to see what was reused).
-    pub memory_tint: bool,
     /// Help improve translations: share the English lines seen (subtitles, instructions, captions)
     /// with the project server, anonymously, in batches. On by default; off in the Advanced tab.
     pub share_lines: bool,
@@ -267,10 +268,6 @@ pub struct Config {
     pub server_url: String,
     /// Apply read-area and font updates for the game profile automatically.
     pub auto_layout: bool,
-    /// Get test versions of game pages before everyone (Advanced).
-    pub early_pages: bool,
-    /// Switch to the game the picture shows (recognised by the games' pages scripts).
-    pub auto_game: bool,
     /// The profile last used for each game (where switching to a game goes).
     pub game_profiles: std::collections::BTreeMap<String, String>,
     /// Version of the last layout update applied (from before per-game versions; see `layout_versions`).
@@ -476,6 +473,8 @@ impl Default for Config {
             libre_key: String::new(),
             claude_key: String::new(),
             claude_model: "claude-haiku-5-5".into(),
+            openai_key: String::new(),
+            openai_model: "gpt-6-luna".into(),
             dialect: "msa".into(),
             interval_ms: 250,
             stable_ms: 300,
@@ -486,7 +485,6 @@ impl Default for Config {
             fps_corner: "top-right".into(),
             theme: "dark".into(),
             memory_enabled: false,
-            memory_tint: true,
             target_lang: "ar".into(),
             ui_lang: "en".into(),
             update_check: true,
@@ -498,8 +496,6 @@ impl Default for Config {
             auto_layout: true,
             layout_version: 0,
             layout_versions: Default::default(),
-            early_pages: false,
-            auto_game: false,
             game_profiles: Default::default(),
             server_games: Vec::new(),
             games_version: 0,
@@ -649,24 +645,11 @@ impl Config {
         self.profile_opts = active.pages;
     }
 
-    /// Switch to a game: the profile it was last played with, else its built-in one. False if it is
-    /// the game in use already or not a game the app knows.
-    pub fn switch_to_game(&mut self, game: &str) -> bool {
-        if self.game() == game || !self.builtins.iter().any(|p| p.id == game) {
-            return false;
-        }
-        let mine = self.game_profiles.get(game).filter(|id| self.profiles.iter().any(|p| &p.id == *id && p.game == game)).cloned();
-        self.profile = mine.unwrap_or_else(|| game.to_string());
-        self.normalize();
-        self.profile_rev += 1;
-        true
-    }
-
     /// The settings without secrets (translator keys, the OBS password, the install id): what goes
     /// to windows other than the main one, and in events (any window can listen to those).
     pub fn redacted(&self) -> Config {
         let mut c = self.clone();
-        for s in [&mut c.deepl_key, &mut c.azure_key, &mut c.google_key, &mut c.libre_key, &mut c.claude_key, &mut c.obs_password, &mut c.install_id] {
+        for s in [&mut c.deepl_key, &mut c.azure_key, &mut c.google_key, &mut c.libre_key, &mut c.claude_key, &mut c.openai_key, &mut c.obs_password, &mut c.install_id] {
             s.clear();
         }
         c
@@ -803,22 +786,6 @@ mod profile_tests {
         assert_eq!(c.timing(), (d.interval_ms, 120, 1500));
         c.clear_after_ms = 900; // the player's own
         assert_eq!(c.timing(), (d.interval_ms, 120, 900));
-    }
-
-    #[test]
-    fn switching_games_goes_to_the_profile_last_used_for_it() {
-        let mut c = Config::default();
-        c.normalize();
-        c.apply_games(&serde_json::json!({"games": [{"id": "rdr2", "name": "Red Dead Redemption 2"}]}), 1);
-        c.profiles.push(Profile { id: "custom-5".into(), name: "Mine".into(), game: "rdr2".into(), ..Profile::default() });
-        c.profile = "custom-5".into();
-        c.normalize();
-        assert!(c.switch_to_game("gta6"));
-        assert_eq!(c.profile, "gta6");
-        assert!(!c.switch_to_game("gta6"), "already");
-        assert!(!c.switch_to_game("nope"));
-        assert!(c.switch_to_game("rdr2"));
-        assert_eq!(c.profile, "custom-5");
     }
 
     #[test]

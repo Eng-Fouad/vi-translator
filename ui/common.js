@@ -430,7 +430,6 @@ window.AS = (() => {
   }
 
   // TEMP (testing the translation memory): colour of Arabic that came from the memory
-  const CACHED_TINT = "#4ade80";
 
-  return { setLang, CACHED_TINT, esc, segHtml, rectFor, alignOf, anchor, renderBox, renderScreen, matchedPx, placeUnderText };
+  return { setLang, esc, segHtml, rectFor, alignOf, anchor, renderBox, renderScreen, matchedPx, placeUnderText };
 })();

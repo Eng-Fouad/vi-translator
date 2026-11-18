@@ -89,10 +89,9 @@ pub static GENERATION: AtomicU64 = AtomicU64::new(0);
 /// `"pages": [{"script", "sig", "channel": "test", "installs": ["<install id>"]}, {"script", "sig"}]`.
 /// The first one this app can use is saved (and loaded by the detection loop): signed with the app's
 /// key, not needing a newer app (`// requires-app: X.Y.Z`), and for everyone, or a test one for an
-/// install that gets test versions (Advanced) or is named in its `installs`. So a script that needs a
-/// newer app comes with the one before it for older apps, and a new script can go to a few installs
-/// first.
-pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value, install_id: &str, early: bool) -> bool {
+/// install named in its `installs`. So a script that needs a newer app comes with the one before it
+/// for older apps, and a new script can go to a few installs first.
+pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value, install_id: &str) -> bool {
     let entries: Vec<&serde_json::Value> = match &layout["pages"] {
         serde_json::Value::Array(list) => list.iter().collect(),
         v @ serde_json::Value::Object(_) => vec![v],
@@ -102,7 +101,7 @@ pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value,
         match e["channel"].as_str().unwrap_or("") {
             "" | "stable" => true,
             // (installs are listed by the SHA-256 of their id: the ids themselves aren't published)
-            "test" => early || e["installs"].as_array().is_some_and(|l| l.iter().any(|i| i.as_str().is_some_and(|i| i.eq_ignore_ascii_case(&install_hash(install_id))))),
+            "test" => e["installs"].as_array().is_some_and(|l| l.iter().any(|i| i.as_str().is_some_and(|i| i.eq_ignore_ascii_case(&install_hash(install_id))))),
             _ => false,
         }
     };
@@ -119,7 +118,7 @@ pub fn save_from_layout(data_dir: &Path, game: &str, layout: &serde_json::Value,
     });
     let (js, sg) = files(data_dir, game);
     let Some((script, sig)) = pick else {
-        // None is for this install now (test versions turned off, say): the app's own pages again.
+        // None is for this install now (a test it's no longer in, say): the app's own pages again.
         // (But one that is for it and can't be used — a bad signature, a newer app needed — keeps
         // the last good script rather than leaving the game without pages.)
         if !entries.iter().any(|e| mine(e)) && std::fs::remove_file(&js).is_ok() {
@@ -1516,14 +1515,14 @@ mod tests {
         // a saved script stays when the layout's entry for this install can't be used (bad signature)
         std::fs::write(&js, "// pages-version: 1\n").unwrap();
         let bad = serde_json::json!({"pages": [{"script": "// pages-version: 2\n", "sig": "AAAA"}]});
-        assert!(!save_from_layout(&dir, "g", &bad, "id", false));
+        assert!(!save_from_layout(&dir, "g", &bad, "id"));
         assert!(js.exists(), "kept: the update was meant for this install but can't be used");
-        // ... and goes when no entry is for this install any more (a test version, test versions off)
+        // ... and goes when no entry is for this install any more (a test version for others)
         let test_only = serde_json::json!({"pages": [{"script": "// pages-version: 2\n", "sig": "AAAA", "channel": "test", "installs": [install_hash("other")]}]});
-        assert!(save_from_layout(&dir, "g", &test_only, "id", false));
+        assert!(save_from_layout(&dir, "g", &test_only, "id"));
         assert!(!js.exists());
         // a layout without pages changes nothing
-        assert!(!save_from_layout(&dir, "g", &serde_json::json!({"areas": []}), "id", false));
+        assert!(!save_from_layout(&dir, "g", &serde_json::json!({"areas": []}), "id"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

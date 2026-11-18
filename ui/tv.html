@@ -61,7 +61,6 @@
               if (ev.text_box) AS.placeUnderText(box, ev.text_box, ev.line_h, W, H, r.x, r.y);
               else Object.assign(box.style, { position: "absolute", left: "0", top: `${px.h}px`, margin: "0" });
             }
-            if (ev.cached && state.memory_tint !== false) box.style.color = AS.CACHED_TINT; // lines from the memory
           }
         }
         AS.renderScreen(screenEl, state.screen, state.reason || [], state.profile_opts);

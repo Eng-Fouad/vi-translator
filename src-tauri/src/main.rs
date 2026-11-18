@@ -177,14 +177,6 @@ fn memory_clear(webview: tauri::Webview, state: tauri::State<AppState>) -> Resul
     Ok(())
 }
 
-/// Forget the locked text sizes: measure them again on the next lines.
-#[tauri::command]
-fn reset_text_sizes(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<(), String> {
-    main_only(&webview)?;
-    state.shared.reset_sizes.store(true, std::sync::atomic::Ordering::Relaxed);
-    Ok(())
-}
-
 /// Re-read the memory files.
 #[tauri::command]
 fn memory_reload(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<(), String> {
@@ -228,13 +220,18 @@ struct TranslationEvent {
 // The game draws each kind of text (subtitles, instructions, the Mission Failed reason) in one fixed
 // font size, but the measured height of a line changes with its letters ("we are" vs "Back off!").
 // So the size is measured on the first few lines, then locked to their median — every Arabic line of
-// that kind has the same size. Locked sizes are kept in text-sizes.json for the next sessions.
+// that kind has the same size. Locked sizes are kept in text-sizes.json for the next sessions, with
+// the picture's resolution: a picture of another resolution (another capture card or source, the
+// card set to another mode) has its text at other sizes, so they're measured again.
 
 const SIZE_SAMPLES: usize = 5;
 
 #[derive(Serialize, Deserialize, Default)]
 struct SizeLock {
     locked: HashMap<String, f64>,
+    /// The picture's width and height the sizes were measured on (None: not known yet)
+    #[serde(default)]
+    res: Option<(u32, u32)>,
     #[serde(skip)]
     samples: HashMap<String, Vec<f64>>,
 }
@@ -270,15 +267,35 @@ impl SizeLock {
         let median = sorted[sorted.len() / 2];
         if sorted.len() >= SIZE_SAMPLES {
             self.locked.insert(kind.into(), median);
-            let _ = std::fs::create_dir_all(data_dir());
-            let _ = std::fs::write(sizes_path(), serde_json::to_string_pretty(self).unwrap_or_default());
+            self.store();
         }
         median
     }
 
-    fn reset(&mut self) {
-        *self = Self::default();
-        let _ = std::fs::remove_file(sizes_path());
+    /// The picture now being read is `w`×`h`: sizes measured on a picture of another resolution are
+    /// forgotten, and measured again on the next lines. True when they were.
+    fn at_resolution(&mut self, w: u32, h: u32) -> bool {
+        if w == 0 || h == 0 || self.res == Some((w, h)) {
+            return false;
+        }
+        // (sizes saved before the resolution was kept: taken as measured on this picture)
+        let other = self.res.is_some();
+        if other {
+            self.locked.clear();
+            self.samples.clear();
+        }
+        self.res = Some((w, h));
+        self.store();
+        other
+    }
+
+    fn store(&self) {
+        // (tests never touch the player's own file)
+        if cfg!(test) {
+            return;
+        }
+        let _ = std::fs::create_dir_all(data_dir());
+        let _ = std::fs::write(sizes_path(), serde_json::to_string_pretty(self).unwrap_or_default());
     }
 }
 
@@ -306,6 +323,13 @@ fn list_langs() -> Vec<langs::Lang> {
 #[tauri::command]
 fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// A development build (`cargo tauri dev`, debug): the Advanced tab shows the tools for developing
+/// the app. Releases never do.
+#[tauri::command]
+fn dev_build() -> bool {
+    cfg!(debug_assertions)
 }
 
 /// A newer version of the app, if one was found.
@@ -909,19 +933,15 @@ fn ocr_loop(
     let mut menu_retry_at = Instant::now();
     // the page on screen last time round (to tell its script when it goes)
     let mut ended_check: Option<String> = None;
-    // Switching games by the picture (Advanced): the other games' scripts, when they were last
-    // asked, and which game the picture looked like how many times in a row.
+    // Another game on screen (while sharing lines): the other games' scripts, and when they last
+    // looked at the picture.
     let mut other_pages: HashMap<String, (u64, Option<pagescript::Pages>)> = HashMap::new();
     let mut recognized_at = Instant::now();
-    let mut recognized: (String, u32) = (String::new(), 0);
     // For sharing lines: the game one of whose pages was on screen this session (that game is
     // really being played), and until when another game the app knows was seen on screen.
     let mut confirmed_game = String::new();
     let mut other_game_until: Option<Instant> = None;
     loop {
-        if shared.reset_sizes.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            sizes.lock().unwrap().reset();
-        }
         let c = cfg.lock().unwrap().clone();
         let t0 = Instant::now();
         // (the player's, or the game's own: see Config::timing)
@@ -984,6 +1004,8 @@ fn ocr_loop(
             no_frame_since = None;
         }
         if let Some(frame) = frame_now {
+            // another resolution: the text sizes are measured again
+            sizes.lock().unwrap().at_resolution(frame.w, frame.h);
             // ---- game pages (the game's pages script finds and reads them; pagescript.rs) ----
             // Appear: each page's `present` (cheap) every frame, then its `read`.
             // Stay: `same` every frame — the translation stays exactly as long as the page does — with
@@ -1151,10 +1173,9 @@ fn ocr_loop(
             } else if screen.is_some() {
                 hide_screen(&app, &shared, &latest, &mut screen);
             }
-            // Another game on screen? Every few seconds, while no page is up, the other games' scripts
-            // look at the picture; two looks in a row that agree switch to that game.
-            // (also while sharing lines: another game on screen holds its lines back)
-            if (c.auto_game || c.share_lines) && screen.is_none() && found.is_none() && recognized_at.elapsed() >= Duration::from_secs(4) {
+            // Another game on screen? While sharing lines, every few seconds while no page is up, the
+            // other games' scripts look at the picture: another game on screen holds its lines back.
+            if c.share_lines && screen.is_none() && found.is_none() && recognized_at.elapsed() >= Duration::from_secs(4) {
                 recognized_at = Instant::now();
                 let generation = pagescript::GENERATION.load(std::sync::atomic::Ordering::Relaxed);
                 let here = c.game();
@@ -1171,34 +1192,6 @@ fn ocr_loop(
                 }
                 if seen.is_some() {
                     other_game_until = Some(Instant::now() + Duration::from_secs(90));
-                }
-                // A picture the game in use's own script recognises too stays with it: two games whose
-                // scripts both match it would otherwise take turns. (Its own copy of the script: the
-                // one reading pages keeps what it learnt between frames.)
-                if c.auto_game && seen.is_some() {
-                    let mine = other_pages.entry(here.clone()).or_insert((u64::MAX, None));
-                    if mine.0 != generation {
-                        *mine = (generation, pagescript::Pages::for_game(&here, &data_dir()));
-                    }
-                    if mine.1.as_ref().is_some_and(|p| p.recognize(&frame, &ocr)) {
-                        seen = None;
-                    }
-                }
-                recognized = match seen {
-                    Some(g) if recognized.0 == g => (g, recognized.1 + 1),
-                    Some(g) => (g, 1),
-                    None => (String::new(), 0),
-                };
-                if c.auto_game && recognized.1 >= 2 {
-                    let g = std::mem::take(&mut recognized.0);
-                    recognized.1 = 0;
-                    let mut now = cfg.lock().unwrap();
-                    if now.switch_to_game(&g) {
-                        let _ = now.save(&config_path());
-                        let _ = app.emit("config", &now.redacted());
-                        let name = now.builtins.iter().find(|p| p.id == g).map(|p| p.name.clone()).unwrap_or(g);
-                        let _ = app.emit("status-msg", format!("Switched to {name}: the picture looks like it."));
-                    }
                 }
             }
             // What lines logged now are, for sharing (see memory::set_share).
@@ -1960,7 +1953,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder, reset_text_sizes])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear, memory_reload, memory_open_folder])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));
@@ -2069,6 +2062,41 @@ fn strip_icon_tokens(s: &str) -> String {
         .map(|t| if t.starts_with('⟦') && t.ends_with('⟧') { "🎮" } else { t })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod size_lock_tests {
+    use super::*;
+
+    fn measured(l: &mut SizeLock, kind: &str, v: f64) -> f64 {
+        (0..SIZE_SAMPLES).map(|_| l.size(kind, v)).last().unwrap()
+    }
+
+    #[test]
+    fn another_resolution_measures_again() {
+        let mut l = SizeLock::default();
+        assert!(!l.at_resolution(1920, 1080), "the first picture: nothing to forget");
+        assert_eq!(measured(&mut l, "subtitles", 0.03), 0.03);
+        assert_eq!(l.size("subtitles", 0.05), 0.03, "locked");
+        // same resolution: kept
+        assert!(!l.at_resolution(1920, 1080));
+        assert_eq!(l.size("subtitles", 0.05), 0.03);
+        // another one: measured again on the next lines
+        assert!(l.at_resolution(1280, 720));
+        assert!(l.locked.is_empty());
+        assert_eq!(measured(&mut l, "subtitles", 0.04), 0.04);
+        // no picture size (no frame yet): nothing changes
+        assert!(!l.at_resolution(0, 0));
+        assert_eq!(l.size("subtitles", 0.05), 0.04);
+    }
+
+    #[test]
+    fn sizes_saved_before_the_resolution_was_kept_stay() {
+        let mut l: SizeLock = serde_json::from_str(r#"{"locked":{"subtitles":0.03}}"#).unwrap();
+        assert!(!l.at_resolution(1920, 1080));
+        assert_eq!(l.size("subtitles", 0.05), 0.03);
+        assert_eq!(l.res, Some((1920, 1080)));
+    }
 }
 
 #[cfg(test)]

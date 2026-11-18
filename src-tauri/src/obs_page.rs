@@ -117,16 +117,15 @@ pub(crate) fn build_id() -> u64 {
 /// Never settings beyond that (keys, passwords) or the picture; private screen text is never in
 /// `screen` (it's taken out before a page is shown).
 pub(crate) fn overlay_state(cfg: &Mutex<Config>, shared: &Shared) -> serde_json::Value {
-    let (areas, style, profile_opts, memory_tint, overlays, lang) = {
+    let (areas, style, profile_opts, overlays, lang) = {
         let c = cfg.lock().unwrap();
-        (c.areas.clone(), c.style.clone(), c.profile_opts.clone(), c.memory_tint, c.overlays_enabled, c.target_lang.clone())
+        (c.areas.clone(), c.style.clone(), c.profile_opts.clone(), c.overlays_enabled, c.target_lang.clone())
     };
     serde_json::json!({
         "build": build_id(),
         "areas": areas,
         "style": style,
         "profile_opts": profile_opts,
-        "memory_tint": memory_tint,
         // the header's Overlays switch: off = draw nothing
         "overlays": overlays,
         "lang": lang,

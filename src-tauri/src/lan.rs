@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn the_tv_state_has_the_overlays_only() {
-        let c = Mutex::new(Config { deepl_key: "secret-deepl-key".into(), claude_key: "secret-claude-key".into(), ..Config::default() });
+        let c = Mutex::new(Config { deepl_key: "secret-deepl-key".into(), claude_key: "secret-claude-key".into(), openai_key: "secret-openai-key".into(), ..Config::default() });
         let shared = Shared::default();
         *shared.status.lock().unwrap() = "status-for-troubleshooting".into();
         let v = crate::obs_page::overlay_state(&c, &shared);

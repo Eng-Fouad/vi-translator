@@ -8,7 +8,6 @@ let shown = { w: 0, h: 0 }; // preview image size on screen (CSS px)
 let selected = null; // selected area id
 const lastSegs = {}; // area id -> latest Arabic segments
 const lastLineH = {}; // area id -> English line height (fraction of the frame), for size matching
-const lastCached = {}; // TEMP: area id -> last line came from the memory
 const lastTextBox = {}; // area id -> English text block [x, y, w, h] (fractions of the frame)
 
 // ------------------------------------------------------------------------------------- saving
@@ -149,7 +148,6 @@ function drawLayer() {
       // matched size only for real translations (the sample text has no English line to match)
       const fontPx = lastSegs[a.id]?.length ? AS.matchedPx(a, lastLineH[a.id], shown.h) : 0;
       AS.renderBox(box, segs, cfg.style, k, a.font_scale, a.placement, a, fontPx);
-      if (lastSegs[a.id]?.length && lastCached[a.id] && cfg.memory_tint !== false) box.style.color = AS.CACHED_TINT; // lines from the memory
       if (a.placement === "under_text") {
         const tb = lastSegs[a.id]?.length ? lastTextBox[a.id] : null;
         if (tb) AS.placeUnderText(box, tb, lastLineH[a.id], shown.w, shown.h, r.x, r.y);
@@ -504,6 +502,7 @@ const ENGINES = [
   { id: "google", name: "Google Cloud Translation", badge: "Free tier", d: "Good quality. Around 500,000 free characters a month." },
   { id: "libre", name: "LibreTranslate", badge: "Free / self-hosted", d: "Open source. Use your own server or a hosted one." },
   { id: "claude", name: "Claude (Anthropic)", badge: "≈ $1 per game", d: "Best with slang, jokes and context. Can use a dialect. Paid per use." },
+  { id: "openai", name: "ChatGPT (OpenAI)", badge: "≈ $1 per game", d: "Natural translations with context, like Claude. Can use a dialect. Paid per use." },
 ];
 const ENGINE_FIELDS = {
   local: [],
@@ -514,6 +513,11 @@ const ENGINE_FIELDS = {
   claude: [
     ["claude_key", "Anthropic API key", "password"],
     ["claude_model", "Model", "select", null, [["claude-haiku-5-5", "Claude Haiku 5.5 — cheapest, fast"], ["claude-sonnet-5-5", "Claude Sonnet 5.5 — better"], ["claude-opus-5-5", "Claude Opus 5.5 — best, ~40× Haiku's price"]]],
+    ["dialect", "Arabic variety", "select", null, [["msa", "Modern Standard (الفصحى)"], ["egyptian", "Egyptian (مصري)"], ["gulf", "Gulf (خليجي)"], ["levantine", "Levantine (شامي)"]]],
+  ],
+  openai: [
+    ["openai_key", "OpenAI API key", "password"],
+    ["openai_model", "Model", "select", null, [["gpt-6-luna", "GPT-6 Luna — cheapest, fast"], ["gpt-6.1-terra", "GPT-6.1 Terra — better"], ["gpt-6.2-sol", "GPT-6.2 Sol — best, ~20× Luna's price"]]],
     ["dialect", "Arabic variety", "select", null, [["msa", "Modern Standard (الفصحى)"], ["egyptian", "Egyptian (مصري)"], ["gulf", "Gulf (خليجي)"], ["levantine", "Levantine (شامي)"]]],
   ],
 };
@@ -908,27 +912,18 @@ function renderTiming() {
 function renderMemory() {
   $("memory-form").innerHTML = `
     <label class="check" style="color:var(--text);font-weight:600"><input type="checkbox" id="mem-on" ${cfg.memory_enabled ? "checked" : ""}/> ${t("Use translation memory")}</label>
-    <label class="check" style="color:var(--text)"><input type="checkbox" id="mem-tint" ${cfg.memory_tint !== false ? "checked" : ""}/> ${t("Show lines from the memory in {green}", { green: `<b style="color:${AS.CACHED_TINT}">${t("green")}</b>` })}</label>
     <div class="callout" id="mem-stats" style="margin:0"></div>
     <div class="row"><button class="btn" id="mem-open">${t("Open its folder")}</button><button class="btn" id="mem-reload">${t("Reload")}</button><button class="btn danger" id="mem-clear">${t("Clear memory")}</button></div>
-    <div class="row"><button class="btn" id="size-reset">${t("Re-measure text sizes")}</button></div>
-    <div class="hint">${t("Text sizes are measured on the first {n} lines of each kind, then fixed.", { n: 5 })}</div>
+    <div class="hint">${t("Text sizes are measured on the first {n} lines of each kind, and again when the picture's resolution changes.", { n: 5 })}</div>
     <label class="check" style="color:var(--text);font-weight:600;margin-top:10px"><input type="checkbox" id="share-on" ${cfg.share_lines !== false ? "checked" : ""}/> ${t("Help improve translations")}</label>
-    <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions; never menus) with the VI Translator server every few minutes, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
+    <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions) with the VI Translator server occasionally, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
     <label class="check" style="color:var(--text)"><input type="checkbox" id="layout-auto" ${cfg.auto_layout !== false ? "checked" : ""}/> ${t("Automatic layout updates")}</label>
     <div class="hint">${t("Keeps the game profile's read areas, fonts, text style and timing up to date.")}</div>
-    <label class="check" style="color:var(--text)"><input type="checkbox" id="auto-game" ${cfg.auto_game ? "checked" : ""}/> ${t("Switch games automatically")}</label>
-    <div class="hint">${t("When the picture shows another game the app knows (by its game pages), that game's profile is used. A game that looks much like another may be taken for it.")}</div>
-    <label class="check" style="color:var(--text)"><input type="checkbox" id="early-pages" ${cfg.early_pages ? "checked" : ""}/> ${t("Get test versions of game pages")}</label>
-    <div class="hint">${t("New game pages go to a few players first. A test version may not work as well yet. This install's id: {id}", { id: `<code>${AS.esc(cfg.install_id || "—")}</code>` })}</div>`;
-  $("size-reset").addEventListener("click", () => invoke("reset_text_sizes"));
+`;
   $("mem-reload").addEventListener("click", async () => { await invoke("memory_reload"); updateMemory(); });
   $("mem-on").addEventListener("change", (e) => { cfg.memory_enabled = e.target.checked; save(false); updateMemory(); });
-  $("mem-tint").addEventListener("change", (e) => { cfg.memory_tint = e.target.checked; save(); });
   $("share-on").addEventListener("change", (e) => { cfg.share_lines = e.target.checked; save(false); });
   $("layout-auto").addEventListener("change", (e) => { cfg.auto_layout = e.target.checked; save(false); });
-  $("auto-game").addEventListener("change", (e) => { cfg.auto_game = e.target.checked; save(false); });
-  $("early-pages").addEventListener("change", (e) => { cfg.early_pages = e.target.checked; save(false); });
   $("mem-open").addEventListener("click", () => invoke("memory_open_folder").catch((e) => log({ error: String(e) })));
   $("mem-clear").addEventListener("click", async () => {
     if (!(await ask(t("Forget all remembered translations?"), t("Clear memory")))) return;
@@ -973,7 +968,8 @@ function renderDebug() {
       <input type="range" id="dbg-int" min="100" max="5000" step="100" value="${cfg.debug_frame_interval_ms}" />
       <span class="val" id="dbg-int-v">${t("{s} s", { s: (cfg.debug_frame_interval_ms / 1000).toFixed(1) })}</span></div></div>
     <div class="callout" id="dbg-status" style="margin:0"></div>
-    <button class="btn" id="dbg-open">${t("Open frames folder")}</button>`;
+    <button class="btn" id="dbg-open">${t("Open frames folder")}</button>
+    <div class="muted small">Install id (to send a test version of a game page to this PC): <code>${AS.esc(cfg.install_id || "—")}</code></div>`;
   $("dbg-save").addEventListener("change", (e) => setSaveFrames(e.target.checked));
   $("dbg-int").addEventListener("input", (e) => {
     cfg.debug_frame_interval_ms = Number(e.target.value);
@@ -1266,7 +1262,6 @@ listen("translation", (e) => {
     screen.reason = ev.segments;
   } else {
     lastSegs[ev.area] = ev.segments;
-    lastCached[ev.area] = !!ev.cached;
     if (ev.line_h) lastLineH[ev.area] = ev.line_h;
     if (ev.text_box) lastTextBox[ev.area] = ev.text_box;
   }
@@ -1559,6 +1554,8 @@ function lockControls() {
   updateLan();
   updateTvs();
   invoke("app_version").then((v) => { $("app-version").textContent = "v" + v; document.title = "VI Translator " + v; }).catch(() => {});
+  // the tools for developing the app: development builds only
+  invoke("dev_build").then((dev) => { $("debug-section").hidden = !dev; }).catch(() => {});
   invoke("update_status").then(showUpdate).catch(() => {});
   $("log").dataset.empty = t("Translations appear here as the game shows text.");
   let mode = "setup";

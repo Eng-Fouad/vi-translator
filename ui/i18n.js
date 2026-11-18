@@ -95,7 +95,6 @@ window.I18N = (() => {
       "Capture device \"{name}\" stopped: {error}",
       "Capture device \"{name}\": {error}",
       "OBS source \"{name}\": {error}",
-      "Switched to {name}: the picture looks like it.",
       "Downloading the free translation model: {file} ...",
       "Loading the translation model ...",
       "Free local translator ready.",

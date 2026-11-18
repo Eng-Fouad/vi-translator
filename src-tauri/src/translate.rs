@@ -3,6 +3,7 @@
 //! - local:  OPUS-MT en→ar (Helsinki-NLP, ONNX export by Xenova) run on the CPU with ONNX Runtime. Free, offline.
 //! - deepl / azure / google / libre: their REST translation APIs (free tiers available).
 //! - claude: the Claude Messages API (raw HTTP; there is no official Rust SDK).
+//! - openai: ChatGPT, the OpenAI Responses API (raw HTTP). Same prompt and tags as claude.
 //!
 //! Output is a list of segments `(text, colour)` so highlighted English words can keep their colour.
 
@@ -207,6 +208,33 @@ fn claude_price(model: &str) -> (f64, f64) {
     }
 }
 
+/// USD per million tokens (input, output) for OpenAI's models (standard tier, November 2026).
+fn openai_price(model: &str) -> (f64, f64) {
+    match model {
+        "gpt-6-luna" => (0.10, 0.50),
+        "gpt-6.1-terra" => (1.0, 5.0),
+        "gpt-6.2-sol" => (2.0, 10.0),
+        _ => (0.0, 0.0),
+    }
+}
+
+/// The text of an OpenAI Responses API answer: its messages' `output_text` parts. None for a refusal.
+fn openai_text(v: &Value) -> Option<String> {
+    let parts: Vec<&Value> = v["output"]
+        .as_array()
+        .map(|items| items.iter().filter(|i| i["type"] == "message").filter_map(|i| i["content"].as_array()).flatten().collect())
+        .unwrap_or_default();
+    if parts.iter().any(|p| p["type"] == "refusal") {
+        return None;
+    }
+    Some(parts.iter().filter(|p| p["type"] == "output_text").filter_map(|p| p["text"].as_str()).collect())
+}
+
+/// The translators that are language models (one prompt with tags, a cost per line).
+pub fn is_llm(engine: &str) -> bool {
+    engine == "claude" || engine == "openai"
+}
+
 pub struct Translator {
     http: reqwest::blocking::Client,
     model_dir: PathBuf,
@@ -306,6 +334,8 @@ impl Translator {
         }
         let segs = if cfg.engine == "claude" {
             self.claude(cfg, line, phrases, icons)?
+        } else if cfg.engine == "openai" {
+            self.openai(cfg, line, phrases, icons)?
         } else {
             // Machine translators can't be trusted to keep markers, so translate the line without
             // the icons and put each icon back after the Arabic for the English word before it.
@@ -364,7 +394,7 @@ impl Translator {
     /// as it was.
     pub fn recolor(&mut self, cfg: &Config, segs: Segments, phrases: &[(String, String)], status: &dyn Fn(String)) -> Segments {
         let has_color = segs.iter().any(|s| s.1.as_deref().is_some_and(|c| !c.starts_with("icon:")));
-        if phrases.is_empty() || has_color || cfg.engine == "claude" {
+        if phrases.is_empty() || has_color || is_llm(&cfg.engine) {
             return segs;
         }
         let mut targets: Vec<(Vec<String>, String)> = Vec::new();
@@ -413,7 +443,7 @@ impl Translator {
     }
 
     pub fn stats(&self, cfg: &Config) -> String {
-        if cfg.engine == "claude" {
+        if is_llm(&cfg.engine) {
             format!("{} lines, ${:.4}", self.lines, self.cost_usd)
         } else {
             format!("{} lines", self.lines)
@@ -518,8 +548,10 @@ impl Translator {
         Ok(serde_json::from_str(&text)?)
     }
 
-    fn claude(&mut self, cfg: &Config, line: &str, phrases: &[(String, String)], icons: &[String]) -> Result<Segments> {
-        need(&cfg.claude_key, "Anthropic API key")?;
+    /// The prompt both language models get: the system text, the user text (earlier lines for
+    /// context, then the new line with its highlighted words as <c1>…</c1> and icons as <b1/>), and
+    /// each highlight's colour by its number.
+    fn llm_prompt(&self, cfg: &Config, line: &str, phrases: &[(String, String)], icons: &[String]) -> (String, String, HashMap<String, String>) {
         let lang = crate::langs::get(&cfg.target_lang);
         let target = if lang.code == "ar" {
             DIALECTS.iter().find(|d| d.0 == cfg.dialect).unwrap_or(&DIALECTS[0]).1.to_string()
@@ -564,7 +596,12 @@ impl Translator {
         } else {
             format!("Earlier lines:\n{}\n\nNEW line:\n{tagged}", context.join("\n"))
         };
+        (system, prompt, colors)
+    }
 
+    fn claude(&mut self, cfg: &Config, line: &str, phrases: &[(String, String)], icons: &[String]) -> Result<Segments> {
+        need(&cfg.claude_key, "Anthropic API key")?;
+        let (system, prompt, colors) = self.llm_prompt(cfg, line, phrases, icons);
         let model = cfg.claude_model.trim();
         let mut body = json!({
             "model": model,
@@ -601,6 +638,41 @@ impl Translator {
             .as_array()
             .map(|blocks| blocks.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect())
             .unwrap_or_default();
+        Ok(self.llm_reply(&ar, &colors, icons, line))
+    }
+
+    /// ChatGPT: the OpenAI Responses API, with the same prompt as Claude. The lines aren't stored at
+    /// OpenAI (`store: false`), and the small models answer without reasoning (fast, cheap).
+    fn openai(&mut self, cfg: &Config, line: &str, phrases: &[(String, String)], icons: &[String]) -> Result<Segments> {
+        need(&cfg.openai_key, "OpenAI API key")?;
+        let (system, prompt, colors) = self.llm_prompt(cfg, line, phrases, icons);
+        let model = cfg.openai_model.trim();
+        // ("none" isn't offered on every model: the bigger ones think a little)
+        let effort = if model.contains("luna") || model.contains("terra") { "none" } else { "low" };
+        let body = json!({
+            "model": model,
+            "instructions": system,
+            "input": prompt,
+            "max_output_tokens": if effort == "none" { 300 } else { 1024 },
+            "reasoning": { "effort": effort },
+            "store": false,
+        });
+        let req = self.http.post("https://api.openai.com/v1/responses").bearer_auth(cfg.openai_key.trim());
+        let v = self.post_json(req.json(&body))?;
+
+        let (pin, pout) = openai_price(model);
+        let usage = &v["usage"];
+        self.cost_usd += (usage["input_tokens"].as_f64().unwrap_or(0.0) * pin
+            + usage["output_tokens"].as_f64().unwrap_or(0.0) * pout)
+            / 1e6;
+        // (a refusal: nothing shown for this line)
+        let Some(ar) = openai_text(&v) else { return Ok(Vec::new()) };
+        Ok(self.llm_reply(&ar, &colors, icons, line))
+    }
+
+    /// A language model's answer -> segments: "<c1>…</c1>" coloured as the game highlighted them,
+    /// "<b1/>" the game's button icon; the line kept as context for the next ones.
+    fn llm_reply(&mut self, ar: &str, colors: &HashMap<String, String>, icons: &[String], line: &str) -> Segments {
         let ar = ar.trim();
 
         // Split "<c1>...</c1>" into coloured segments; drop any stray tags.
@@ -624,14 +696,14 @@ impl Translator {
             .filter(|(t, _)| !t.is_empty())
             .collect();
 
-        // Button icons: "<b1/>" -> icon segment (an icon Claude dropped is added at the end).
+        // Button icons: "<b1/>" -> icon segment (an icon the model dropped is added at the end).
         let segs = split_icon_tags(segs, icons);
         let plain: String = segs.iter().filter(|s| !is_icon(s)).map(|s| s.0.as_str()).collect();
         self.history.push_back((line.to_string(), plain));
         while self.history.len() > 3 {
             self.history.pop_front();
         }
-        Ok(segs)
+        segs
     }
 }
 
@@ -972,4 +1044,31 @@ mod term_tests {
 pub fn keeps_terms(en: &str, ar: &str) -> bool {
     let ar = ar.replace(['\u{2066}', '\u{2069}'], "");
     protect_terms(en).1.iter().all(|t| ar.contains(t.as_str()))
+}
+
+#[cfg(test)]
+mod openai_tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_answer_text() {
+        // a reasoning item first, then the message (as the Responses API returns them)
+        let v = json!({"output": [
+            {"type": "reasoning", "summary": []},
+            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "اضغط <b1/> للقفز", "annotations": []}]}
+        ], "usage": {"input_tokens": 120, "output_tokens": 9}});
+        assert_eq!(openai_text(&v).as_deref(), Some("اضغط <b1/> للقفز"));
+        // a refusal shows nothing
+        let v = json!({"output": [{"type": "message", "role": "assistant", "content": [{"type": "refusal", "refusal": "I can't help with that."}]}]});
+        assert_eq!(openai_text(&v), None);
+        // no output at all: empty, not an error
+        assert_eq!(openai_text(&json!({})).as_deref(), Some(""));
+    }
+
+    #[test]
+    fn prices_and_kinds() {
+        assert_eq!(openai_price("gpt-6-luna"), (0.10, 0.50));
+        assert_eq!(openai_price("something-else"), (0.0, 0.0));
+        assert!(is_llm("openai") && is_llm("claude") && !is_llm("deepl"));
+    }
 }

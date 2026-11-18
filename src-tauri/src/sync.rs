@@ -92,17 +92,17 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
         .expect("http client");
     let mut first = true;
     let (mut next_upload, mut next_download) = (Instant::now(), Instant::now());
-    let mut last = (String::new(), String::new(), false); // game, language, test versions of pages
+    let mut last = (String::new(), String::new()); // game, language
     loop {
         let c = cfg.lock().unwrap().clone();
         // what was downloaded before works offline; another game or language: its own downloads
         if let Some(g) = game(&c) {
-            if last != (g.clone(), c.target_lang.clone(), c.early_pages) {
+            if last != (g.clone(), c.target_lang.clone()) {
                 // (give the app a moment to switch its memory to the new language first)
                 std::thread::sleep(Duration::from_secs(2));
                 // (the game or language as they are now: they may have changed again meanwhile)
                 let now = cfg.lock().unwrap().clone();
-                last = (now.game(), now.target_lang.clone(), now.early_pages);
+                last = (now.game(), now.target_lang.clone());
                 load_cached(&app, &cfg, &memory, &paths, &last.0, &last.1);
                 next_download = Instant::now();
             }
@@ -336,8 +336,8 @@ fn download(
             if crate::config::write_atomic(&paths.layout(game), &bytes).is_ok() {
                 st.versions.insert(k, tag.clone());
             }
-            let (id, early) = { let c = cfg.lock().unwrap(); (c.install_id.clone(), c.early_pages) };
-            if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early) {
+            let id = cfg.lock().unwrap().install_id.clone();
+            if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id) {
                 let _ = app.emit("pages", ());
             }
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
@@ -488,8 +488,8 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout(game)), st.versions.get(&format!("layout/{game}"))) {
         if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
             // (test versions turned on or off: the script that's for this install now)
-            let (id, early) = { let c = cfg.lock().unwrap(); (c.install_id.clone(), c.early_pages) };
-            if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id, early) {
+            let id = cfg.lock().unwrap().install_id.clone();
+            if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id) {
                 let _ = app.emit("pages", ());
             }
             apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);

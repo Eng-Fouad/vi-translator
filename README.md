@@ -22,7 +22,7 @@
 
 - **Translation:** Arabic, Hindi, Bengali, Urdu, Indonesian, Turkish, Vietnamese, Persian, Thai,
   Tamil, Telugu, Marathi, Ukrainian, Dutch, Filipino, Malay, Swahili, Romanian, Greek, Czech.
-- **Translators:** free offline model (some languages), DeepL, Azure, Google, LibreTranslate or Claude.
+- **Translators:** free offline model (some languages), DeepL, Azure, Google, LibreTranslate, Claude or ChatGPT.
 - **App interface:** 33 languages, including right-to-left layouts.
 
 ## Download

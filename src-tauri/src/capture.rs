@@ -51,8 +51,6 @@ pub struct Shared {
     pub menu_cache: Mutex<MenuCache>,
     /// …and the menu text it couldn't translate (asked again later).
     pub menu_failed: Mutex<Vec<String>>,
-    /// Set by the UI: measure the text sizes again.
-    pub reset_sizes: std::sync::atomic::AtomicBool,
     /// Live preview, separate from the full frames read for text: a frame (≤ PREVIEW_W wide) at
     /// the preview rate, made only while someone watches (see `watching`), and its JPEG.
     pub preview_raw: Mutex<Option<Arc<FrameData>>>,
