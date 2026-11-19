@@ -1473,7 +1473,7 @@ fn ocr_loop(
                             let line = if icons.is_empty() { &st.candidate } else { &t };
                             let m = memory.lock().unwrap();
                             // (a speaker name in front is not part of what's remembered)
-                            m.knows(line) || speaker::without_name(line).is_some_and(|rest| m.knows(rest))
+                            m.knows(line) || speaker::without_name(line).is_some_and(|rest| m.knows(rest)) || m.knows(&speaker::sentence_of(line))
                         });
                     // A reading the app isn't sure of (text still animating in: GTA VI's instructions
                     // fade in with a glow) waits three times as long: by then the real text has
@@ -1529,7 +1529,8 @@ fn ocr_loop(
                         let line_h = sizes.lock().unwrap().size(&area.id, measured);
                         // (logged without a speaker name in front: the sentence is what gets translated)
                         st.current_en = {
-                            let line = speaker::split(&en, &phrases).map(|(_, _, rest)| rest).unwrap_or(&en);
+                            let clean = speaker::take_cues(&en).map(|(_, t)| t).unwrap_or_else(|| en.clone());
+                            let line = speaker::split(&clean, &phrases).map(|(_, _, rest)| rest).unwrap_or(&clean);
                             speaker::language_tag(line).map(|(_, s)| s).unwrap_or(line).to_string()
                         };
                         st.current_start = Some(en_start);
@@ -1743,6 +1744,42 @@ fn translate_spoken(
     phrases: &[(String, String)],
     status: &dyn Fn(String),
 ) -> (anyhow::Result<translate::Segments>, bool) {
+    // "[laughs]": the sound cues off first (each translated on its own), back where they were at the end
+    if let Some((cues, clean)) = speaker::take_cues(en) {
+        let shown: Vec<String> = cues
+            .before
+            .iter()
+            .chain(&cues.after_name)
+            .chain(&cues.after)
+            .map(|cue| {
+                speaker::cue_in(&c.target_lang, cue).unwrap_or_else(|| {
+                    let (r, _) = translate_line(tr, c, memory, cue, &[], &[], status);
+                    r.ok().map(|segs| segs.iter().map(|s| s.0.as_str()).collect::<String>()).filter(|t| !t.trim().is_empty()).unwrap_or_else(|| cue.clone())
+                })
+            })
+            .collect();
+        // a cue-only line ("Donnie: [laughs]", "[rattling]"): the name (if any) and the cues
+        let words = clean.chars().filter(|ch| ch.is_alphabetic()).count();
+        let probe = format!("{clean} xx");
+        let only_name = speaker::plain_name(&probe).is_some_and(|(_, rest)| rest == "xx");
+        if words < 2 || only_name {
+            let named = if only_name { speaker::plain_name(&probe).map(|(n, _)| n) } else { None };
+            let segs = match &named {
+                Some(name) => {
+                    let color = phrases.iter().find(|(p, _)| p.starts_with(name.as_str())).map(|(_, col)| col.clone()).unwrap_or_else(|| speaker::PLAIN_NAME_COLOR.to_string());
+                    let shown_name = speaker::name_in(&c.target_lang, name, reviewed_name(memory, c, name));
+                    let mut s = speaker::with_name(&shown_name, &color, Vec::new());
+                    s.truncate(2);
+                    s
+                }
+                None => Vec::new(),
+            };
+            return (Ok(speaker::with_cues(&cues, &shown, named.is_some(), segs)), true);
+        }
+        let (result, hit) = translate_spoken(tr, c, memory, &clean, icons, phrases, status);
+        let named = speaker::split(&clean, phrases).is_some() || speaker::plain_name(&clean).is_some();
+        return (result.map(|segs| speaker::with_cues(&cues, &shown, named, segs)), hit);
+    }
     let named = speaker::split(en, phrases).or_else(|| plain_speaker(memory, c, en));
     let (line, phrases) = match &named {
         Some((name, _, rest)) => (*rest, speaker::phrases_without(phrases, name)),

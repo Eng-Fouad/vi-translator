@@ -65,6 +65,12 @@ pub fn without_name(en: &str) -> Option<&str> {
     (rest.len() < en.len()).then_some(rest)
 }
 
+/// The sentence alone, for the memory check and the log: no cues, no name, no "In Spanish:".
+pub fn sentence_of(en: &str) -> String {
+    let clean = take_cues(en).map(|(_, t)| t).unwrap_or_else(|| en.to_string());
+    without_name(&clean).unwrap_or(&clean).to_string()
+}
+
 /// The highlighted phrases of the sentence without the name (the name is not a highlighted word in it).
 pub fn phrases_without(phrases: &[(String, String)], name: &str) -> Vec<(String, String)> {
     let tag = format!("{name}:");
@@ -344,6 +350,196 @@ pub fn with_name(name_shown: &str, color: &str, mut segs: Segments) -> Segments 
     out
 }
 
+// --------------------------------------------------------------------------------- sound cues
+
+/// Sound cues in square brackets, as GTA VI shows them with its sound subtitles on: "[rattling]" on a
+/// line of its own or in front, "Donnie: [sigh] Fuck.", "Donnie: [laughs]". Kept apart like a speaker
+/// name: only the sentence is translated and remembered, so the same line finds the same translation
+/// with or without a cue; each cue is translated on its own and put back where it was.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Cues {
+    /// In front of everything ("[rattling] Donnie: …").
+    pub before: Vec<String>,
+    /// Right after the speaker name ("Donnie: [sigh] Fuck.").
+    pub after_name: Vec<String>,
+    /// Anywhere else: at the end, or inside the sentence.
+    pub after: Vec<String>,
+}
+
+impl Cues {
+    pub fn is_empty(&self) -> bool {
+        self.before.is_empty() && self.after_name.is_empty() && self.after.is_empty()
+    }
+}
+
+/// The colour cues are drawn in: a soft grey, so they read as sounds, not speech.
+pub const CUE_COLOR: &str = "#b9b9b9";
+
+/// The line without its cues ("[sigh]" out of "Donnie: [sigh] Fuck." -> "Donnie: Fuck."), and the cues by
+/// where they were. None when it has none.
+pub fn take_cues(en: &str) -> Option<(Cues, String)> {
+    let mut cues = Cues::default();
+    let mut text = String::new();
+    let mut rest = en;
+    while let Some(open) = rest.find('[') {
+        let Some(len) = rest[open..].find(']') else { break };
+        let inner = rest[open + 1..open + len].trim();
+        // (a cue is a few words of letters: anything else in brackets stays text)
+        let is_cue = (1..=40).contains(&inner.chars().count())
+            && inner.chars().any(|c| c.is_alphabetic())
+            && inner.chars().all(|c| c.is_alphabetic() || c == ' ' || c == '-' || c == '\'' || c == ',');
+        if !is_cue {
+            text.push_str(&rest[..open + len + 1]);
+            rest = &rest[open + len + 1..];
+            continue;
+        }
+        text.push_str(&rest[..open]);
+        let before = text.trim();
+        let tokens: Vec<&str> = before.split_whitespace().collect();
+        if before.is_empty() {
+            cues.before.push(inner.to_string());
+        } else if crate::ocr::name_len(&tokens) == Some(tokens.len()) {
+            cues.after_name.push(inner.to_string());
+        } else {
+            cues.after.push(inner.to_string());
+        }
+        text.push(' ');
+        rest = &rest[open + len + 1..];
+    }
+    text.push_str(rest);
+    if cues.is_empty() {
+        return None;
+    }
+    Some((cues, text.split_whitespace().collect::<Vec<_>>().join(" ")))
+}
+
+/// Common cues as Arabic writes them (others go to the translator, which remembers them too).
+const CUES_AR: &[(&str, &str)] = &[
+    ("laughs", "يضحك"),
+    ("laughing", "يضحك"),
+    ("laughter", "ضحك"),
+    ("chuckles", "يضحك بخفة"),
+    ("chuckling", "يضحك بخفة"),
+    ("giggles", "يقهقه"),
+    ("sigh", "يتنهّد"),
+    ("sighs", "يتنهّد"),
+    ("gasp", "يشهق"),
+    ("gasps", "يشهق"),
+    ("groans", "يتأوّه"),
+    ("groaning", "يتأوّه"),
+    ("grunts", "يهمهم"),
+    ("grunting", "يهمهم"),
+    ("screams", "يصرخ"),
+    ("screaming", "صراخ"),
+    ("shouts", "يصيح"),
+    ("shouting", "صياح"),
+    ("yells", "يصيح"),
+    ("coughs", "يسعل"),
+    ("coughing", "سعال"),
+    ("cries", "يبكي"),
+    ("crying", "بكاء"),
+    ("sobbing", "نحيب"),
+    ("panting", "يلهث"),
+    ("whispers", "يهمس"),
+    ("whispering", "همس"),
+    ("scoffs", "يسخر"),
+    ("sniffs", "يستنشق"),
+    ("clears throat", "يتنحنح"),
+    ("exhales", "يزفر"),
+    ("inhales", "يستنشق"),
+    ("mumbles", "يتمتم"),
+    ("mumbling", "تمتمة"),
+    ("whistles", "يصفّر"),
+    ("rattling", "قعقعة"),
+    ("music playing", "موسيقى"),
+    ("music", "موسيقى"),
+    ("phone ringing", "رنين الهاتف"),
+    ("phone buzzing", "اهتزاز الهاتف"),
+    ("phone vibrates", "اهتزاز الهاتف"),
+    ("siren wailing", "صفّارة إنذار"),
+    ("sirens wailing", "صفّارات إنذار"),
+    ("sirens", "صفّارات إنذار"),
+    ("alarm blaring", "إنذار يدوّي"),
+    ("gunshot", "إطلاق نار"),
+    ("gunshots", "إطلاق نار"),
+    ("gunfire", "إطلاق نار"),
+    ("explosion", "انفجار"),
+    ("engine revving", "هدير المحرك"),
+    ("tires screeching", "صرير الإطارات"),
+    ("tyres screeching", "صرير الإطارات"),
+    ("door opens", "يُفتح الباب"),
+    ("door closes", "يُغلق الباب"),
+    ("knocking", "طرق"),
+    ("footsteps", "خطوات"),
+    ("crowd cheering", "هتاف الحشد"),
+    ("cheering", "هتاف"),
+    ("applause", "تصفيق"),
+    ("dog barking", "نباح كلب"),
+    ("beeping", "صفير"),
+    ("static", "تشويش"),
+    ("indistinct chatter", "أحاديث غير واضحة"),
+    ("indistinct", "غير واضح"),
+    ("slap", "صفعة"),
+    ("thud", "ارتطام"),
+    ("crash", "تحطّم"),
+    ("muffled", "مكتوم"),
+];
+
+/// A cue in the target language from the built-in list (Arabic), or None (the translator then).
+pub fn cue_in(lang: &str, cue: &str) -> Option<String> {
+    if lang != "ar" {
+        return None;
+    }
+    let low = cue.trim().trim_end_matches(|c: char| matches!(c, '.' | ',' | '!' | '?')).to_lowercase();
+    CUES_AR.iter().find(|(en, _)| *en == low).map(|(_, ar)| ar.to_string())
+}
+
+/// One cue as drawn: in brackets, in the cue colour.
+fn cue_seg(shown: &str) -> (String, Option<String>) {
+    (format!("[{}]", shown.trim()), Some(format!("{NAME_PREFIX}{CUE_COLOR}")))
+}
+
+/// The cues put back around a translated line ([`with_name`] gave it its name first, `named` says
+/// so): in front, right after the name, and at the end. `shown` = each cue as the target language
+/// writes it, in the order of `before`, `after_name`, `after`.
+pub fn with_cues(cues: &Cues, shown: &[String], named: bool, segs: Segments) -> Segments {
+    let (b, n) = (cues.before.len(), cues.after_name.len());
+    let mut out: Segments = Vec::new();
+    for s in &shown[..b] {
+        out.push(cue_seg(s));
+        out.push((" ".into(), None));
+    }
+    let mut segs = segs.into_iter();
+    if named && n > 0 {
+        // the name and the space after it, then the cues
+        if let Some(first) = segs.next() {
+            out.push(first);
+        }
+        if let Some(space) = segs.next() {
+            out.push(space);
+        }
+        for s in &shown[b..b + n] {
+            out.push(cue_seg(s));
+            out.push((" ".into(), None));
+        }
+    } else {
+        for s in &shown[b..b + n] {
+            out.push(cue_seg(s));
+            out.push((" ".into(), None));
+        }
+    }
+    out.extend(segs);
+    for s in &shown[b + n..] {
+        out.push((" ".into(), None));
+        out.push(cue_seg(s));
+    }
+    // (a cue-only line: no space left dangling)
+    while out.last().is_some_and(|(t, c)| c.is_none() && t.trim().is_empty()) {
+        out.pop();
+    }
+    out
+}
+
 // ------------------------------------------------------------------------------- language tags
 
 /// Languages the game's people speak in, as GTA VI tags the line ("In Spanish: …"), and how Arabic
@@ -488,6 +684,29 @@ mod tests {
         assert_eq!(plain_name("Jason..: Hold up."), Some(("Jason".to_string(), "Hold up.")));
         assert!(plain_name("In Spanish: Hola, amigo.").is_none());
         assert!(is_known("Jason") && !is_known("Tip"));
+    }
+
+    #[test]
+    fn sound_cues_are_kept_apart() {
+        let (c, rest) = take_cues("[rattling] Donnie: Hell nah, she's good We're good!").unwrap();
+        assert_eq!((c.before.clone(), rest.as_str()), (vec!["rattling".to_string()], "Donnie: Hell nah, she's good We're good!"));
+        let (c, rest) = take_cues("Donnie: [sigh] Fuck.").unwrap();
+        assert_eq!((c.after_name.clone(), rest.as_str()), (vec!["sigh".to_string()], "Donnie: Fuck."));
+        let (c, rest) = take_cues("Donnie: [laughs]").unwrap();
+        assert_eq!((c.after_name.clone(), rest.as_str()), (vec!["laughs".to_string()], "Donnie:"));
+        let (c, rest) = take_cues("We're good! [laughs]").unwrap();
+        assert_eq!((c.after.clone(), rest.as_str()), (vec!["laughs".to_string()], "We're good!"));
+        assert!(take_cues("Hold [1] to aim").is_none(), "not a cue: no letters");
+        assert!(take_cues("No cues here.").is_none());
+        assert_eq!(cue_in("ar", "Laughs"), Some("يضحك".to_string()));
+        assert_eq!(cue_in("hi", "laughs"), None);
+        // put back: in front, after the name, at the end
+        let segs = with_name("دوني", "#ffd69f", vec![("تبًا.".into(), None)]);
+        let c = Cues { before: vec!["rattling".into()], after_name: vec!["sigh".into()], after: vec![] };
+        let out = with_cues(&c, &["قعقعة".into(), "يتنهّد".into()], true, segs);
+        let text: String = out.iter().map(|s| s.0.as_str()).collect();
+        assert_eq!(text, "[قعقعة] دوني: [يتنهّد] تبًا.");
+        assert_eq!(out[0].1.as_deref(), Some("name:#b9b9b9"));
     }
 
     #[test]
