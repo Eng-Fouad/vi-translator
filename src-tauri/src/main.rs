@@ -1741,7 +1741,7 @@ fn translate_spoken(
     phrases: &[(String, String)],
     status: &dyn Fn(String),
 ) -> (anyhow::Result<translate::Segments>, bool) {
-    let named = speaker::split(en, phrases);
+    let named = speaker::split(en, phrases).or_else(|| plain_speaker(memory, c, en));
     let (line, phrases) = match &named {
         Some((name, _, rest)) => (*rest, speaker::phrases_without(phrases, name)),
         None => (en, phrases.to_vec()),
@@ -1762,8 +1762,26 @@ fn translate_spoken(
         None => translate_line(tr, c, memory, line, icons, &phrases, status),
     };
     let Some((name, color, _)) = named else { return (result, hit) };
-    let shown = speaker::name_in(&c.target_lang, &name, reviewed_name(memory, c, &name));
+    let mut reviewed = reviewed_name(memory, c, &name);
+    // a role ("Cop:") is translated; outside Arabic, by the translator when no reviewed line has it
+    if reviewed.is_none() && c.target_lang != "ar" && speaker::is_role(&name) {
+        let (r, _) = translate_line(tr, c, memory, &name, &[], &[], status);
+        reviewed = r.ok().map(|segs| segs.iter().map(|s| s.0.as_str()).collect());
+    }
+    let shown = if speaker::is_role(&name) && c.target_lang != "ar" {
+        reviewed.map(|r| r.trim().trim_end_matches(|ch: char| matches!(ch, ':' | '.' | '!' | '?' | '،' | '؟' | '…')).trim().to_string()).filter(|r| !r.is_empty()).unwrap_or(name)
+    } else {
+        speaker::name_in(&c.target_lang, &name, reviewed)
+    };
     (result.map(|segs| speaker::with_name(&shown, &color, segs)), hit)
+}
+
+/// A "Name:" the colour check missed, taken when the app knows it: one of the game's people, a name
+/// with a reviewed translation, or a sentence it knows without the name. (name, colour, rest)
+fn plain_speaker<'a>(memory: &Arc<Mutex<memory::Memory>>, c: &Config, en: &'a str) -> Option<(String, String, &'a str)> {
+    let (name, rest) = speaker::plain_name(en)?;
+    let known = speaker::is_known(&name) || speaker::is_role(&name) || reviewed_name(memory, c, &name).is_some() || memory.lock().unwrap().knows(rest);
+    known.then(|| (name, speaker::PLAIN_NAME_COLOR.to_string(), rest))
 }
 
 /// A reviewed translation of a name alone ("Dobbs" -> "دوبس") from the downloaded translations.
@@ -1905,7 +1923,11 @@ fn offline_line(
             None => tr.translate(cfg, line, phrases, icons, log)?,
         })
     };
-    let named = speaker::split(en, phrases);
+    let named = speaker::split(en, phrases).or_else(|| {
+        let (name, rest) = speaker::plain_name(en)?;
+        let reviewed = mem.get(&name, &[], &[]).is_some_and(|(_, src)| src == "reviewed");
+        (speaker::is_known(&name) || speaker::is_role(&name) || reviewed || mem.knows(rest)).then(|| (name, speaker::PLAIN_NAME_COLOR.to_string(), rest))
+    });
     let (line, phrases) = match &named {
         Some((name, color, rest)) => {
             log(format!("Speaker: {name} ({color})"));
@@ -1924,8 +1946,17 @@ fn offline_line(
     };
     Ok(match named {
         Some((name, color, _)) => {
-            let reviewed = mem.get(&name, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(s, _)| s.iter().map(|x| x.0.as_str()).collect());
-            speaker::with_name(&speaker::name_in(&cfg.target_lang, &name, reviewed), &color, segs)
+            let mut reviewed: Option<String> = mem.get(&name, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(s, _)| s.iter().map(|x| x.0.as_str()).collect());
+            let role = speaker::is_role(&name) && cfg.target_lang != "ar";
+            if role && reviewed.is_none() {
+                reviewed = one(tr, &name, &[]).ok().map(|segs| segs.iter().map(|s| s.0.as_str()).collect());
+            }
+            let shown = if role {
+                reviewed.map(|r| r.trim().trim_end_matches(|ch: char| matches!(ch, ':' | '.' | '!' | '?' | '،' | '؟' | '…')).trim().to_string()).filter(|r| !r.is_empty()).unwrap_or(name)
+            } else {
+                speaker::name_in(&cfg.target_lang, &name, reviewed)
+            };
+            speaker::with_name(&shown, &color, segs)
         }
         None => segs,
     })

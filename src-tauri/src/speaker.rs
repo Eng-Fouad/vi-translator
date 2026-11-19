@@ -26,8 +26,37 @@ pub fn split<'a>(en: &'a str, phrases: &[(String, String)]) -> Option<(String, S
     if rest.chars().filter(|c| c.is_alphabetic()).count() < 2 {
         return None;
     }
-    Some((tagged.trim_end_matches(':').to_string(), color, rest))
+    Some((bare_name(&tagged), color, rest))
 }
+
+/// "Lucia.:" / "Jason…:" -> "Lucia" / "Jason": the name without its colon or the dots the OCR reads
+/// next to it.
+fn bare_name(tagged: &str) -> String {
+    tagged.trim_end_matches(':').trim_end_matches(|c: char| matches!(c, '.' | '…' | ',' | ';')).trim().to_string()
+}
+
+/// A "Name:" in front that the colour check missed (a pale name, or one over a bright sky): (name,
+/// the rest). The caller takes it only for a name it knows (the game's people, a reviewed name, or a
+/// sentence it knows without it), so a white "Tip:" stays part of the text. Never a language tag.
+pub fn plain_name(en: &str) -> Option<(String, &str)> {
+    if language_tag(en).is_some() {
+        return None;
+    }
+    let (tagged, rest) = crate::ocr::split_name(en)?;
+    if rest.chars().filter(|c| c.is_alphabetic()).count() < 2 {
+        return None;
+    }
+    Some((bare_name(&tagged), rest))
+}
+
+/// One of the game's people (as KNOWN lists them).
+pub fn is_known(name: &str) -> bool {
+    let low = name.to_lowercase();
+    KNOWN.iter().any(|(en, _)| *en == low)
+}
+
+/// The colour a name the colour check missed is drawn in: the subtitles' own near-white.
+pub const PLAIN_NAME_COLOR: &str = "#f2f2f2";
 
 /// The line without a "Name:" in front (colour not known yet: for the memory check only).
 pub fn without_name(en: &str) -> Option<&str> {
@@ -73,18 +102,130 @@ const KNOWN: &[(&str, &str)] = &[
     ("lamar", "لامار"),
 ];
 
+/// Roles the game puts where a name goes ("Cop:", "Prison Guard:"): translated, never spelt out in
+/// Arabic letters ("كوب"). Arabic, with the article, as the subtitle names a person.
+const ROLES: &[(&str, &str)] = &[
+    ("cop", "الشرطي"),
+    ("cops", "الشرطة"),
+    ("police", "الشرطة"),
+    ("police officer", "ضابط الشرطة"),
+    ("officer", "الضابط"),
+    ("deputy", "نائب الشريف"),
+    ("sheriff", "الشريف"),
+    ("trooper", "شرطي الولاية"),
+    ("detective", "المحقق"),
+    ("sergeant", "الرقيب"),
+    ("captain", "النقيب"),
+    ("agent", "العميل"),
+    ("soldier", "الجندي"),
+    ("guard", "الحارس"),
+    ("prison guard", "حارس السجن"),
+    ("security guard", "حارس الأمن"),
+    ("security", "الأمن"),
+    ("bouncer", "حارس الملهى"),
+    ("dispatch", "مركز البلاغات"),
+    ("dispatcher", "مركز البلاغات"),
+    ("operator", "عامل الهاتف"),
+    ("pilot", "الطيار"),
+    ("driver", "السائق"),
+    ("cashier", "أمين الصندوق"),
+    ("clerk", "الموظف"),
+    ("teller", "الصرّاف"),
+    ("bank teller", "صرّاف البنك"),
+    ("bartender", "النادل"),
+    ("waiter", "النادل"),
+    ("waitress", "النادلة"),
+    ("customer", "الزبون"),
+    ("shopkeeper", "صاحب المتجر"),
+    ("owner", "المالك"),
+    ("manager", "المدير"),
+    ("boss", "الزعيم"),
+    ("worker", "العامل"),
+    ("mechanic", "الميكانيكي"),
+    ("attendant", "العامل"),
+    ("salesman", "البائع"),
+    ("dealer", "التاجر"),
+    ("doctor", "الطبيب"),
+    ("nurse", "الممرضة"),
+    ("paramedic", "المسعف"),
+    ("reporter", "المراسل"),
+    ("news anchor", "مذيع الأخبار"),
+    ("anchor", "المذيع"),
+    ("announcer", "المذيع"),
+    ("host", "المقدّم"),
+    ("radio host", "مذيع الراديو"),
+    ("dj", "منسّق الأغاني"),
+    ("caller", "المتصل"),
+    ("voice", "الصوت"),
+    ("man", "الرجل"),
+    ("woman", "المرأة"),
+    ("guy", "الرجل"),
+    ("girl", "الفتاة"),
+    ("boy", "الفتى"),
+    ("kid", "الطفل"),
+    ("old man", "العجوز"),
+    ("old woman", "العجوز"),
+    ("homeless man", "المشرّد"),
+    ("pedestrian", "أحد المارة"),
+    ("passerby", "أحد المارة"),
+    ("local", "أحد السكان"),
+    ("neighbor", "الجار"),
+    ("neighbour", "الجار"),
+    ("tourist", "السائح"),
+    ("stranger", "الغريب"),
+    ("hostage", "الرهينة"),
+    ("inmate", "السجين"),
+    ("prisoner", "السجين"),
+    ("thug", "البلطجي"),
+    ("goon", "البلطجي"),
+    ("gangster", "رجل العصابة"),
+    ("gang member", "عضو العصابة"),
+    ("biker", "سائق الدراجة"),
+    ("crowd", "الحشد"),
+    ("everyone", "الجميع"),
+    ("all", "الجميع"),
+];
+
+/// A role in place of a name ("Cop", "Prison Guard"), or a title before one ("Officer Smith").
+pub fn is_role(name: &str) -> bool {
+    let low = name.to_lowercase();
+    let first = low.split_whitespace().next().unwrap_or("");
+    ROLES.iter().any(|(en, _)| *en == low || *en == first)
+}
+
+/// A role (or a title and a name) in Arabic: "Cop" -> "الشرطي", "Officer Smith" -> "الضابط سميث".
+fn role_ar(name: &str) -> Option<String> {
+    let low = name.to_lowercase();
+    if let Some((_, ar)) = ROLES.iter().find(|(en, _)| *en == low) {
+        return Some(ar.to_string());
+    }
+    let (first, rest) = low.split_once(' ')?;
+    let (_, title) = ROLES.iter().find(|(en, _)| *en == first)?;
+    let person = KNOWN.iter().find(|(en, _)| *en == rest).map(|(_, ar)| ar.to_string()).unwrap_or_else(|| rest.split('-').map(transliterate).collect::<Vec<_>>().join("-"));
+    Some(format!("{title} {person}"))
+}
+
 /// The name as the target language writes it. `reviewed`: a reviewed translation of the name alone
 /// (the downloaded translations can carry the names the game's people go by).
 pub fn name_in(lang: &str, name: &str, reviewed: Option<String>) -> String {
     if !arabic_script(lang) {
         return name.to_string();
     }
-    if let Some(r) = reviewed.filter(|r| !r.trim().is_empty()) {
-        return r.trim().trim_end_matches(':').trim().to_string();
-    }
     let low = name.to_lowercase();
     if let Some((_, ar)) = KNOWN.iter().find(|(en, _)| *en == low) {
         return ar.to_string();
+    }
+    if lang == "ar" {
+        if let Some(r) = role_ar(name) {
+            return r;
+        }
+    }
+    // a reviewed translation of the name alone: the downloaded line "Lucia." comes with its full stop
+    // ("لوسيا."), and only a name-sized one is a name (not a sentence that happens to match)
+    let words = name.split_whitespace().count();
+    let reviewed = reviewed.map(|r| r.trim().trim_end_matches(|c: char| matches!(c, ':' | '.' | '…' | '!' | '?' | '،' | '؟' | ',' | '؛')).trim().to_string());
+    if let Some(r) = reviewed.filter(|r| !r.is_empty() && r.split_whitespace().count() <= words + 1 && !r.contains(|c: char| matches!(c, '.' | '!' | '?' | '؟' | '،'))) {
+        return r;
     }
     // each word on its own ("Officer Smith"); a word that is one of the known names is written as they are
     low.split(' ')
@@ -311,7 +452,7 @@ mod tests {
         let (name, color, rest) = split("Real Dimez: Yo, what's up?", &ph).unwrap();
         assert_eq!((name.as_str(), color.as_str(), rest), ("Real Dimez", "#c8a0ff", "Yo, what's up?"));
         assert_eq!(name_in("ar", "Real Dimez", None), "ريال دايمز");
-        assert_eq!(name_in("ar", "Officer Jason", None), "أوفيسير جيسون");
+        assert_eq!(name_in("ar", "Officer Jason", None), "الضابط جيسون");
         assert_eq!(without_name("Officer Smith: Hands up!"), Some("Hands up!"));
         // a colon later in a sentence is not a name
         assert!(without_name("Listen up: we go now.").is_none());
@@ -335,6 +476,26 @@ mod tests {
     fn a_white_label_is_not_a_name() {
         assert!(split("Tip: Hold L2 to aim.", &[]).is_none());
         assert!(split("Not to be annoying: fine.", &gold()).is_none());
+    }
+
+    #[test]
+    fn dots_by_a_name_are_dropped() {
+        let ph = vec![("Lucia.:".to_string(), "#ffd69f".to_string())];
+        assert_eq!(split("Lucia.: Let's go.", &ph).unwrap().0, "Lucia");
+        assert_eq!(name_in("ar", "Lucia", Some("لوسيا.".into())), "لوسيا");
+        assert_eq!(name_in("ar", "Dobbs", Some("دوبس..".into())), "دوبس");
+        assert_eq!(name_in("ar", "Dobbs", Some("دوبس، هيا بنا.".into())), "دوبس");
+        assert_eq!(plain_name("Jason..: Hold up."), Some(("Jason".to_string(), "Hold up.")));
+        assert!(plain_name("In Spanish: Hola, amigo.").is_none());
+        assert!(is_known("Jason") && !is_known("Tip"));
+    }
+
+    #[test]
+    fn a_role_is_translated() {
+        assert_eq!(name_in("ar", "Cop", None), "الشرطي");
+        assert_eq!(name_in("ar", "Prison Guard", None), "حارس السجن");
+        assert_eq!(name_in("ar", "Officer Smith", None), "الضابط سميث");
+        assert!(is_role("Cop") && is_role("Officer Smith") && !is_role("Dobbs"));
     }
 
     #[test]
