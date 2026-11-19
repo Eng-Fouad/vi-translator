@@ -67,15 +67,19 @@
         let wait = 0;
         try {
           const r = await fetch(`tv.json?t=${encodeURIComponent(key)}&h=${encodeURIComponent(version)}`, { cache: "no-store" });
+          // (tells the TV app the page is alive: it loads a page that went quiet again)
+          if (window.VITTV) window.VITTV.alive();
           if (r.status === 200) {
             const next = await r.json();
             version = r.headers.get("X-State") || "";
-            // the app was restarted (maybe updated): load its current code
-            if (build !== null && next.build !== build) { location.reload(); return; }
+            // the app was restarted (maybe updated): load its current code. A TV app that doesn't let the
+            // page reload itself keeps this one going: it draws the new state, never stuck empty
+            const restarted = build !== null && next.build !== build;
             build = next.build;
             state = next;
             AS.setLang(state.lang);
             draw();
+            if (restarted) location.reload();
           } else if (r.status !== 204) {
             // (sharing switched off, this TV removed in the app, or an older app without this page)
             if (state) { state = null; version = ""; clear(); }
