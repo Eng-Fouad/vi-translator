@@ -461,7 +461,7 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 // right under GTA's own box: same left edge, at most its width, growing downward
                 placement: "under_text".into(),
                 text_pos: "top-left".into(),
-                font_family: "Noto Sans Arabic Medium".into(),
+                font_family: "Tajawal".into(),
                 style: Some(gta6_text()),
                 // square, dark see-through box like GTA's own instructions box
                 background: "game".into(),
@@ -491,8 +491,9 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
                 out_valign: "bottom".into(),
                 out_halign: "center".into(),
                 background: "none".into(), // like the game: no box, white with pink words
-                font_family: "Noto Sans Arabic Medium".into(),
-                style: Some(gta6_bordered()),
+                // set apart from the subtitles above it: Tajawal, bold
+                font_family: "Tajawal".into(),
+                style: Some(Style { bold: true, ..gta6_bordered() }),
                 font_scale: 0.92,
                 ..Area::default()
             },
