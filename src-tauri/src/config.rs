@@ -567,7 +567,7 @@ impl Default for Config {
             obs_port: 4455,
             obs_password: String::new(),
             obs_page_port: 8790,
-            capture_fps: 8,
+            capture_fps: 12,
             preview_fps: 30,
             debug_save_frames: false,
             debug_frame_interval_ms: 1000,

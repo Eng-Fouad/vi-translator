@@ -164,7 +164,7 @@ I18N.add("es-MX", {
   "Debugging": "Depuración",
   "Tools for developing the app.": "Herramientas para desarrollar la app.",
   "Frames captured for reading text (per second)": "Cuadros capturados para leer texto (por segundo)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Cuadros a tamaño completo que se usan para leer texto, las pantallas del juego y los cuadros guardados. También define cada cuánto el menú de pausa revisa si su texto cambió. Con 8 es suficiente; más consume CPU, sobre todo en 4K. Desde OBS, lo máximo que entrega es unos 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Cuadros a tamaño completo que se usan para leer texto, las pantallas del juego y los cuadros guardados. También define cada cuánto el menú de pausa revisa si su texto cambió. Con 12 es suficiente; más consume CPU, sobre todo en 4K. Desde OBS, lo máximo que entrega es unos 12.",
   "Live preview frame rate (per second)": "Cuadros por segundo de la vista previa en vivo",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Solo la imagen de esta app (cuadros pequeños, generados solo mientras está visible). No cambia cómo se lee el texto.",
   "How often areas are read (ms)": "Cada cuánto se leen las áreas (ms)",

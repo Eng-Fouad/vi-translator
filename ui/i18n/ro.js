@@ -164,7 +164,7 @@ I18N.add("ro", {
   "Debugging": "Depanare",
   "Tools for developing the app.": "Instrumente pentru dezvoltarea aplicației.",
   "Frames captured for reading text (per second)": "Cadre capturate pentru citirea textului (pe secundă)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Cadre la dimensiune completă folosite pentru citirea textului, ecranele jocului și cadrele salvate. Tot de aici depinde cât de des verifică meniul de pauză dacă textul s-a schimbat. 8 este suficient; mai multe consumă procesor, mai ales la 4K. Din OBS se pot obține cel mult aproximativ 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Cadre la dimensiune completă folosite pentru citirea textului, ecranele jocului și cadrele salvate. Tot de aici depinde cât de des verifică meniul de pauză dacă textul s-a schimbat. 12 este suficient; mai multe consumă procesor, mai ales la 4K. Din OBS se pot obține cel mult aproximativ 12.",
   "Live preview frame rate (per second)": "Rata de cadre a previzualizării (pe secundă)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Doar imaginea din această aplicație (cadre mici, create doar cât este vizibilă). Nu schimbă modul de citire a textului.",
   "How often areas are read (ms)": "Interval de citire a zonelor (ms)",

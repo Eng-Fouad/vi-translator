@@ -164,7 +164,7 @@ I18N.add("ja", {
   "Debugging": "デバッグ",
   "Tools for developing the app.": "アプリ開発用のツールです。",
   "Frames captured for reading text (per second)": "テキスト読み取り用のキャプチャ フレーム数 (毎秒)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "テキストの読み取り、ゲーム画面の検出、フレームの保存に使うフル サイズのフレームです。ポーズメニューの文字が変わったかを確認する頻度でもあります。8 で十分です。増やすと、特に 4K では CPU 負荷が高くなります。OBS からは約 12 が上限です。",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "テキストの読み取り、ゲーム画面の検出、フレームの保存に使うフル サイズのフレームです。ポーズメニューの文字が変わったかを確認する頻度でもあります。12 で十分です。増やすと、特に 4K では CPU 負荷が高くなります。OBS からは約 12 が上限です。",
   "Live preview frame rate (per second)": "ライブ プレビューのフレーム レート (毎秒)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "このアプリ内の映像のみ (表示中だけ作られる小さなフレーム) です。テキストの読み取りには影響しません。",
   "How often areas are read (ms)": "範囲を読み取る間隔 (ms)",

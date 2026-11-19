@@ -164,7 +164,7 @@ I18N.add("id", {
   "Debugging": "Debugging",
   "Tools for developing the app.": "Alat untuk pengembangan aplikasi.",
   "Frames captured for reading text (per second)": "Frame yang ditangkap untuk membaca teks (per detik)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Frame ukuran penuh untuk membaca teks, halaman game, dan frame yang disimpan. Juga menentukan seberapa sering menu jeda memeriksa apakah teksnya berubah. 8 sudah cukup; lebih tinggi memakan CPU, terutama pada 4K. Dari OBS, maksimal sekitar 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Frame ukuran penuh untuk membaca teks, halaman game, dan frame yang disimpan. Juga menentukan seberapa sering menu jeda memeriksa apakah teksnya berubah. 12 sudah cukup; lebih tinggi memakan CPU, terutama pada 4K. Dari OBS, maksimal sekitar 12.",
   "Live preview frame rate (per second)": "Frame rate pratinjau langsung (per detik)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Hanya gambar di aplikasi ini (frame kecil, dibuat hanya saat terlihat). Tidak mengubah cara teks dibaca.",
   "How often areas are read (ms)": "Seberapa sering area dibaca (ms)",

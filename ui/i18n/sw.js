@@ -164,7 +164,7 @@ I18N.add("sw", {
   "Debugging": "Utatuzi",
   "Tools for developing the app.": "Zana za kutengeneza programu.",
   "Frames captured for reading text (per second)": "Fremu zinazonaswa kwa kusoma maandishi (kwa sekunde)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Fremu za ukubwa kamili zinazotumika kusoma maandishi, kurasa za mchezo na fremu zinazohifadhiwa. Pia ni mara ngapi menyu ya kusitisha hukagua kama maandishi yake yamebadilika. 8 zinatosha; zaidi hutumia CPU, hasa kwa 4K. Kutoka OBS, kiwango cha juu ni takriban 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Fremu za ukubwa kamili zinazotumika kusoma maandishi, kurasa za mchezo na fremu zinazohifadhiwa. Pia ni mara ngapi menyu ya kusitisha hukagua kama maandishi yake yamebadilika. 12 zinatosha; zaidi hutumia CPU, hasa kwa 4K. Kutoka OBS, kiwango cha juu ni takriban 12.",
   "Live preview frame rate (per second)": "Kasi ya fremu ya onyesho la moja kwa moja (kwa sekunde)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Picha iliyo kwenye programu hii pekee (fremu ndogo, hutengenezwa tu inapoonekana). Haibadilishi jinsi maandishi yanavyosomwa.",
   "How often areas are read (ms)": "Mara ngapi maeneo husomwa (ms)",

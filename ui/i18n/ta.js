@@ -164,7 +164,7 @@ I18N.add("ta", {
   "Debugging": "பிழைத்திருத்தம்",
   "Tools for developing the app.": "செயலியை உருவாக்குவதற்கான கருவிகள்.",
   "Frames captured for reading text (per second)": "உரையைப் படிக்கப் பிடிக்கப்படும் ஃப்ரேம்கள் (ஒரு வினாடிக்கு)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "உரை படித்தல், கேம் பக்கங்கள், சேமித்த ஃப்ரேம்களுக்குப் பயன்படும் முழு அளவு ஃப்ரேம்கள். இடைநிறுத்த மெனு தன் உரை மாறியதா என்று சரிபார்க்கும் அதிர்வெண்ணும் இதுவே. 8 போதுமானது; அதிகமானால் CPU செலவாகும், குறிப்பாக 4K-இல். OBS-இலிருந்து அதிகபட்சம் சுமார் 12 கிடைக்கும்.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "உரை படித்தல், கேம் பக்கங்கள், சேமித்த ஃப்ரேம்களுக்குப் பயன்படும் முழு அளவு ஃப்ரேம்கள். இடைநிறுத்த மெனு தன் உரை மாறியதா என்று சரிபார்க்கும் அதிர்வெண்ணும் இதுவே. 12 போதுமானது; அதிகமானால் CPU செலவாகும், குறிப்பாக 4K-இல். OBS-இலிருந்து அதிகபட்சம் சுமார் 12 கிடைக்கும்.",
   "Live preview frame rate (per second)": "நேரடி முன்னோட்ட ஃப்ரேம் வீதம் (ஒரு வினாடிக்கு)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "இந்தச் செயலியில் உள்ள படம் மட்டும் (சிறிய ஃப்ரேம்கள், அது தெரியும்போது மட்டுமே உருவாக்கப்படும்). உரை படிக்கப்படும் விதத்தை மாற்றாது.",
   "How often areas are read (ms)": "பகுதிகள் எவ்வளவு அடிக்கடி படிக்கப்படும் (ms)",

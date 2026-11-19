@@ -164,7 +164,7 @@ I18N.add("vi", {
   "Debugging": "Gỡ lỗi",
   "Tools for developing the app.": "Công cụ để phát triển ứng dụng.",
   "Frames captured for reading text (per second)": "Số khung hình chụp để đọc chữ (mỗi giây)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Khung hình kích thước đầy đủ dùng để đọc chữ, nhận màn hình game và lưu khung hình. Đây cũng là tần suất menu tạm dừng kiểm tra chữ có thay đổi không. 8 là đủ; nhiều hơn sẽ tốn CPU, nhất là ở 4K. Từ OBS, tối đa khoảng 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Khung hình kích thước đầy đủ dùng để đọc chữ, nhận màn hình game và lưu khung hình. Đây cũng là tần suất menu tạm dừng kiểm tra chữ có thay đổi không. 12 là đủ; nhiều hơn sẽ tốn CPU, nhất là ở 4K. Từ OBS, tối đa khoảng 12.",
   "Live preview frame rate (per second)": "Tốc độ khung hình xem trước trực tiếp (mỗi giây)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Chỉ áp dụng cho hình trong ứng dụng này (khung hình nhỏ, chỉ tạo khi đang hiển thị). Không ảnh hưởng đến cách đọc chữ.",
   "How often areas are read (ms)": "Tần suất đọc các vùng (ms)",

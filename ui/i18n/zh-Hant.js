@@ -164,7 +164,7 @@ I18N.add("zh-Hant", {
   "Debugging": "偵錯",
   "Tools for developing the app.": "用於開發此應用程式的工具。",
   "Frames captured for reading text (per second)": "用於讀取文字的擷取影格數（每秒）",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "用於讀取文字、辨識遊戲畫面和儲存影格的全尺寸影格，也決定暫停選單檢查文字是否變更的頻率。8 就很足夠；更高會耗用更多 CPU，在 4K 下尤其明顯。從 OBS 擷取時最多約 12。",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "用於讀取文字、辨識遊戲畫面和儲存影格的全尺寸影格，也決定暫停選單檢查文字是否變更的頻率。12 就很足夠；更高會耗用更多 CPU，在 4K 下尤其明顯。從 OBS 擷取時最多約 12。",
   "Live preview frame rate (per second)": "即時預覽影格速率（每秒）",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "僅影響此應用程式內的畫面（小尺寸影格，只在可見時產生），不影響文字讀取。",
   "How often areas are read (ms)": "區域讀取間隔（ms）",

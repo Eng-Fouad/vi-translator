@@ -164,7 +164,7 @@ I18N.add("hi", {
   "Debugging": "डीबगिंग",
   "Tools for developing the app.": "ऐप डेवलप करने के टूल।",
   "Frames captured for reading text (per second)": "टेक्स्ट पढ़ने के लिए कैप्चर किए गए फ़्रेम (प्रति सेकंड)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "टेक्स्ट पढ़ने, गेम पेज और सेव किए गए फ़्रेम के लिए पूरे आकार के फ़्रेम। पॉज़ मेनू भी इतनी ही बार जाँचता है कि उसका टेक्स्ट बदला या नहीं। 8 काफ़ी है; ज़्यादा रखने पर CPU खर्च होता है, खासकर 4K पर। OBS से ज़्यादा से ज़्यादा लगभग 12 मिल पाते हैं।",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "टेक्स्ट पढ़ने, गेम पेज और सेव किए गए फ़्रेम के लिए पूरे आकार के फ़्रेम। पॉज़ मेनू भी इतनी ही बार जाँचता है कि उसका टेक्स्ट बदला या नहीं। 12 काफ़ी है; ज़्यादा रखने पर CPU खर्च होता है, खासकर 4K पर। OBS से ज़्यादा से ज़्यादा लगभग 12 मिल पाते हैं।",
   "Live preview frame rate (per second)": "लाइव प्रीव्यू फ़्रेम रेट (प्रति सेकंड)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "सिर्फ़ इस ऐप में दिखने वाली तस्वीर (छोटे फ़्रेम, सिर्फ़ तब बनते हैं जब यह दिख रही हो)। टेक्स्ट पढ़ने के तरीके पर इसका असर नहीं पड़ता।",
   "How often areas are read (ms)": "क्षेत्र कितनी बार पढ़े जाएँ (ms)",

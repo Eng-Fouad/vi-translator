@@ -164,7 +164,7 @@ I18N.add("bn", {
   "Debugging": "ডিবাগিং",
   "Tools for developing the app.": "অ্যাপ তৈরির টুল।",
   "Frames captured for reading text (per second)": "টেক্সট পড়ার জন্য ক্যাপচার করা ফ্রেম (প্রতি সেকেন্ডে)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "টেক্সট পড়া, গেম পৃষ্ঠা ও সেভ করা ফ্রেমের জন্য পূর্ণ আকারের ফ্রেম। পজ মেনু তার টেক্সট বদলেছে কি না, তাও এত ঘন ঘন যাচাই করে। 8-ই যথেষ্ট; বেশি দিলে CPU খরচ হয়, বিশেষত 4K-তে। OBS থেকে সর্বোচ্চ প্রায় 12 পাওয়া যায়।",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "টেক্সট পড়া, গেম পৃষ্ঠা ও সেভ করা ফ্রেমের জন্য পূর্ণ আকারের ফ্রেম। পজ মেনু তার টেক্সট বদলেছে কি না, তাও এত ঘন ঘন যাচাই করে। 12-ই যথেষ্ট; বেশি দিলে CPU খরচ হয়, বিশেষত 4K-তে। OBS থেকে সর্বোচ্চ প্রায় 12 পাওয়া যায়।",
   "Live preview frame rate (per second)": "লাইভ প্রিভিউ ফ্রেম রেট (প্রতি সেকেন্ডে)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "শুধু এই অ্যাপের ছবি (ছোট ফ্রেম, কেবল দৃশ্যমান থাকার সময় তৈরি হয়)। টেক্সট পড়ার ওপর প্রভাব ফেলে না।",
   "How often areas are read (ms)": "কত ঘন ঘন এলাকা পড়া হবে (ms)",

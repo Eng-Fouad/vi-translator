@@ -164,7 +164,7 @@ I18N.add("ko", {
   "Debugging": "디버깅",
   "Tools for developing the app.": "앱 개발용 도구입니다.",
   "Frames captured for reading text (per second)": "텍스트 읽기용 캡처 프레임(초당)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "텍스트 읽기, 게임 화면, 저장 프레임에 쓰이는 원본 크기 프레임입니다. 일시 정지 메뉴의 텍스트가 바뀌었는지 확인하는 빈도이기도 합니다. 8이면 충분하며, 높이면 특히 4K에서 CPU 사용량이 늘어납니다. OBS에서는 약 12가 최대입니다.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "텍스트 읽기, 게임 화면, 저장 프레임에 쓰이는 원본 크기 프레임입니다. 일시 정지 메뉴의 텍스트가 바뀌었는지 확인하는 빈도이기도 합니다. 12이면 충분하며, 높이면 특히 4K에서 CPU 사용량이 늘어납니다. OBS에서는 약 12가 최대입니다.",
   "Live preview frame rate (per second)": "실시간 미리 보기 프레임 속도(초당)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "이 앱 안의 화면에만 적용됩니다(보이는 동안에만 만드는 작은 프레임). 텍스트 읽기에는 영향을 주지 않습니다.",
   "How often areas are read (ms)": "영역 읽기 간격(ms)",

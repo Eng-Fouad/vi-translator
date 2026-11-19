@@ -164,7 +164,7 @@ I18N.add("uk", {
   "Debugging": "Налагодження",
   "Tools for developing the app.": "Інструменти для розробки застосунку.",
   "Frames captured for reading text (per second)": "Кадрів для читання тексту (за секунду)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Повнорозмірні кадри для читання тексту, екранів гри й збережених кадрів. Також визначає, як часто меню паузи перевіряє, чи змінився його текст. 8 цілком достатньо; більше навантажує процесор, особливо при 4K. З OBS можна отримати щонайбільше близько 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Повнорозмірні кадри для читання тексту, екранів гри й збережених кадрів. Також визначає, як часто меню паузи перевіряє, чи змінився його текст. 12 цілком достатньо; більше навантажує процесор, особливо при 4K. З OBS можна отримати щонайбільше близько 12.",
   "Live preview frame rate (per second)": "Частота кадрів попереднього перегляду (за секунду)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Лише зображення в цьому застосунку (малі кадри, лише поки його видно). Не впливає на читання тексту.",
   "How often areas are read (ms)": "Інтервал читання областей (ms)",

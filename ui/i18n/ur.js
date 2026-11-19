@@ -164,7 +164,7 @@ I18N.add("ur", {
   "Debugging": "ڈیبگنگ",
   "Tools for developing the app.": "ایپ بنانے کے لیے ٹولز۔",
   "Frames captured for reading text (per second)": "متن پڑھنے کے لیے کیپچر کیے گئے فریمز (فی سیکنڈ)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "مکمل سائز کے فریمز جو متن پڑھنے، گیم کے صفحات اور محفوظ فریمز کے لیے استعمال ہوتے ہیں۔ یہی طے کرتا ہے کہ پاز مینو کتنی بار دیکھے کہ اس کا متن بدلا یا نہیں۔ 8 کافی ہے؛ زیادہ سے CPU خرچ ہوتا ہے، خاص طور پر 4K پر۔ OBS سے زیادہ سے زیادہ تقریباً 12 مل سکتے ہیں۔",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "مکمل سائز کے فریمز جو متن پڑھنے، گیم کے صفحات اور محفوظ فریمز کے لیے استعمال ہوتے ہیں۔ یہی طے کرتا ہے کہ پاز مینو کتنی بار دیکھے کہ اس کا متن بدلا یا نہیں۔ 12 کافی ہے؛ زیادہ سے CPU خرچ ہوتا ہے، خاص طور پر 4K پر۔ OBS سے زیادہ سے زیادہ تقریباً 12 مل سکتے ہیں۔",
   "Live preview frame rate (per second)": "لائیو پیش منظر کی فریم ریٹ (فی سیکنڈ)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "صرف اس ایپ میں نظر آنے والی تصویر (چھوٹے فریمز، صرف تب بنتے ہیں جب یہ نظر آ رہی ہو)۔ متن پڑھنے کے طریقے پر اثر نہیں پڑتا۔",
   "How often areas are read (ms)": "حصے کتنی بار پڑھے جائیں (ms)",

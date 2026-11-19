@@ -164,7 +164,7 @@ I18N.add("ms", {
   "Debugging": "Penyahpepijatan",
   "Tools for developing the app.": "Alat untuk membangunkan aplikasi.",
   "Frames captured for reading text (per second)": "Bingkai ditangkap untuk membaca teks (sesaat)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Bingkai saiz penuh yang digunakan untuk membaca teks, halaman permainan dan bingkai yang disimpan. Juga menentukan kekerapan menu jeda menyemak sama ada teksnya berubah. 8 sudah memadai; lebih tinggi menggunakan CPU, terutamanya pada 4K. Daripada OBS, kira-kira 12 ialah maksimum.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Bingkai saiz penuh yang digunakan untuk membaca teks, halaman permainan dan bingkai yang disimpan. Juga menentukan kekerapan menu jeda menyemak sama ada teksnya berubah. 12 sudah memadai; lebih tinggi menggunakan CPU, terutamanya pada 4K. Daripada OBS, kira-kira 12 ialah maksimum.",
   "Live preview frame rate (per second)": "Kadar bingkai pratonton langsung (sesaat)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Hanya gambar dalam aplikasi ini (bingkai kecil, dibuat hanya semasa ia kelihatan). Tidak mengubah cara teks dibaca.",
   "How often areas are read (ms)": "Kekerapan kawasan dibaca (ms)",

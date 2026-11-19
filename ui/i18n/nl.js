@@ -164,7 +164,7 @@ I18N.add("nl", {
   "Debugging": "Foutopsporing",
   "Tools for developing the app.": "Hulpmiddelen voor het ontwikkelen van de app.",
   "Frames captured for reading text (per second)": "Vastgelegde frames voor het lezen van tekst (per seconde)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Frames op volledige grootte voor het lezen van tekst, gamepagina's en opgeslagen frames. Bepaalt ook hoe vaak het pauzemenu controleert of de tekst is veranderd. 8 is ruim voldoende; meer kost CPU, vooral bij 4K. Vanuit OBS is ongeveer 12 het maximum.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Frames op volledige grootte voor het lezen van tekst, gamepagina's en opgeslagen frames. Bepaalt ook hoe vaak het pauzemenu controleert of de tekst is veranderd. 12 is ruim voldoende; meer kost CPU, vooral bij 4K. Vanuit OBS is ongeveer 12 het maximum.",
   "Live preview frame rate (per second)": "Framerate live voorbeeld (per seconde)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Alleen het beeld in deze app (kleine frames, alleen gemaakt als het zichtbaar is). Verandert niets aan het lezen van tekst.",
   "How often areas are read (ms)": "Hoe vaak gebieden worden gelezen (ms)",

@@ -164,7 +164,7 @@ I18N.add("tr", {
   "Debugging": "Hata ayıklama",
   "Tools for developing the app.": "Uygulamayı geliştirmek için araçlar.",
   "Frames captured for reading text (per second)": "Metin okumak için yakalanan kareler (saniyede)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Metin okuma, oyun ekranları ve kaydedilen kareler için kullanılan tam boyutlu kareler. Duraklatma menüsünün metninin değişip değişmediğini ne sıklıkta kontrol ettiğini de belirler. 8 fazlasıyla yeterli; daha fazlası özellikle 4K'da CPU harcar. OBS'ten en fazla yaklaşık 12 alınabilir.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Metin okuma, oyun ekranları ve kaydedilen kareler için kullanılan tam boyutlu kareler. Duraklatma menüsünün metninin değişip değişmediğini ne sıklıkta kontrol ettiğini de belirler. 12 fazlasıyla yeterli; daha fazlası özellikle 4K'da CPU harcar. OBS'ten en fazla yaklaşık 12 alınabilir.",
   "Live preview frame rate (per second)": "Canlı önizleme kare hızı (saniyede)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Yalnızca bu uygulamadaki görüntü (küçük kareler, yalnızca görünürken oluşturulur). Metnin okunma şeklini değiştirmez.",
   "How often areas are read (ms)": "Alanların okunma sıklığı (ms)",

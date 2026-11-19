@@ -164,7 +164,7 @@ I18N.add("fil", {
   "Debugging": "Debugging",
   "Tools for developing the app.": "Mga tool para sa pag-develop ng app.",
   "Frames captured for reading text (per second)": "Mga frame na kinukuha para sa pagbasa ng teksto (bawat segundo)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Mga full-size na frame na ginagamit sa pagbasa ng teksto, mga pahina ng laro at mga na-save na frame. Ito rin kung gaano kadalas tinitingnan ng pause menu kung nagbago ang teksto nito. Sapat na ang 8; mas mataas ay mas mabigat sa CPU, lalo na sa 4K. Mula sa OBS, mga 12 ang pinakamarami nitong kaya.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Mga full-size na frame na ginagamit sa pagbasa ng teksto, mga pahina ng laro at mga na-save na frame. Ito rin kung gaano kadalas tinitingnan ng pause menu kung nagbago ang teksto nito. Sapat na ang 12; mas mataas ay mas mabigat sa CPU, lalo na sa 4K. Mula sa OBS, mga 12 ang pinakamarami nitong kaya.",
   "Live preview frame rate (per second)": "Frame rate ng live preview (bawat segundo)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Ang larawan lang sa app na ito (maliliit na frame, ginagawa lang habang nakikita ito). Hindi nito binabago kung paano binabasa ang teksto.",
   "How often areas are read (ms)": "Gaano kadalas binabasa ang mga bahagi (ms)",

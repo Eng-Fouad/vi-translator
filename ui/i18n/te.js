@@ -164,7 +164,7 @@ I18N.add("te", {
   "Debugging": "డీబగ్గింగ్",
   "Tools for developing the app.": "యాప్ అభివృద్ధి కోసం సాధనాలు.",
   "Frames captured for reading text (per second)": "టెక్స్ట్ చదవడానికి క్యాప్చర్ చేసే ఫ్రేమ్‌లు (సెకనుకు)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "టెక్స్ట్ చదవడానికి, గేమ్ పేజీలకు, సేవ్ చేసిన ఫ్రేమ్‌లకు ఉపయోగించే పూర్తి పరిమాణ ఫ్రేమ్‌లు. పాజ్ మెనూ తన టెక్స్ట్ మారిందో లేదో ఎంత తరచుగా తనిఖీ చేస్తుందో కూడా ఇదే. 8 చాలు; ఎక్కువైతే CPU ఖర్చవుతుంది, ముఖ్యంగా 4K వద్ద. OBS నుంచి గరిష్ఠంగా సుమారు 12 వస్తాయి.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "టెక్స్ట్ చదవడానికి, గేమ్ పేజీలకు, సేవ్ చేసిన ఫ్రేమ్‌లకు ఉపయోగించే పూర్తి పరిమాణ ఫ్రేమ్‌లు. పాజ్ మెనూ తన టెక్స్ట్ మారిందో లేదో ఎంత తరచుగా తనిఖీ చేస్తుందో కూడా ఇదే. 12 చాలు; ఎక్కువైతే CPU ఖర్చవుతుంది, ముఖ్యంగా 4K వద్ద. OBS నుంచి గరిష్ఠంగా సుమారు 12 వస్తాయి.",
   "Live preview frame rate (per second)": "లైవ్ ప్రివ్యూ ఫ్రేమ్ రేట్ (సెకనుకు)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "ఈ యాప్‌లోని చిత్రం మాత్రమే (చిన్న ఫ్రేమ్‌లు, అది కనిపిస్తున్నప్పుడు మాత్రమే తయారవుతాయి). టెక్స్ట్ చదివే విధానాన్ని మార్చదు.",
   "How often areas are read (ms)": "ప్రాంతాలను ఎంత తరచుగా చదవాలి (ms)",

@@ -164,7 +164,7 @@ I18N.add("ar", {
   "Debugging": "التصحيح",
   "Tools for developing the app.": "أدوات لتطوير التطبيق.",
   "Frames captured for reading text (per second)": "الإطارات الملتقطة لقراءة النص (في الثانية)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "إطارات بالحجم الكامل لقراءة النص وصفحات اللعبة والإطارات المحفوظة، وهي أيضاً عدد مرات فحص قائمة الإيقاف لتغيّر نصها. 8 تكفي؛ الأكثر يستهلك المعالج خاصة عند 4K. من OBS أقصى ما يمكن نحو 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "إطارات بالحجم الكامل لقراءة النص وصفحات اللعبة والإطارات المحفوظة، وهي أيضاً عدد مرات فحص قائمة الإيقاف لتغيّر نصها. 12 تكفي؛ الأكثر يستهلك المعالج خاصة عند 4K. من OBS أقصى ما يمكن نحو 12.",
   "Live preview frame rate (per second)": "معدل إطارات المعاينة المباشرة (في الثانية)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "الصورة في هذا التطبيق فقط (إطارات صغيرة تُنشأ أثناء ظهورها فقط). لا تؤثر على قراءة النص.",
   "How often areas are read (ms)": "معدل قراءة المناطق (ملي ثانية)",

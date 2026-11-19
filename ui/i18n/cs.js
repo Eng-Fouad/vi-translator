@@ -164,7 +164,7 @@ I18N.add("cs", {
   "Debugging": "Ladění",
   "Tools for developing the app.": "Nástroje pro vývoj aplikace.",
   "Frames captured for reading text (per second)": "Snímky pro čtení textu (za sekundu)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Snímky v plné velikosti pro čtení textu, obrazovky hry a ukládané snímky. Určuje také, jak často menu pauzy kontroluje, zda se změnil jeho text. 8 bohatě stačí; víc zatěžuje procesor, hlavně ve 4K. Z OBS lze získat nejvýše asi 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Snímky v plné velikosti pro čtení textu, obrazovky hry a ukládané snímky. Určuje také, jak často menu pauzy kontroluje, zda se změnil jeho text. 12 bohatě stačí; víc zatěžuje procesor, hlavně ve 4K. Z OBS lze získat nejvýše asi 12.",
   "Live preview frame rate (per second)": "Snímková frekvence živého náhledu (za sekundu)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Jen obraz v této aplikaci (malé snímky, vytvářené jen tehdy, když je vidět). Nemění způsob čtení textu.",
   "How often areas are read (ms)": "Interval čtení oblastí (ms)",

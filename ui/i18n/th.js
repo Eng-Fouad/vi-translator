@@ -164,7 +164,7 @@ I18N.add("th", {
   "Debugging": "การดีบัก",
   "Tools for developing the app.": "เครื่องมือสำหรับพัฒนาแอป",
   "Frames captured for reading text (per second)": "จำนวนเฟรมที่จับเพื่ออ่านข้อความ (ต่อวินาที)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "เฟรมขนาดเต็มที่ใช้อ่านข้อความ ตรวจหน้าของเกม และบันทึกเฟรม ยังเป็นความถี่ที่เมนูหยุดชั่วคราวตรวจว่าข้อความเปลี่ยนหรือไม่ด้วย 8 ก็เพียงพอ มากกว่านั้นจะใช้ CPU มากขึ้น โดยเฉพาะที่ 4K จาก OBS ได้สูงสุดประมาณ 12",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "เฟรมขนาดเต็มที่ใช้อ่านข้อความ ตรวจหน้าของเกม และบันทึกเฟรม ยังเป็นความถี่ที่เมนูหยุดชั่วคราวตรวจว่าข้อความเปลี่ยนหรือไม่ด้วย 12 ก็เพียงพอ มากกว่านั้นจะใช้ CPU มากขึ้น โดยเฉพาะที่ 4K จาก OBS ได้สูงสุดประมาณ 12",
   "Live preview frame rate (per second)": "อัตราเฟรมตัวอย่างสด (ต่อวินาที)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "มีผลเฉพาะภาพในแอปนี้ (เฟรมขนาดเล็ก สร้างเฉพาะตอนที่มองเห็น) ไม่เปลี่ยนวิธีอ่านข้อความ",
   "How often areas are read (ms)": "ความถี่ในการอ่านพื้นที่ (ms)",

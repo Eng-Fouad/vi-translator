@@ -164,7 +164,7 @@ I18N.add("el", {
   "Debugging": "Αποσφαλμάτωση",
   "Tools for developing the app.": "Εργαλεία για την ανάπτυξη της εφαρμογής.",
   "Frames captured for reading text (per second)": "Καρέ καταγραφής για ανάγνωση κειμένου (ανά δευτερόλεπτο)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Καρέ πλήρους μεγέθους για ανάγνωση κειμένου, οθόνες παιχνιδιού και αποθηκευμένα καρέ. Ορίζει επίσης πόσο συχνά το μενού παύσης ελέγχει αν άλλαξε το κείμενό του. Τα 8 αρκούν· περισσότερα επιβαρύνουν τη CPU, ειδικά σε 4K. Από το OBS, το μέγιστο είναι περίπου 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Καρέ πλήρους μεγέθους για ανάγνωση κειμένου, οθόνες παιχνιδιού και αποθηκευμένα καρέ. Ορίζει επίσης πόσο συχνά το μενού παύσης ελέγχει αν άλλαξε το κείμενό του. Τα 12 αρκούν· περισσότερα επιβαρύνουν τη CPU, ειδικά σε 4K. Από το OBS, το μέγιστο είναι περίπου 12.",
   "Live preview frame rate (per second)": "Ρυθμός καρέ ζωντανής προεπισκόπησης (ανά δευτερόλεπτο)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Αφορά μόνο την εικόνα σε αυτή την εφαρμογή (μικρά καρέ, μόνο όσο είναι ορατή). Δεν επηρεάζει την ανάγνωση του κειμένου.",
   "How often areas are read (ms)": "Συχνότητα ανάγνωσης περιοχών (ms)",

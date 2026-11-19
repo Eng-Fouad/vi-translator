@@ -164,7 +164,7 @@ I18N.add("zh-Hans", {
   "Debugging": "调试",
   "Tools for developing the app.": "用于开发本应用的工具。",
   "Frames captured for reading text (per second)": "用于读取文字的捕获帧数（每秒）",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "用于读取文字、识别游戏界面和保存帧的全尺寸帧，也决定暂停菜单检查文字是否变化的频率。8 已足够；更高会占用更多 CPU，在 4K 下尤其明显。从 OBS 获取时最多约 12。",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "用于读取文字、识别游戏界面和保存帧的全尺寸帧，也决定暂停菜单检查文字是否变化的频率。12 已足够；更高会占用更多 CPU，在 4K 下尤其明显。从 OBS 获取时最多约 12。",
   "Live preview frame rate (per second)": "实时预览帧率（每秒）",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "仅影响本应用内的画面（小尺寸帧，仅在可见时生成），不影响文字读取。",
   "How often areas are read (ms)": "区域读取间隔（ms）",

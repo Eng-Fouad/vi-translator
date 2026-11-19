@@ -898,7 +898,7 @@ function renderTiming() {
   const form = $("timing-form");
   form.innerHTML = "";
   const fields = [
-    ["capture_fps", "Frames captured for reading text (per second)", 1, 30, 1, "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver."],
+    ["capture_fps", "Frames captured for reading text (per second)", 1, 30, 1, "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver."],
     ["preview_fps", "Live preview frame rate (per second)", 5, 60, 5, "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read."],
     ["interval_ms", "How often areas are read (ms)", 100, 1000, 50, "Lower = faster reaction, more CPU."],
     ["stable_ms", "Wait for text to settle before translating (ms)", 0, 1500, 50, "Avoids translating half-faded lines."],

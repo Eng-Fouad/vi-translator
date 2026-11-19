@@ -164,7 +164,7 @@ I18N.add("pl", {
   "Debugging": "Debugowanie",
   "Tools for developing the app.": "Narzędzia do tworzenia aplikacji.",
   "Frames captured for reading text (per second)": "Klatki do odczytu tekstu (na sekundę)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Pełnowymiarowe klatki do odczytu tekstu, ekranów gry i zapisywanych klatek. Określa też, jak często menu pauzy sprawdza, czy zmienił się jego tekst. 8 w zupełności wystarcza; więcej obciąża procesor, zwłaszcza w 4K. Z OBS da się uzyskać najwyżej około 12.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "Pełnowymiarowe klatki do odczytu tekstu, ekranów gry i zapisywanych klatek. Określa też, jak często menu pauzy sprawdza, czy zmienił się jego tekst. 12 w zupełności wystarcza; więcej obciąża procesor, zwłaszcza w 4K. Z OBS da się uzyskać najwyżej około 12.",
   "Live preview frame rate (per second)": "Liczba klatek podglądu na żywo (na sekundę)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "Tylko obraz w tej aplikacji (małe klatki, tworzone tylko wtedy, gdy jest widoczny). Nie wpływa na odczyt tekstu.",
   "How often areas are read (ms)": "Interwał odczytu obszarów (ms)",

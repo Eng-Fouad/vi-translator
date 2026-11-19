@@ -164,7 +164,7 @@ I18N.add("fa", {
   "Debugging": "اشکال‌زدایی",
   "Tools for developing the app.": "ابزارهایی برای توسعه برنامه.",
   "Frames captured for reading text (per second)": "فریم‌های ضبط‌شده برای خواندن متن (در ثانیه)",
-  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 8 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "فریم‌های تمام‌اندازه برای خواندن متن، صفحه‌های بازی و فریم‌های ذخیره‌شده. همچنین تعیین می‌کند منوی توقف هر چند وقت یک بار بررسی کند که متنش تغییر کرده یا نه. 8 کافی است؛ بیشتر از آن CPU مصرف می‌کند، به‌ویژه در 4K. از OBS حداکثر حدود 12 فریم دریافت می‌شود.",
+  "Full-size frames used for reading text, game pages and saved frames. Also how often the pause menu checks whether its text changed. 12 is plenty; more costs CPU, especially at 4K. From OBS, about 12 is the most it can deliver.": "فریم‌های تمام‌اندازه برای خواندن متن، صفحه‌های بازی و فریم‌های ذخیره‌شده. همچنین تعیین می‌کند منوی توقف هر چند وقت یک بار بررسی کند که متنش تغییر کرده یا نه. 12 کافی است؛ بیشتر از آن CPU مصرف می‌کند، به‌ویژه در 4K. از OBS حداکثر حدود 12 فریم دریافت می‌شود.",
   "Live preview frame rate (per second)": "نرخ فریم پیش‌نمایش زنده (در ثانیه)",
   "Only the picture in this app (small frames, made only while it's visible). Doesn't change how text is read.": "فقط تصویر داخل این برنامه (فریم‌های کوچک که فقط وقتی دیده می‌شود ساخته می‌شوند). روی نحوه خواندن متن اثری ندارد.",
   "How often areas are read (ms)": "فاصله خواندن ناحیه‌ها (ms)",
