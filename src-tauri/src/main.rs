@@ -469,6 +469,8 @@ fn save_config(app: AppHandle, webview: tauri::Webview, state: tauri::State<AppS
     config.games_version = now.games_version;
     config.layout_version = now.layout_version;
     config.layout_versions = now.layout_versions.clone();
+    // (the defaults already moved stay moved: a window that left the field out can't undo it)
+    config.defaults_version = config.defaults_version.max(now.defaults_version);
     // sent before the window heard of a game switch the app made by itself: the switch stays
     if config.profile_rev != now.profile_rev {
         config.profile = now.profile.clone();
@@ -2403,9 +2405,13 @@ fn main() {
 
     let mut loaded = Config::load(&config_path());
     loaded.debug_save_frames = false; // recording always starts off
+    let mut save_now = std::mem::take(&mut loaded.defaults_moved); // (a setting moved to a new default)
     if loaded.install_id.is_empty() {
         // a random id for this install (no account): lets the server count distinct players
         loaded.install_id = uuid::Uuid::new_v4().to_string();
+        save_now = true;
+    }
+    if save_now {
         let _ = loaded.save(&config_path());
     }
     let cfg = Arc::new(Mutex::new(loaded));

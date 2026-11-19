@@ -314,6 +314,13 @@ pub struct Config {
     /// The settings file was there but couldn't be read (nor kept aside) at start: it isn't saved over.
     #[serde(skip)]
     pub unreadable: bool,
+    /// Which changes of the app's defaults this settings file has had (see `DEFAULTS_VERSION`).
+    /// A file from before it reads 0.
+    #[serde(default)]
+    pub defaults_version: u32,
+    /// Set by `load` when it moved a setting to a new default: the caller saves the file.
+    #[serde(skip)]
+    pub defaults_moved: bool,
     /// The player's own profiles (copies they can change); the built-in ones are in `builtins`.
     pub profiles: Vec<Profile>,
     /// The built-in profiles as they are now (the app's defaults, tuned by layout updates from the
@@ -574,6 +581,8 @@ impl Default for Config {
             profile: "gta6".into(),
             profile_rev: 0,
             unreadable: false,
+            defaults_version: DEFAULTS_VERSION,
+            defaults_moved: false,
             profiles: Vec::new(),
             builtins: BUILTINS.iter().filter_map(|id| builtin_profile(id)).collect(),
             // 0 here too: a settings file from before profiles has no such field and takes this
@@ -586,7 +595,24 @@ impl Default for Config {
     }
 }
 
+/// Changes of the app's defaults that settings saved before them take too, where the player had kept
+/// the old default: 1 = text is read from 12 frames a second (was 8).
+pub const DEFAULTS_VERSION: u32 = 1;
+
 impl Config {
+    /// Moves settings still on an old default to the new one, once (`defaults_version`); a value the
+    /// player chose stays. True when something was moved.
+    pub fn move_to_new_defaults(&mut self) -> bool {
+        let mut moved = false;
+        if self.defaults_version < 1 && self.capture_fps == 8 {
+            self.capture_fps = 12;
+            moved = true;
+        }
+        let bumped = self.defaults_version < DEFAULTS_VERSION;
+        self.defaults_version = self.defaults_version.max(DEFAULTS_VERSION);
+        moved || bumped
+    }
+
     pub fn load(path: &PathBuf) -> Self {
         // A settings file that's there but can't be used is never written over by the defaults: kept
         // aside (config.broken-<time>.json), or — when even that fails (another program holds it) —
@@ -617,6 +643,9 @@ impl Config {
         if c.timing_custom.is_none() {
             let d = Self::default();
             c.timing_custom = Some(c.interval_ms != d.interval_ms || c.stable_ms != d.stable_ms || c.clear_after_ms != d.clear_after_ms);
+        }
+        if !c.unreadable {
+            c.defaults_moved = c.move_to_new_defaults();
         }
         c.normalize();
         c
@@ -801,6 +830,25 @@ mod profile_tests {
         assert_eq!((p.areas[0].x, p.areas[0].font_family.as_str(), p.areas[0].placement.as_str()), (1.0, "Tajawal", "above"));
         assert_eq!(p.pages.more.keys().collect::<Vec<_>>(), vec!["camp"]);
         assert_eq!((p.timing.interval_ms, p.timing.clear_after_ms), (100, 3000));
+    }
+
+    #[test]
+    fn old_defaults_move_once() {
+        // a file from before: the old default moves, once
+        let mut c: Config = serde_json::from_str(r#"{"capture_fps": 8}"#).unwrap();
+        assert_eq!(c.defaults_version, 0);
+        assert!(c.move_to_new_defaults());
+        assert_eq!((c.capture_fps, c.defaults_version), (12, DEFAULTS_VERSION));
+        // set back to 8 by the player afterwards: stays
+        c.capture_fps = 8;
+        assert!(!c.move_to_new_defaults());
+        assert_eq!(c.capture_fps, 8);
+        // a value the player had chosen stays
+        let mut c: Config = serde_json::from_str(r#"{"capture_fps": 20}"#).unwrap();
+        c.move_to_new_defaults();
+        assert_eq!(c.capture_fps, 20);
+        // a new install already has the new defaults
+        assert_eq!((Config::default().capture_fps, Config::default().defaults_version), (12, DEFAULTS_VERSION));
     }
 
     #[test]
