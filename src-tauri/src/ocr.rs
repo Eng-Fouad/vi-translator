@@ -144,10 +144,13 @@ impl Ocr {
         let (t1, t2) = (txt(&first), txt(&second));
         let took_second = !second.is_empty() && score(&second) >= score(&first) + 3;
         let first_kept = first.clone();
+        let second_kept = second.clone();
         let best = if took_second { second } else { first };
         // Outlined letters over a bright floor (GTA VI's instructions under the subtitles): read once
         // more with only the letters inside their outline.
-        if unsure || quality(&best).1 > 0 || words_out_of_order(&best) {
+        // (and when neither pass read anything: white letters in a thin outline over sunlit sand or
+        // concrete are as bright as the ground, so the plain passes see no text at all)
+        if unsure || best.is_empty() || quality(&best).1 > 0 || words_out_of_order(&best) {
             let third = drop_junk(self.recognize_with(crop, Prep::Outlined)?);
             if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
                 eprintln!("[ocr] pass3 {:?} (score {})", txt(&third), score(&third));
@@ -160,6 +163,13 @@ impl Ocr {
             // (a clear edge, like the second pass: "lget's" beat "Let's" by one point)
             if !third.is_empty() && score(&third) >= score(&best) + 2 && !words_out_of_order(&third) && third_ok {
                 return Ok((third, false, first_kept));
+            }
+            // Half the line over sunlit ground, half over shade: each pass reads its own half
+            // ("Good that good" | "You don't fix it too good"). Clean words the others read where
+            // the reading taken has a gap go in.
+            let filled = fill_gaps(&best, &[&first_kept, &third, if took_second { &[][..] } else { &second_kept }]);
+            if filled.len() > best.len() {
+                return Ok((filled, false, first_kept));
             }
         }
         Ok((best, !unsure, first_kept))
@@ -1313,7 +1323,7 @@ fn outlined_letters(c: &Crop) -> Vec<bool> {
     let (w, h) = (c.w as usize, c.h as usize);
     let lum: Vec<i32> = (0..w * h).map(|i| { let (r, g, b) = c.px((i % w) as u32, (i / w) as u32); r.max(g).max(b) }).collect();
     // (the outline is dark grey, lighter where video compression smeared it)
-    let dark = |i: usize| lum[i] < 120;
+    let dark = |i: usize| lum[i] < 130;
     // a stroke is a small part of the text's height; the area holds about one line
     let reach = (h / 9).clamp(3, 12);
     let mut m = vec![false; w * h];
@@ -1332,6 +1342,9 @@ fn outlined_letters(c: &Crop) -> Vec<bool> {
             m[i] = (side(-1, 0) && side(1, 0)) || (side(0, -1) && side(0, 1));
         }
     }
+    // specks that pass too (gravel, glints, the smeared outline between two letters) make the OCR
+    // lose whole words, so only pieces the size of a letter part stay
+    drop_specks(&mut m, w, h, (h / 16).max(5), 12);
     // one pixel thicker: the strokes come out thin, and the OCR reads solid letters best
     let mut thick = m.clone();
     for y in 1..h.saturating_sub(1) {
@@ -1343,6 +1356,81 @@ fn outlined_letters(c: &Crop) -> Vec<bool> {
         }
     }
     thick
+}
+
+/// `best` with the clean words (plain letters, two or more) of other readings put in where `best` has
+/// nothing: on one of its lines (overlapping it up and down) and not touching any word already there.
+/// Unchanged when `best` is empty: a word from another pass alone is too little to go on.
+fn fill_gaps(best: &[Word], others: &[&[Word]]) -> Vec<Word> {
+    let mut out: Vec<Word> = best.to_vec();
+    if best.is_empty() {
+        return out;
+    }
+    let overlaps = |a: (u32, u32), b: (u32, u32)| a.0 < b.1 && b.0 < a.1;
+    for other in others {
+        for w in other.iter() {
+            let (g, b) = quality(std::slice::from_ref(w));
+            if b > 0 || g < 2 {
+                continue;
+            }
+            let (x0, x1) = (w.rect.0, w.rect.0 + w.rect.2);
+            let (y0, y1) = (w.rect.1, w.rect.1 + w.rect.3);
+            // the line it belongs to: a word taken whose height overlaps most of this one's
+            let Some(host) = out.iter().find(|o| {
+                let (oy0, oy1) = (o.rect.1, o.rect.1 + o.rect.3);
+                oy0.max(y0) + (y1 - y0) / 2 <= oy1.min(y1)
+            }) else {
+                continue;
+            };
+            let line = host.line;
+            if out.iter().any(|o| overlaps((o.rect.0, o.rect.0 + o.rect.2), (x0, x1))) {
+                continue;
+            }
+            out.push(Word { text: w.text.clone(), rect: w.rect, line });
+        }
+    }
+    // in reading order: by line, then left to right
+    out.sort_by_key(|w| (w.line, w.rect.0));
+    out
+}
+
+/// Clear the pieces of a mask (8-connected) smaller than `min_px` pixels or shorter than `min_h` rows.
+fn drop_specks(m: &mut [bool], w: usize, h: usize, min_h: usize, min_px: usize) {
+    let mut seen = vec![false; w * h];
+    let mut stack = Vec::new();
+    let mut piece = Vec::new();
+    for start in 0..w * h {
+        if !m[start] || seen[start] {
+            continue;
+        }
+        seen[start] = true;
+        stack.push(start);
+        piece.clear();
+        let (mut y0, mut y1) = (start / w, start / w);
+        while let Some(i) = stack.pop() {
+            piece.push(i);
+            let (x, y) = (i % w, i / w);
+            (y0, y1) = (y0.min(y), y1.max(y));
+            for dy in -1isize..=1 {
+                for dx in -1isize..=1 {
+                    let (nx, ny) = (x as isize + dx, y as isize + dy);
+                    if nx < 0 || ny < 0 || nx as usize >= w || ny as usize >= h {
+                        continue;
+                    }
+                    let j = ny as usize * w + nx as usize;
+                    if m[j] && !seen[j] {
+                        seen[j] = true;
+                        stack.push(j);
+                    }
+                }
+            }
+        }
+        if piece.len() < min_px || y1 - y0 + 1 < min_h {
+            for &i in &piece {
+                m[i] = false;
+            }
+        }
+    }
 }
 
 /// How pixels are turned into the black-on-white picture the OCR reads.
