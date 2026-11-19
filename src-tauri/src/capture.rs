@@ -321,6 +321,15 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
     }
 }
 
+/// The program behind a window source the app knows by name, for a window whose title the system
+/// translated: (Windows executable, macOS app name).
+pub fn program_of(title: &str) -> Option<&'static str> {
+    match title {
+        "PS Remote Play" => Some(if cfg!(windows) { "RemotePlay.exe" } else { "PS Remote Play" }),
+        _ => None,
+    }
+}
+
 #[derive(Serialize)]
 pub struct WindowInfo {
     pub title: String,

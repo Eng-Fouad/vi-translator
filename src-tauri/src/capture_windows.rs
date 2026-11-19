@@ -34,7 +34,7 @@ impl WindowCapture {
 
 /// Start capturing the window titled `title`; returns the capture and the window's handle.
 pub fn start_window(title: &str, shared: Arc<Shared>) -> anyhow::Result<(WindowCapture, isize)> {
-    let win = Window::from_name(title).map_err(|_| anyhow::anyhow!("Window \"{title}\" not found. Open it, or pick another window."))?;
+    let win = find(title).ok_or_else(|| anyhow::anyhow!("Window \"{title}\" not found. Open it, or pick another window."))?;
     let hwnd = win.as_raw_hwnd() as isize;
     // Hide the yellow capture border where Windows allows it; fall back if refused.
     let mut last_err = String::new();
@@ -103,7 +103,7 @@ impl GraphicsCaptureApiHandler for Handler {
 
 /// Capture a single frame of a window (used by `--grab` for building and testing profiles).
 pub fn grab_once(title: &str) -> anyhow::Result<Arc<FrameData>> {
-    let win = Window::from_name(title).map_err(|_| anyhow::anyhow!("window \"{title}\" not found"))?;
+    let win = find(title).ok_or_else(|| anyhow::anyhow!("window \"{title}\" not found"))?;
     let shared = Arc::new(Shared::default());
     let settings = Settings::new(
         win,
@@ -235,5 +235,20 @@ pub fn grab_screen_region(x: i32, y: i32, w: i32, h: i32) -> Option<Vec<u8>> {
 
 /// The handle of the window titled `title`.
 pub fn find_window(title: &str) -> Option<isize> {
-    Window::from_name(title).ok().map(|w| w.as_raw_hwnd() as isize)
+    find(title).map(|w| w.as_raw_hwnd() as isize)
+}
+
+/// The window titled `title`; else one whose title contains it; else the program it names. A source
+/// saved as "PS Remote Play" is its window under any title (Windows set to another language
+/// translates it: "اللعب عن بُعد").
+fn find(title: &str) -> Option<Window> {
+    if let Ok(w) = Window::from_name(title) {
+        return Some(w);
+    }
+    let all: Vec<Window> = Window::enumerate().unwrap_or_default().into_iter().filter(|w| w.is_valid()).collect();
+    if let Some(w) = all.iter().find(|w| w.title().is_ok_and(|t| !t.trim().is_empty() && t.contains(title))) {
+        return Some(*w);
+    }
+    let program = super::program_of(title)?;
+    all.into_iter().find(|w| w.process_name().is_ok_and(|p| p.eq_ignore_ascii_case(program)) && w.title().is_ok_and(|t| !t.trim().is_empty()))
 }
