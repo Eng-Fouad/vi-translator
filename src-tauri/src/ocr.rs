@@ -367,7 +367,8 @@ fn agreed(words: &[Word], other: &str) -> usize {
 /// the side of the area (a garage's or shop's panel on the right: "STRENGTH", "RATING") is dropped, so it
 /// doesn't push the subtitle off-centre and lose it. Words are grouped in columns (a gap wider than three
 /// text heights splits them); while the columns together are off-centre, the outermost one on that side
-/// goes. Nothing is left when even one column is off-centre (a menu's "Browse" at the bottom right).
+/// goes; a column whose middle is far to the side goes first. Nothing is left when even one column is
+/// off-centre (a menu's "Browse" at the bottom right).
 /// `crop_x` is where the crop starts in the frame and `frame_w` the frame's width, in pixels.
 pub fn centered_words(words: &[Word], crop_x: f64, frame_w: f64) -> Vec<Word> {
     if words.is_empty() || frame_w <= 0.0 {
@@ -388,6 +389,15 @@ pub fn centered_words(words: &[Word], crop_x: f64, frame_w: f64) -> Vec<Word> {
                 c.2.push(i);
             }
             _ => cols.push((x0, x1, vec![i])),
+        }
+    }
+    // side panels first: with more than one column, a column whose own middle is far from the
+    // picture's (a quarter of its width) isn't part of a subtitle, even when a panel on each side
+    // balances out in the middle (a garage: the upgrade's name on the left, the car's stats on the right)
+    if cols.len() > 1 {
+        cols.retain(|c| ((crop_x + (c.0 + c.1) / 2.0) / frame_w - 0.5).abs() <= 0.25);
+        if cols.is_empty() {
+            return Vec::new();
         }
     }
     loop {
@@ -1566,6 +1576,13 @@ mod centered_tests {
         // stats panel on the right; the OCR missed the middle words of the line
         let ws = vec![w("STRENGTH", 1291, 10, 110), w("Joey:", 490, 95, 58), w("to", 900, 95, 20), w("the", 925, 95, 36), w("action", 966, 95, 80), w("RATING", 1291, 70, 76)];
         assert_eq!(texts(&centered_words(&ws, 192.0, 1920.0)), "Joey: to the action");
+    }
+
+    #[test]
+    fn panels_on_both_sides_are_not_a_subtitle() {
+        // the upgrade's name on the left and the car's stats on the right: together they're centred
+        let ws = vec![w("ADE", 3, 41, 45), w("STAGE", 57, 41, 74), w("2", 140, 41, 14), w("STRENGTH", 1292, 28, 90), w("RATING", 1292, 93, 64), w("350", 1481, 93, 33)];
+        assert!(centered_words(&ws, 192.0, 1920.0).is_empty());
     }
 
     #[test]
