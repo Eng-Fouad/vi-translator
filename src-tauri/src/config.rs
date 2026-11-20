@@ -480,11 +480,12 @@ pub fn builtin_profile(id: &str) -> Option<Profile> {
             Area {
                 id: "help".into(),
                 name: "Instructions (top left)".into(),
-                // GTA VI's instructions box sits at ~0.27–0.31 of the height (seen on gameplay frames)
+                // GTA VI's instructions box starts at ~0.27 of the height and grows downward: four lines
+                // reach ~0.41 (seen on gameplay frames), so the area goes down to 0.48
                 x: 0.01,
                 y: 0.18,
                 w: 0.30,
-                h: 0.20,
+                h: HELP_H,
                 // right under GTA's own box: same left edge, at most its width, growing downward
                 placement: "under_text".into(),
                 text_pos: "top-left".into(),
@@ -636,8 +637,13 @@ impl Default for Config {
 /// Changes of the app's defaults that settings saved before them take too, where the player had kept
 /// the old default: 1 = text is read from 12 frames a second (was 8); 2 = GTA VI's top-left
 /// instructions are read only inside the game's own box (settings saved before `needs_box` existed had
-/// it off: menu text and credits there were translated).
-pub const DEFAULTS_VERSION: u32 = 2;
+/// it off: menu text and credits there were translated); 3 = that area reaches lower (h 0.20 → 0.30):
+/// a four-line box's last line was cut off, so the translation stopped short and covered it.
+pub const DEFAULTS_VERSION: u32 = 3;
+
+/// The height of GTA VI's top-left instructions area (and the one before `DEFAULTS_VERSION` 3).
+const HELP_H: f64 = 0.30;
+const OLD_HELP_H: f64 = 0.20;
 
 impl Config {
     /// Moves settings still on an old default to the new one, once (`defaults_version`); a value the
@@ -652,6 +658,23 @@ impl Config {
             for p in self.builtins.iter_mut().filter(|p| p.id == "gta6") {
                 for a in p.areas.iter_mut().filter(|a| a.id == "help" && !a.needs_box) {
                     a.needs_box = true;
+                    moved = true;
+                }
+            }
+        }
+        if self.defaults_version < 3 {
+            // (the areas in use: only while they are the built-in profile's; a player's own copy is theirs)
+            let gta6 = self.profile == "gta6";
+            let old = |a: &Area| a.id == "help" && (a.h - OLD_HELP_H).abs() < 1e-9;
+            for p in self.builtins.iter_mut().filter(|p| p.id == "gta6") {
+                for a in p.areas.iter_mut().filter(|a| old(a)) {
+                    a.h = HELP_H;
+                    moved = true;
+                }
+            }
+            if gta6 {
+                for a in self.areas.iter_mut().filter(|a| old(a)) {
+                    a.h = HELP_H;
                     moved = true;
                 }
             }
@@ -963,6 +986,28 @@ mod profile_tests {
         let gta6 = c.builtins.iter().find(|p| p.id == "gta6").unwrap();
         assert!(gta6.areas.iter().find(|a| a.id == "help").unwrap().needs_box);
         assert!(!gta6.areas.iter().find(|a| a.id == "subtitles").unwrap().needs_box);
+    }
+
+    #[test]
+    fn gta6_help_reaches_lower_after_the_update() {
+        let mut c = Config::default();
+        c.normalize();
+        let set = |c: &mut Config, h: f64| {
+            for p in c.builtins.iter_mut() {
+                p.areas.iter_mut().filter(|a| a.id == "help").for_each(|a| a.h = h);
+            }
+            c.areas.iter_mut().filter(|a| a.id == "help").for_each(|a| a.h = h);
+        };
+        set(&mut c, 0.20);
+        c.defaults_version = 2;
+        assert!(c.move_to_new_defaults());
+        let gta6 = c.builtins.iter().find(|p| p.id == "gta6").unwrap();
+        assert_eq!(gta6.areas.iter().find(|a| a.id == "help").unwrap().h, 0.30);
+        // a height the player chose stays
+        set(&mut c, 0.25);
+        c.defaults_version = 2;
+        c.move_to_new_defaults();
+        assert_eq!(c.builtins.iter().find(|p| p.id == "gta6").unwrap().areas.iter().find(|a| a.id == "help").unwrap().h, 0.25);
     }
 
     #[test]
