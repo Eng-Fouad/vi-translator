@@ -13,9 +13,11 @@ mod secure;
 // installed fonts: DirectWrite on Windows, fontdb elsewhere
 #[cfg_attr(not(windows), path = "fonts_fontdb.rs")]
 mod fonts;
+mod game_icons;
 mod ocr;
 mod overlay;
 mod phrasebook;
+mod preview_shot;
 mod lan;
 mod langs;
 mod screens;
@@ -537,6 +539,34 @@ fn frame_saver_status(state: tauri::State<AppState>) -> debug_frames::SaverEvent
 fn open_frames_folder(webview: tauri::Webview, state: tauri::State<AppState>) -> Result<String, String> {
     main_only(&webview)?;
     let dir = state.saver.folder.lock().unwrap().clone().unwrap_or_else(frames_dir);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    debug_frames::open_folder(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.display().to_string())
+}
+
+/// Debugging: save a picture of the preview (`area`: where it is in the page). The first one of a run makes a
+/// new folder in Pictures\VI Translator\previews, the next ones go to the same folder. The file's path.
+/// Next to it, "frame_NNN.png": the game's frame at the size the app captures and reads it (the preview's
+/// picture is only as big as the preview on screen).
+#[tauri::command]
+async fn save_preview(webview: tauri::Webview, area: preview_shot::Area, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    main_only(&webview)?;
+    let base = pictures_dir().map(|p| p.join(FOLDER).join("previews")).unwrap_or_else(|| data_dir().join("previews"));
+    // (the frame first: the one the preview is showing now)
+    let frame = state.shared.latest();
+    let path = preview_shot::save(&webview, area, &base).await?;
+    if let (Some(f), Some(name)) = (frame, path.file_name().and_then(|n| n.to_str())) {
+        let full = path.with_file_name(name.replacen("preview_", "frame_", 1));
+        debug_frames::save_png_fast(&f, &full).map_err(|e| format!("the full-size frame: {e:#}"))?;
+    }
+    Ok(path.display().to_string())
+}
+
+/// Debugging: open the folder the preview pictures go to (this run's, or the one for all of them).
+#[tauri::command]
+fn open_previews_folder(webview: tauri::Webview) -> Result<String, String> {
+    main_only(&webview)?;
+    let dir = preview_shot::FOLDER.lock().unwrap().clone().unwrap_or_else(|| pictures_dir().map(|p| p.join(FOLDER).join("previews")).unwrap_or_else(|| data_dir().join("previews")));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     debug_frames::open_folder(&dir).map_err(|e| e.to_string())?;
     Ok(dir.display().to_string())
@@ -1159,9 +1189,14 @@ fn ocr_loop(
                             match reread(&frame) {
                                 Some(l) => found = Some(l),
                                 None => {
+                                    // The page wasn't ready (a list's selection still sliding): keep its list rows
+                                    // (the same words, a highlight moving past them: not dropped to English for a
+                                    // moment), but not other text that changed (a panel showing the next topic);
+                                    // and try again shortly, not in 3 s.
                                     let mut l = old.clone();
-                                    l.menu.retain(|m| screens::region_same(&frame, &m.rect, &m.sig));
+                                    l.menu.retain(|m| m.item || screens::region_same(&frame, &m.rect, &m.sig));
                                     found = Some(l);
+                                    screen_checked = Instant::now() - Duration::from_millis(2800);
                                 }
                             }
                         } else if gone && !due {
@@ -1283,20 +1318,36 @@ fn ocr_loop(
                 // Stability from one read to the next, on the same tab: a line read a bit differently
                 // keeps its Arabic.
                 if let Some(old) = screen.as_ref().filter(|o| o.id == layout.id && screens::menu_rects(o).is_some() && screens::selected_tab_name(o) == screens::selected_tab_name(layout)) {
-                    let near = |a: &screens::Rect, b: &screens::Rect| (a.y - b.y).abs() < a.h.min(b.h).max(0.001) * 0.6 && (a.x - b.x).abs() < 0.03;
+                    // (only OCR's jitter of a few pixels: a line that moved — a list scrolled, read once
+                    // mid-scroll — takes its new place, or its Arabic would stay off by part of a row)
+                    let near = |a: &screens::Rect, b: &screens::Rect| (a.y - b.y).abs() < a.h.min(b.h).max(0.001) * 0.25 && (a.x - b.x).abs() < 0.01;
                     // The same line found again (same place, similar words): keep its box, colours and
                     // Arabic exactly, so nothing shifts or changes wording between reads.
                     for m in layout.menu.iter_mut() {
+                        // (the selected row's box is the game's white bar, measured exactly: it takes this read's
+                        // place, or a bar that moved a few pixels — the selection arriving, a list settling after a
+                        // scroll — would show the old box's edge beside it)
+                        let selected = m.item && m.bg.eq_ignore_ascii_case("#ffffff");
                         // the picture there hasn't changed: it's the same text, whatever OCR made of it this time
-                        if let Some(o) = old.menu.iter().find(|o| near(&o.rect, &m.rect) && !o.ar.is_empty() && screens::region_same(&frame, &o.rect, &o.sig)) {
+                        // (unless this read found more of the game's icons for it: a first read while the page was
+                        // still appearing can miss them, and would keep the line without them)
+                        // (and the words largely the same: two paragraphs in the same place on the same background
+                        // can look alike to that small picture, and the last topic's would stay)
+                        if let Some(o) = old.menu.iter().find(|o| near(&o.rect, &m.rect) && !o.ar.is_empty() && o.icons.len() >= m.icons.len() && screens::same_words(&o.en, &m.en) && screens::region_same(&frame, &o.rect, &o.sig)) {
+                            let rect = m.rect.clone();
                             *m = o.clone();
+                            if selected {
+                                m.rect = rect;
+                            }
                             continue;
                         }
                         if let Some(o) = old.menu.iter().find(|o| near(&o.rect, &m.rect) && ocr::similar(&o.en, &m.en)) {
                             // same place and words as before; colours and picture from this read (the
                             // selection's white highlight may have moved onto it or off it)
-                            let ar = if o.ar.is_empty() { m.ar.clone() } else { o.ar.clone() };
-                            *m = screens::MenuText { ar, rect: o.rect.clone(), right: o.right, ..m.clone() };
+                            // (its Arabic and the icons it places go together; a read with more icons wins)
+                            let (ar, icons) = if o.ar.is_empty() || m.icons.len() > o.icons.len() { (m.ar.clone(), m.icons.clone()) } else { (o.ar.clone(), o.icons.clone()) };
+                            let rect = if selected || o.bg != m.bg { m.rect.clone() } else { o.rect.clone() };
+                            *m = screens::MenuText { ar, icons, rect, right: o.right, ..m.clone() };
                         }
                     }
                 }
@@ -2461,7 +2512,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, memory_status, memory_clear])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

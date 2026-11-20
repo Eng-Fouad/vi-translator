@@ -40,7 +40,7 @@ impl SaverState {
 }
 
 /// "2026-11-15_07-41-03" in local time.
-fn timestamp() -> String {
+pub(crate) fn timestamp() -> String {
     #[cfg(windows)]
     {
         let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
@@ -53,7 +53,7 @@ fn timestamp() -> String {
 }
 
 /// PNG with fast compression: a 4K frame takes a fraction of the time of the default settings.
-fn save_png_fast(f: &FrameData, path: &Path) -> anyhow::Result<()> {
+pub(crate) fn save_png_fast(f: &FrameData, path: &Path) -> anyhow::Result<()> {
     let file = BufWriter::new(std::fs::File::create(path)?);
     PngEncoder::new_with_quality(file, CompressionType::Fast, FilterType::Sub).write_image(
         &f.rgba,

@@ -16,7 +16,9 @@ window.AS = (() => {
   // left-to-right on its own, so right-to-left text can't move its "+" or "$" ("+GTA").
   const ltrRuns = (s) => {
     const text = String(s).replace(/[⁦⁩]/g, "");
-    const re = /[A-Za-z0-9](?:[A-Za-z0-9$+\/™%&_-]|[.,](?=[A-Za-z0-9]))*[$+%™]?/g;
+    // (Latin words in a row are one run, "Pay 'n' Spray": each on its own, right-to-left would put them in
+    // reverse order)
+    const re = /[A-Za-z0-9](?:[A-Za-z0-9$+\/™%&_-]|[.,](?=[A-Za-z0-9])|['’](?=\s*[A-Za-z0-9])|\s+(?=['’]?[A-Za-z0-9]))*[$+%™]?/g;
     let out = "", last = 0, m;
     while ((m = re.exec(text))) {
       out += esc(text.slice(last, m.index)) + `<bdi dir="ltr">${esc(m[0])}</bdi>`;
@@ -24,6 +26,19 @@ window.AS = (() => {
     }
     return out + esc(text.slice(last));
   };
+
+  // A text box's words with the game's button icons where it says ⟦1⟧, ⟦2⟧ … (`icons`: PNG data URLs),
+  // each about as tall as the letters and sitting on the line like one.
+  const withIcons = (s, icons) =>
+    String(s)
+      .split(/(⟦\d+⟧)/)
+      .map((part) => {
+        const m = /^⟦(\d+)⟧$/.exec(part);
+        const src = m && icons && icons[Number(m[1]) - 1];
+        if (m) return src && /^data:image\/png;base64,/.test(src) ? `<img src="${esc(src)}" alt="" style="height:1.15em;width:auto;vertical-align:-0.25em;margin:0 0.12em">` : "";
+        return ltrRuns(part);
+      })
+      .join("");
 
   const hexToRgb = (hex) => {
     const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
@@ -220,7 +235,7 @@ window.AS = (() => {
     // UI pieces replaced by Arabic replicas (pause-menu tabs): same box and colours as the game's.
     for (const lb of L.labels || []) {
       const h = lb.rect.h * H;
-      mk(
+      const tab = mk(
         {
           left: `${lb.rect.x * W}px`,
           top: `${lb.rect.y * H}px`,
@@ -235,9 +250,25 @@ window.AS = (() => {
           fontWeight: "500",
           fontSize: `${h * 0.55}px`,
           lineHeight: "1",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
         },
-        esc(lb.ar),
+        `<span>${esc(lb.ar)}</span>`,
       );
+      // (a tab's name longer in this language than the game's English, "DIKEHENDAKI & BAHANG": smaller, inside its
+      // own tab, not over the next one)
+      // (measured again once the language's font has come: a script's fallback font loads on first use, and the name
+      // was measured in another, narrower one)
+      const name = tab && tab.firstChild;
+      const room = lb.rect.w * W * 0.92;
+      const fit = () => {
+        if (!name || !name.isConnected) return;
+        tab.style.fontSize = `${h * 0.55}px`;
+        if (name.offsetWidth > room) tab.style.fontSize = `${h * 0.55 * (room / name.offsetWidth)}px`;
+      };
+      fit();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+      setTimeout(fit, 400);
     }
 
     // Pause-menu content: list items and paragraphs covered by Arabic replicas (same place and
@@ -274,7 +305,7 @@ window.AS = (() => {
             WebkitTextStroke: m.outline ? `${(fs * 0.06).toFixed(1)}px ${m.outline}` : "",
             paintOrder: m.outline ? "stroke fill" : "",
           },
-          `<span>${ltrRuns(m.ar)}</span>`,
+          `<span>${withIcons(m.ar, m.icons)}</span>`,
         );
         continue;
       }
@@ -305,7 +336,7 @@ window.AS = (() => {
           lineHeight: "1.35",
         },
         // one child: this box is a flex container, and each left-to-right run would become its own column
-        `<span>${ltrRuns(m.ar)}</span>`,
+        `<span>${withIcons(m.ar, m.icons)}</span>`,
       );
     }
 
@@ -375,8 +406,55 @@ window.AS = (() => {
       );
     }
 
+    // Buttons that know their icon's place: each one's Arabic label and the game's own icon just above its
+    // English one, icon over icon (so they line up with the game's), in the word's colour (a greyed-out
+    // button stays grey).
+    // (an icon too faint to cut out still has its place: the label goes there, without the picture)
+    const placed = L.buttons && L.buttons.length && L.buttons.every((b) => b.icon_rect && b.text_rect);
+    if (placed) {
+      // right to left; a label longer than its English pushes the ones to its left further left
+      let room = Infinity; // where the item to the right begins (px from the left)
+      const order = L.buttons.slice().sort((a, b) => b.icon_rect.x - a.icon_rect.x);
+      // (all on one middle line: a bigger icon, a ringed "RESTORE ALL", grows up and down alike, its word level
+      // with the others', not pushed up by the extra height)
+      const stdH = Math.min(...order.map((b) => b.icon_rect.h));
+      for (const b of order) {
+        const capH = b.text_rect.h * H;
+        const bfs = capH * 1.45;
+        const iconRight = Math.min((b.icon_rect.x + b.icon_rect.w) * W, room - capH * 0.8);
+        const extra = (b.icon_rect.h - stdH) * H;
+        const item = mk({
+          right: `${W - iconRight}px`,
+          top: `${b.icon_rect.y * H - capH * 0.35 + extra}px`,
+          transform: "translateY(-100%)",
+          display: "flex",
+          alignItems: "center",
+          gap: `${Math.max(2, (b.icon_rect.x - (b.text_rect.x + b.text_rect.w)) * W)}px`,
+          // (no picture: keep the icon's room, so the label sits where it would beside it)
+          paddingRight: b.icon ? "0" : `${b.icon_rect.w * W + Math.max(2, (b.icon_rect.x - (b.text_rect.x + b.text_rect.w)) * W)}px`,
+          fontFamily: `"${opts.text_font}", ${fonts()}`,
+          fontWeight: "700",
+          fontSize: `${bfs}px`,
+          color: b.fg || "#ffffff",
+          textShadow: shadow(bfs),
+        }, "");
+        // (right to left: the icon first, on the right, like the game's after its word)
+        for (const src of (b.icon ? [b.icon, ...(b.more_icons || [])] : []).reverse()) {
+          const img = document.createElement("img");
+          img.src = src;
+          // the icon's place, not its picture's own width: a grey icon cuts out narrower than a white one,
+          // and a picture not loaded yet has none (the label beside it moved left and right)
+          Object.assign(img.style, { height: `${b.icon_rect.h * H}px`, width: `${b.icon_rect.w * W}px`, objectFit: "contain", flex: "none", display: "block" });
+          item.appendChild(img);
+        }
+        const label = document.createElement("span");
+        label.textContent = b.ar;
+        item.appendChild(label);
+        room = iconRight - item.offsetWidth;
+      }
+    }
     // Buttons: the game's own icons + Arabic labels, a row just above the English one, right-aligned to it.
-    if (L.buttons && L.buttons.length && L.buttons_row) {
+    if (!placed && L.buttons && L.buttons.length && L.buttons_row) {
       const row = L.buttons_row;
       const capH = Math.min(...L.buttons.map((b) => b.text_rect.h)) * H; // word without descenders
       const bfs = capH * 1.45;

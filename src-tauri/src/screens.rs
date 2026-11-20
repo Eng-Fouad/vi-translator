@@ -32,6 +32,8 @@ pub struct Button {
     pub text_rect: Rect,
     /// More icons after the first ("Browse [L1] [R1]").
     pub more_icons: Vec<String>,
+    /// The word's colour in the game (a greyed-out button that can't be used now); unset = white.
+    pub fg: String,
 }
 
 /// A piece of the game's UI covered by a translated replica (e.g. a menu tab): same box, same
@@ -132,17 +134,23 @@ pub struct MenuText {
     pub fixed: bool,
     /// other people's text (player nicknames …): never translated, sent or kept; not covered either
     pub private: bool,
+    /// the game's button icons for this text (PNG data URLs), drawn where the translation says ⟦1⟧, ⟦2⟧ …
+    pub icons: Vec<String>,
     /// what the game showed under it when read (see `region_sig`)
     #[serde(skip)]
     pub sig: Vec<u8>,
 }
 
 /// What a script read, kept to what a page can show (a runaway script can't fill memory or the
-/// overlay): at most 300 text boxes, 48 tabs, 16 buttons with 4 more icons each, icons of at most
-/// 256 KB, 8 player lines; places and sizes that are numbers.
+/// overlay): at most 300 text boxes with 8 icons each, 48 tabs, 16 buttons with 4 more icons each,
+/// icons of at most 256 KB, 8 player lines; places and sizes that are numbers.
 pub fn limit(l: &mut ScreenLayout) {
     const ICON: usize = 256 * 1024;
     l.menu.truncate(300);
+    for m in l.menu.iter_mut() {
+        m.icons.retain(|i| i.len() <= ICON && i.starts_with("data:image/png;base64,"));
+        m.icons.truncate(8);
+    }
     l.labels.truncate(48);
     l.buttons.truncate(16);
     for b in l.buttons.iter_mut() {
@@ -409,6 +417,18 @@ pub fn content_changed_in(f: &FrameData, area: &Rect, sig: &[u8]) -> bool {
     !sig.is_empty() && content_sig_in(f, area).iter().zip(sig).filter(|(a, b)| a.abs_diff(**b) > 40).count() >= 3
 }
 
+/// Two readings of one line: at least half their words in common (OCR reads the same line a little
+/// differently each time; another line shares far fewer).
+pub fn same_words(a: &str, b: &str) -> bool {
+    let words = |s: &str| -> std::collections::HashSet<String> { s.split_whitespace().map(letters).filter(|w| w.len() > 1).collect() };
+    let (wa, wb) = (words(a), words(b));
+    if wa.is_empty() || wb.is_empty() {
+        return letters(a) == letters(b);
+    }
+    let common = wa.intersection(&wb).count();
+    common * 2 >= wa.len().min(wb.len())
+}
+
 /// Letter-level similarity 0..1 (edit distance).
 fn ratio(a: &str, b: &str) -> f64 {
     let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
@@ -505,6 +525,13 @@ mod tests {
         use_words_for("gta6", "ar");
         assert_eq!(button_words().len(), 1, "back to Arabic: its words again");
         set_layout_words("", "", vec![], vec![], vec![]);
+    }
+
+    #[test]
+    fn one_line_read_twice_has_the_same_words_another_line_not() {
+        assert!(same_words("Jason and Lucia's criminal profiles are affected", "Jason and Lucias criminal profi1es are affected"));
+        assert!(!same_words("Using extreme violence can have the opposite effect", "A criminal with a professional profile commits crimes"));
+        assert!(same_words("Pool", "pool"));
     }
 
     #[test]

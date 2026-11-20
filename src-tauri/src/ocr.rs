@@ -931,7 +931,9 @@ pub fn icon_png(c: &Crop, r: (u32, u32, u32, u32), thr: u8) -> Option<String> {
     let mut edge: Vec<u8> = (x0..x1).flat_map(|x| [lum(x, y0), lum(x, y1 - 1)]).chain((y0..y1).flat_map(|y| [lum(x0, y), lum(x1 - 1, y)])).collect();
     edge.sort_unstable();
     let bg = edge[edge.len() / 2];
-    if brightest < bg.saturating_add(40) {
+    // (a solid crop, `thr` 0, keeps everything: a grey disc on a bright purple stands out by its colour, not its
+    // brightness, and must still come out)
+    if thr > 0 && brightest < bg.saturating_add(40) {
         return None; // no shape that stands out: nothing to cut
     }
     let thr = thr.min(((brightest as u32 + bg as u32) / 2) as u8);
@@ -1272,7 +1274,9 @@ pub fn text_with_icons(c: &Crop, words: &[Word]) -> (String, Vec<String>, Option
                 }
                 Err(r) => {
                     grow(*r);
-                    let png = if plain_icons.contains(r) { icon_png_plain(c, *r) } else { icon_png(c, *r, thr_used) };
+                    // one of the game's own icons, recognised: the clean one the app carries; else cut from the line
+                    let known = crate::game_icons::identify(&c.into(), *r).and_then(crate::game_icons::data_url).map(String::from);
+                    let png = known.or_else(|| if plain_icons.contains(r) { icon_png_plain(c, *r) } else { icon_png(c, *r, thr_used) });
                     if let Some(png) = png {
                         // "<height relative to the text>|<png>": the Arabic draws it at the same proportion
                         // (GTA's L2/R2 are smaller than the text, ✕/△ discs a bit larger)

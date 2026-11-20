@@ -999,6 +999,8 @@ function renderDebug() {
       <span class="val" id="dbg-int-v">${t("{s} s", { s: (cfg.debug_frame_interval_ms / 1000).toFixed(1) })}</span></div></div>
     <div class="callout" id="dbg-status" style="margin:0"></div>
     <button class="btn" id="dbg-open">${t("Open frames folder")}</button>
+    <button class="btn" id="dbg-shot">${t("Save preview image")}</button>
+    <div class="muted small" style="margin:-6px 0 0">${AS.esc(t("Saves the preview as you see it (the game and its translation) as a PNG. The first one makes a new folder in Pictures\\VI Translator\\previews; the next ones go to the same folder until the app is closed."))} <button class="link" id="dbg-shot-open">${t("Open previews folder")}</button></div>
     <div class="muted small">Install id (to send a test version of a game page to this PC): <code>${AS.esc(cfg.install_id || "—")}</code></div>`;
   $("dbg-save").addEventListener("change", (e) => setSaveFrames(e.target.checked));
   $("dbg-int").addEventListener("input", (e) => {
@@ -1007,6 +1009,14 @@ function renderDebug() {
     save(false);
   });
   $("dbg-open").addEventListener("click", openFramesFolder);
+  $("dbg-shot").addEventListener("click", savePreview);
+  $("dbg-shot-open").addEventListener("click", async () => {
+    try {
+      log({ info: t("Opened {dir}", { dir: await invoke("open_previews_folder") }) });
+    } catch (e) {
+      log({ error: String(e) });
+    }
+  });
   updateSaver();
 }
 
@@ -1016,6 +1026,20 @@ function setSaveFrames(on) {
   if ($("dbg-save")) $("dbg-save").checked = on;
   // turning it off: show what was recorded (wait a moment so the last frame is written)
   if (!on) setTimeout(openFramesFolder, 400);
+}
+
+// The preview as it is on screen (the game's picture and the translation over it), saved by the app: the
+// part of the page the picture takes, inside the visible stage.
+async function savePreview() {
+  const a = $("frame-wrap").getBoundingClientRect(), v = $("viewport").getBoundingClientRect();
+  const x = Math.max(a.left, v.left), y = Math.max(a.top, v.top);
+  const area = { x, y, w: Math.min(a.right, v.right) - x, h: Math.min(a.bottom, v.bottom) - y, page_w: window.innerWidth };
+  try {
+    const file = await invoke("save_preview", { area });
+    log({ info: t("Saved {file}", { file }) });
+  } catch (e) {
+    log({ error: t("Could not save the preview: {e}", { e }) });
+  }
 }
 
 async function openFramesFolder() {

@@ -6277,6 +6277,7 @@ dependencies = [
  "ttf-parser",
  "tungstenite",
  "uuid",
+ "webview2-com",
  "windows",
  "windows-capture",
  "xcap",

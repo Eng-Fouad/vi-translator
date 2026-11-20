@@ -52,6 +52,9 @@
 //!  - `f.ocr(rect, {scale})` → `{text, words: [{text, x, y, w, h}]}` (frame pixels);
 //!  - `f.box(x, y, w, h)` → the same rectangle as fractions of the frame, for layouts;
 //!
+//! The game's controller icons the app carries (`game_icons.rs`): `vi.gameIcon("L2")` → a PNG data URL, and
+//! `f.gameIconAt(rect)` → which of them is there ("X", "L2" …) or "".
+//!
 //! and `vi.lang()`: the language the player translates into ("ar", "fr" …), for a page's fixed
 //! words the script translates itself (a title's `title_ar`; anything left in English goes to the
 //! translator).
@@ -352,9 +355,11 @@ impl Pages {
             g.set("__mean", Function::new(ctx.clone(), |rect: String, opts: String| helper_mean(&rect, &opts))?)?;
             g.set("__blobs", Function::new(ctx.clone(), |rect: String, opts: String| helper_blobs(&rect, &opts))?)?;
             g.set("__icon", Function::new(ctx.clone(), |rect: String, thr: f64| helper_icon(&rect, thr))?)?;
+            g.set("__game_icon_at", Function::new(ctx.clone(), |rect: String| helper_game_icon_at(&rect))?)?;
             // (text helpers: bounded input, and "nothing" once the call is out of time, like the frame helpers)
             g.set("__letters", Function::new(ctx.clone(), |s: String| text_helper(&s, 4096, String::new(), || crate::screens::letters(&s)))?)?;
             g.set("__lang", Function::new(ctx.clone(), || crate::screens::words_lang())?)?;
+            g.set("__game_icon", Function::new(ctx.clone(), |name: String| crate::game_icons::data_url(&name).unwrap_or("").to_string())?)?;
             g.set("__similar", Function::new(ctx.clone(), |a: String, b: String| {
                 text_helper(&a, 4096, false, || b.len() <= 4096 && ocr::similar(&a, &b))
             })?)?;
@@ -603,6 +608,8 @@ function __frame() {
     blobs: (r, o) => JSON.parse(__blobs(JSON.stringify(r), JSON.stringify(o || {}))),
     ocr: (r, o) => JSON.parse(__ocr(JSON.stringify(r), JSON.stringify(o || {}))),
     icon: (r, threshold) => __icon(JSON.stringify(r), threshold ?? 140) || null,
+    // which of the game's icons the app carries is there ("X", "L2" …), or "" (then f.icon cuts it)
+    gameIconAt: (r) => __game_icon_at(JSON.stringify(r)),
     runs: (r, o) => JSON.parse(__runs(JSON.stringify(r), JSON.stringify(o || {}))),
     median: (r, o) => JSON.parse(__median(JSON.stringify(r), JSON.stringify(o || {}))),
     contrast: (r, against, share) => JSON.parse(__contrast(JSON.stringify(r), JSON.stringify(against), share ?? 0.125)),
@@ -618,6 +625,8 @@ globalThis.vi = Object.freeze({
   letters: (s) => __letters(String(s)),
   // the language the player translates into ("ar", "fr" …): for words a script translates itself
   lang: () => __lang(),
+  // the game's controller icon by name ("X", "L2", "DPAD-UP" …), carried by the app: a PNG data URL, or ""
+  gameIcon: (name) => __game_icon(String(name)),
   similar: (a, b) => __similar(String(a), String(b)),
   buttonWord: (read) => JSON.parse(__button_word(String(read))),
   tabWord: (read) => JSON.parse(__tab_word(String(read))),
@@ -905,6 +914,17 @@ fn helper_icon(rect: &str, thr: f64) -> Option<String> {
         ocr::icon_png(&c, inner, thr.clamp(0.0, 255.0) as u8)
     })
     .flatten()
+}
+
+/// `f.gameIconAt(rect)`: the name of the game's icon the app carries that is there ("X", "L2" …), or "".
+fn helper_game_icon_at(rect: &str) -> String {
+    let Ok(r) = serde_json::from_str::<PxRect>(rect) else { return String::new() };
+    with_frame(|f, _| {
+        let (x, y) = (r.x.max(0.0) as u32, r.y.max(0.0) as u32);
+        let pic = crate::game_icons::Picture { w: f.w, h: f.h, rgba: &f.rgba };
+        crate::game_icons::identify(&pic, (x, y, r.w.max(0.0) as u32, r.h.max(0.0) as u32)).unwrap_or("").to_string()
+    })
+    .unwrap_or_default()
 }
 
 /// A picture a script carries (`pages.image`): grey levels.
@@ -1286,6 +1306,8 @@ mod built_in_tests {
         let p = Pages::load(built_in("gta6").expect("carried")).expect("loads");
         assert!(p.list.iter().any(|i| i.id == "gta6_wasted"));
         assert!(p.options.iter().any(|o| o.id == "wasted" && o.on));
+        assert!(p.list.iter().any(|i| i.id == "gta6_pause"));
+        assert!(p.options.iter().any(|o| o.id == "pause_menu" && o.on));
     }
 }
 

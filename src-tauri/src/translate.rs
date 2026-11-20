@@ -355,8 +355,18 @@ impl Translator {
                 groups.push((batch.len(), variants.len(), color.clone()));
                 batch.extend(variants);
             }
-            let out = self.mt_batch(cfg, &batch, status)?;
-            let sentence = out.first().cloned().unwrap_or_default();
+            // The offline model translates one sentence well and a paragraph badly (a menu's help text: it
+            // drifts and invents, even Bible verses): several sentences go one by one, in the same batch.
+            let parts = if cfg.engine == "local" && icons.is_empty() && phrases.is_empty() { sentences(&plain) } else { Vec::new() };
+            let (out, sentence) = if parts.len() > 1 {
+                let out = self.mt_batch(cfg, &parts, status)?;
+                let joined = out.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
+                (out, joined)
+            } else {
+                let out = self.mt_batch(cfg, &batch, status)?;
+                let first = out.first().cloned().unwrap_or_default();
+                (out, first)
+            };
             let mut targets: Vec<(Vec<String>, String)> = Vec::new();
             for (start, len, color) in groups {
                 let words = out[start..start + len]
@@ -785,6 +795,31 @@ fn close_enough(a: &str, b: &str) -> bool {
     1.0 - prev[bv.len()] as f64 / la.max(lb) as f64 >= 0.8
 }
 
+/// A paragraph's sentences: cut after . ! ? (or …) followed by a space and a capital letter
+/// ("… at home. Tip: Hold …"); "e.g. 3.5 mi" stays whole.
+fn sentences(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut start = 0;
+    for i in 0..chars.len() {
+        let end = matches!(chars[i], '.' | '!' | '?' | '…');
+        let next = chars.get(i + 1).copied();
+        let after = chars.get(i + 2).copied();
+        if end && next == Some(' ') && after.is_some_and(|c| c.is_uppercase()) {
+            let s: String = chars[start..=i].iter().collect();
+            if !s.trim().is_empty() {
+                out.push(s.trim().to_string());
+            }
+            start = i + 2;
+        }
+    }
+    let rest: String = chars[start.min(chars.len())..].iter().collect();
+    if !rest.trim().is_empty() {
+        out.push(rest.trim().to_string());
+    }
+    out
+}
+
 /// Colour the words of `sentence` that match a highlighted phrase's translation.
 fn color_tokens(sentence: &str, targets: &[(Vec<String>, String)]) -> Segments {
     let tokens: Vec<&str> = sentence.split_whitespace().collect();
@@ -1037,6 +1072,16 @@ pub fn protect_terms(line: &str) -> (String, Vec<String>) {
 
 #[cfg(test)]
 mod term_tests {
+    #[test]
+    fn a_paragraph_goes_sentence_by_sentence() {
+        let p = "Pay attention to your surroundings. Investigating strange noises may lead to new opportunities. Tip: Hold e.g. 3.5 mi away.";
+        assert_eq!(
+            super::sentences(p),
+            vec!["Pay attention to your surroundings.", "Investigating strange noises may lead to new opportunities.", "Tip: Hold e.g. 3.5 mi away."]
+        );
+        assert_eq!(super::sentences("Take cover."), vec!["Take cover."]);
+    }
+
     #[test]
     fn every_offline_model_has_a_fixed_version() {
         for l in crate::langs::LANGS.iter() {
