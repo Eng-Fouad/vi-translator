@@ -1,4 +1,4 @@
-// pages-version: 2
+// pages-version: 3
 // requires-app: 1.0.0
 // Grand Theft Auto VI: the game's own pages the app translates (see src/pagescript.rs for the API).
 
@@ -5817,9 +5817,10 @@ function readButtons(f) {
   for (const opts of [{ scale: 2 }, { scale: 2, boost: 2 }]) {
     for (const s of segments(f, row, opts, 1.2)) {
       for (const part of splitButtons(s)) {
-        const hit = known(part.text, BUTTON_NAMES);
+        const count = /\s*\(\s*(\d+?)\s*[\/|1Il]\s*(\d+)\s*\)?\s*$/.exec(part.text);
+        const hit = known(count ? part.text.slice(0, count.index) : part.text, BUTTON_NAMES);
         const box = { x: part.x0, y: part.y0, w: part.x1 - part.x0, h: part.y1 - part.y0 };
-        if (hit && !hit.cut && !parts.some((o) => overlaps(box, { x: o.x0, y: o.y0, w: o.x1 - o.x0, h: o.y1 - o.y0 }))) parts.push(Object.assign(part, { en: hit.en }));
+        if (hit && !hit.cut && !parts.some((o) => overlaps(box, { x: o.x0, y: o.y0, w: o.x1 - o.x0, h: o.y1 - o.y0 }))) parts.push(Object.assign(part, { en: hit.en, count: count ? `(${count[1]}/${count[2]})` : "" }));
       }
     }
   }
@@ -5839,7 +5840,8 @@ function readButtons(f) {
     const zone = { x: part.x1 + 2, y: Math.max(part.y0 - h, 0), w: Math.round(h * 3), h: h * 3 };
     const ic = f.blobs(zone, { gap: 2, bright: [90, 255], spread: [0, 28] }).find((o) => o.h >= h * 0.8 && o.w >= h * 0.6 && o.w <= h * 2.8);
     const t = vi.buttonWord(part.en);
-    const ar = (t && t[1]) || ownWord(part.en);
+    const word = (t && t[1]) || ownWord(part.en);
+    const ar = word && part.count ? word + " " + part.count : word;
     const back = f.median({ x: part.x0, y: part.y0 - 2, w: part.x1 - part.x0, h: h + 4 }, { step_x: 2, step_y: 1, exclude: [part.x0, part.y0, part.x1, part.y1] }) || { r: 0, g: 0, b: 0 };
     // the letters' colour (white, or grey on a button that can't be used now)
     const fg = (ink.box && ink.median) || f.contrast({ x: part.x0, y: part.y0, w: part.x1 - part.x0, h }, back, 0.12) || { r: 255, g: 255, b: 255 };
@@ -5852,7 +5854,7 @@ function readButtons(f) {
     const was = BUTTON_AT[part.en];
     if (was && Math.abs(was.x1 - part.x1) <= 4 && Math.abs(was.ty - ty) <= 4) Object.assign(part, { x0: was.x0, x1: was.x1 }), (ty = was.ty);
     else BUTTON_AT[part.en] = { x0: part.x0, x1: part.x1, ty };
-    const b = { en: part.en, ar, fg: hex(fg), text_rect: f.box(part.x0, ty, part.x1 - part.x0, th) };
+    const b = { en: part.count ? part.en + " " + part.count : part.en, ar, fg: hex(fg), text_rect: f.box(part.x0, ty, part.x1 - part.x0, th) };
     // the game's icon, cut out, so the translation shows it too (and is placed over it)
     // (the clean one the app carries when it recognises it, else cut from the frame)
     // (a greyed-out button's icon is grey too: cut from the frame as the game shows it, the app's carried ones
@@ -5883,6 +5885,13 @@ function splitButtons(s) {
   const parts = [];
   let cur = null;
   for (const w of s.words) {
+    // (a button's counter, "(0/3)", goes with it)
+    // (OCR reads the slash as a 1: "(1/2)" comes as "(112)")
+    if (cur && /^\(\d+\s*[\/|1Il]\s*\d+\)?$/.test(w.text)) {
+      Object.assign(cur, { text: cur.text + " " + w.text, x1: w.x + w.w, y0: Math.min(cur.y0, w.y), y1: Math.max(cur.y1, w.y + w.h) });
+      cur = null;
+      continue;
+    }
     if (!/\p{L}{2}|^\d\p{L}$/u.test(w.text)) { cur = null; continue; }
     if (cur && known(cur.text, BUTTON_NAMES) && !known(cur.text + " " + w.text, BUTTON_NAMES)) cur = null;
     if (!cur) parts.push((cur = { text: w.text, x0: w.x, y0: w.y, x1: w.x + w.w, y1: w.y + w.h }));
@@ -6288,5 +6297,201 @@ pages.add({
   },
   same(f) {
     return !!findNotice(f);
+  },
+});
+
+// ------------------------------------------------------------------ weapon wheel
+// The wheel the game opens on a held button: two tabs at the top (WEAPONS / ITEMS, the open one white), the slots in
+// a ring, the selected slot's name and kind in the middle ("WORTHAM WCR1" / "SIDEARM"), a weapon's stats on a panel
+// at the right, and the buttons at the bottom right ("TAKE AMMO PACK (0/3) ✕"). The game's own names (a gun's
+// make and model, "GIRARDI E59") stay as they are; its words are the script's; anything else goes to the
+// app's translator.
+
+pages.option({
+  id: "weapon_wheel",
+  name: { en: "Weapon wheel", ar: "عجلة الأسلحة" },
+  about: { en: "Translate the weapon and item wheel: its tabs, the selected item, a weapon's stats and the buttons.", ar: "ترجمة عجلة الأسلحة والأغراض: تبويباتها، والغرض المحدد، وخصائص السلاح، والأزرار." },
+  on: true,
+});
+
+// the wheel's words in Arabic (the other languages: WHEEL_WORDS below, added to each language's words)
+Object.assign(WORDS.ar, {
+  "WEAPONS": "الأسلحة", "ITEMS": "الأغراض",
+  "UNARMED": "بلا سلاح", "EMPTY": "فارغ", "BINOCULARS": "منظار", "FLASHLIGHT": "مصباح يدوي", "FISHING ROD": "صنّارة صيد",
+  "HUNTING KNIFE": "سكين صيد", "CURRENT OUTFIT": "الزي الحالي", "BRIAN'S MARINA CAP": "قبعة مرسى براين",
+  "SQUARE SHADES": "نظارة شمسية مربعة", "COKE BAGGIE": "كيس كوكايين",
+  "IN HAND": "في اليد", "SIDEARM": "سلاح جانبي", "LONGARM": "سلاح طويل", "MELEE": "سلاح أبيض", "EXPLOSIVES": "متفجرات",
+  "EQUIPMENT": "معدات", "HEADWEAR": "أغطية الرأس", "HEADGEAR": "أغطية الرأس", "OUTFITS": "الأزياء", "BAGS": "الحقائب", "GEAR": "العتاد",
+  "EYEWEAR": "النظارات", "SMOKES & DRUGS": "سجائر ومخدرات",
+  "COMPACT REVOLVER": "مسدس دوّار صغير", "MILITARY PISTOL": "مسدس عسكري", "PUMP ACTION SHOTGUN": "بندقية خرطوش مضخّية",
+  "DAMAGE": "الضرر", "ACCURACY": "الدقة", "HANDLING": "التحكم", "RANGE": "المدى", "MODS": "التعديلات",
+  "MAG SIZE": "سعة المخزن", "HELD AMMO": "الذخيرة المحمولة", "FIRE STYLE": "نمط الإطلاق", "BRAND": "العلامة",
+  "CALIBER": "العيار", "SEMI-AUTO": "نصف آلي", "PUMP ACTION": "مضخّي",
+  "TAKE AMMO PACK": "أخذ حزمة ذخيرة", "TAKE EXPLOSIVES PACK": "أخذ حزمة متفجرات", "WEAR STYLE": "طريقة الارتداء",
+  "TAKE OFF": "خلع", "PUT ON": "ارتداء", "USE": "استخدام",
+  "ON": "مرتدى", "OFF": "منزوع",
+});
+// the wheel's words in the other languages
+const WHEEL_WORDS = {
+  "hi": {"WEAPONS": "हथियार", "ITEMS": "आइटम", "UNARMED": "निहत्था", "EMPTY": "खाली", "BINOCULARS": "दूरबीन", "FLASHLIGHT": "टॉर्च", "FISHING ROD": "मछली पकड़ने की छड़", "HUNTING KNIFE": "शिकारी चाकू", "CURRENT OUTFIT": "मौजूदा आउटफ़िट", "BRIAN'S MARINA CAP": "ब्रायन्स मरीना टोपी", "SQUARE SHADES": "चौकोर धूप का चश्मा", "COKE BAGGIE": "कोकीन की पुड़िया", "IN HAND": "हाथ में", "SIDEARM": "छोटा हथियार", "LONGARM": "लंबा हथियार", "MELEE": "हाथापाई", "EXPLOSIVES": "विस्फोटक", "EQUIPMENT": "उपकरण", "HEADWEAR": "सिर का पहनावा", "HEADGEAR": "सिर का पहनावा", "OUTFITS": "आउटफ़िट", "BAGS": "बैग", "GEAR": "गियर", "EYEWEAR": "चश्मे", "SMOKES & DRUGS": "सिगरेट और ड्रग्स", "COMPACT REVOLVER": "कॉम्पैक्ट रिवॉल्वर", "MILITARY PISTOL": "मिलिट्री पिस्टल", "PUMP ACTION SHOTGUN": "पंप एक्शन शॉटगन", "DAMAGE": "नुकसान", "ACCURACY": "सटीकता", "HANDLING": "हैंडलिंग", "RANGE": "रेंज", "MODS": "मॉड्स", "MAG SIZE": "मैगज़ीन क्षमता", "HELD AMMO": "साथ रखा गोला-बारूद", "FIRE STYLE": "फ़ायरिंग शैली", "BRAND": "ब्रांड", "CALIBER": "कैलिबर", "SEMI-AUTO": "सेमी-ऑटो", "PUMP ACTION": "पंप एक्शन", "TAKE AMMO PACK": "गोला-बारूद पैक लें", "TAKE EXPLOSIVES PACK": "विस्फोटक पैक लें", "WEAR STYLE": "पहनने का तरीका", "TAKE OFF": "उतारें", "PUT ON": "पहनें", "USE": "इस्तेमाल करें", "ON": "पहना हुआ", "OFF": "उतारा हुआ"},
+  "bn": {"WEAPONS": "অস্ত্র", "ITEMS": "আইটেম", "UNARMED": "নিরস্ত্র", "EMPTY": "খালি", "BINOCULARS": "দূরবীন", "FLASHLIGHT": "টর্চ", "FISHING ROD": "মাছ ধরার ছিপ", "HUNTING KNIFE": "শিকারের ছুরি", "CURRENT OUTFIT": "বর্তমান পোশাক", "BRIAN'S MARINA CAP": "ব্রায়ান্স মেরিনা টুপি", "SQUARE SHADES": "চৌকো সানগ্লাস", "COKE BAGGIE": "কোকেনের পুরিয়া", "IN HAND": "হাতে", "SIDEARM": "ছোট অস্ত্র", "LONGARM": "লম্বা অস্ত্র", "MELEE": "হাতাহাতি", "EXPLOSIVES": "বিস্ফোরক", "EQUIPMENT": "সরঞ্জাম", "HEADWEAR": "মাথার পরিধান", "HEADGEAR": "মাথার পরিধান", "OUTFITS": "পোশাকের সেট", "BAGS": "ব্যাগ", "GEAR": "গিয়ার", "EYEWEAR": "চশমা", "SMOKES & DRUGS": "সিগারেট ও মাদক", "COMPACT REVOLVER": "কমপ্যাক্ট রিভলভার", "MILITARY PISTOL": "মিলিটারি পিস্তল", "PUMP ACTION SHOTGUN": "পাম্প অ্যাকশন শটগান", "DAMAGE": "ক্ষতি", "ACCURACY": "নির্ভুলতা", "HANDLING": "নিয়ন্ত্রণ", "RANGE": "পাল্লা", "MODS": "মড", "MAG SIZE": "ম্যাগাজিন ক্ষমতা", "HELD AMMO": "সঙ্গে থাকা গোলাবারুদ", "FIRE STYLE": "গুলির ধরন", "BRAND": "ব্র্যান্ড", "CALIBER": "ক্যালিবার", "SEMI-AUTO": "সেমি-অটো", "PUMP ACTION": "পাম্প অ্যাকশন", "TAKE AMMO PACK": "গোলাবারুদের প্যাক নেওয়া", "TAKE EXPLOSIVES PACK": "বিস্ফোরকের প্যাক নেওয়া", "WEAR STYLE": "পরার ধরন", "TAKE OFF": "খুলে ফেলা", "PUT ON": "পরা", "USE": "ব্যবহার", "ON": "পরা আছে", "OFF": "পরা নেই"},
+  "ur": {"WEAPONS": "ہتھیار", "ITEMS": "اشیاء", "UNARMED": "نہتا", "EMPTY": "خالی", "BINOCULARS": "دوربین", "FLASHLIGHT": "ٹارچ", "FISHING ROD": "مچھلی پکڑنے کی چھڑی", "HUNTING KNIFE": "شکاری چاقو", "CURRENT OUTFIT": "موجودہ لباس", "BRIAN'S MARINA CAP": "برائنز مرینا ٹوپی", "SQUARE SHADES": "چوکور دھوپ کا چشمہ", "COKE BAGGIE": "کوکین کی پُڑیا", "IN HAND": "ہاتھ میں", "SIDEARM": "چھوٹا ہتھیار", "LONGARM": "لمبا ہتھیار", "MELEE": "ہاتھا پائی", "EXPLOSIVES": "دھماکہ خیز مواد", "EQUIPMENT": "سازوسامان", "HEADWEAR": "سر کا پہناوا", "HEADGEAR": "سر کا پہناوا", "OUTFITS": "لباس", "BAGS": "بیگ", "GEAR": "گیئر", "EYEWEAR": "چشمے", "SMOKES & DRUGS": "سگریٹ اور منشیات", "COMPACT REVOLVER": "کمپیکٹ ریوالور", "MILITARY PISTOL": "ملٹری پستول", "PUMP ACTION SHOTGUN": "پمپ ایکشن شاٹ گن", "DAMAGE": "نقصان", "ACCURACY": "درستگی", "HANDLING": "کنٹرول", "RANGE": "رینج", "MODS": "موڈز", "MAG SIZE": "میگزین کی گنجائش", "HELD AMMO": "ساتھ رکھا گولہ بارود", "FIRE STYLE": "فائر کا انداز", "BRAND": "برانڈ", "CALIBER": "کیلیبر", "SEMI-AUTO": "سیمی آٹو", "PUMP ACTION": "پمپ ایکشن", "TAKE AMMO PACK": "گولہ بارود کا پیک لیں", "TAKE EXPLOSIVES PACK": "دھماکہ خیز پیک لیں", "WEAR STYLE": "پہننے کا انداز", "TAKE OFF": "اتاریں", "PUT ON": "پہنیں", "USE": "استعمال کریں", "ON": "پہنا ہوا", "OFF": "اتارا ہوا"},
+  "id": {"WEAPONS": "SENJATA", "ITEMS": "BARANG", "UNARMED": "TANGAN KOSONG", "EMPTY": "KOSONG", "BINOCULARS": "TEROPONG", "FLASHLIGHT": "SENTER", "FISHING ROD": "JORAN PANCING", "HUNTING KNIFE": "PISAU BERBURU", "CURRENT OUTFIT": "SETELAN SAAT INI", "BRIAN'S MARINA CAP": "TOPI BRIAN'S MARINA", "SQUARE SHADES": "KACAMATA HITAM KOTAK", "COKE BAGGIE": "KANTONG KOKAIN", "IN HAND": "DI TANGAN", "SIDEARM": "SENJATA GENGGAM", "LONGARM": "SENJATA LARAS PANJANG", "MELEE": "SENJATA JARAK DEKAT", "EXPLOSIVES": "BAHAN PELEDAK", "EQUIPMENT": "PERLENGKAPAN", "HEADWEAR": "PENUTUP KEPALA", "HEADGEAR": "PENUTUP KEPALA", "OUTFITS": "SETELAN", "BAGS": "TAS", "GEAR": "PERALATAN", "EYEWEAR": "KACAMATA", "SMOKES & DRUGS": "ROKOK & NARKOBA", "COMPACT REVOLVER": "REVOLVER RINGKAS", "MILITARY PISTOL": "PISTOL MILITER", "PUMP ACTION SHOTGUN": "SHOTGUN POMPA", "DAMAGE": "KERUSAKAN", "ACCURACY": "AKURASI", "HANDLING": "PENGENDALIAN", "RANGE": "JANGKAUAN", "MODS": "MODIFIKASI", "MAG SIZE": "KAPASITAS MAGASIN", "HELD AMMO": "AMUNISI DIBAWA", "FIRE STYLE": "MODE TEMBAK", "BRAND": "MEREK", "CALIBER": "KALIBER", "SEMI-AUTO": "SEMI-OTOMATIS", "PUMP ACTION": "POMPA", "TAKE AMMO PACK": "AMBIL PAKET AMUNISI", "TAKE EXPLOSIVES PACK": "AMBIL PAKET PELEDAK", "WEAR STYLE": "GAYA PAKAI", "TAKE OFF": "LEPAS", "PUT ON": "PAKAI", "USE": "GUNAKAN", "ON": "DIPAKAI", "OFF": "DILEPAS"},
+  "tr": {"WEAPONS": "SİLAHLAR", "ITEMS": "EŞYALAR", "UNARMED": "SİLAHSIZ", "EMPTY": "BOŞ", "BINOCULARS": "DÜRBÜN", "FLASHLIGHT": "EL FENERİ", "FISHING ROD": "OLTA", "HUNTING KNIFE": "AV BIÇAĞI", "CURRENT OUTFIT": "MEVCUT KIYAFET", "BRIAN'S MARINA CAP": "BRIAN'S MARINA ŞAPKASI", "SQUARE SHADES": "KARE GÜNEŞ GÖZLÜĞÜ", "COKE BAGGIE": "KOKAİN POŞETİ", "IN HAND": "ELDE", "SIDEARM": "TABANCA", "LONGARM": "UZUN NAMLULU", "MELEE": "YAKIN DÖVÜŞ", "EXPLOSIVES": "PATLAYICILAR", "EQUIPMENT": "EKİPMAN", "HEADWEAR": "BAŞ GİYSİLERİ", "HEADGEAR": "BAŞ GİYSİLERİ", "OUTFITS": "KIYAFETLER", "BAGS": "ÇANTALAR", "GEAR": "TEÇHİZAT", "EYEWEAR": "GÖZLÜKLER", "SMOKES & DRUGS": "SİGARA & UYUŞTURUCU", "COMPACT REVOLVER": "KOMPAKT REVOLVER", "MILITARY PISTOL": "ASKERİ TABANCA", "PUMP ACTION SHOTGUN": "POMPALI TÜFEK", "DAMAGE": "HASAR", "ACCURACY": "İSABET", "HANDLING": "KONTROL", "RANGE": "MENZİL", "MODS": "MODLAR", "MAG SIZE": "ŞARJÖR KAPASİTESİ", "HELD AMMO": "TAŞINAN CEPHANE", "FIRE STYLE": "ATIŞ MODU", "BRAND": "MARKA", "CALIBER": "KALİBRE", "SEMI-AUTO": "YARI OTOMATİK", "PUMP ACTION": "POMPALI", "TAKE AMMO PACK": "CEPHANE PAKETİ AL", "TAKE EXPLOSIVES PACK": "PATLAYICI PAKETİ AL", "WEAR STYLE": "GİYİM TARZI", "TAKE OFF": "ÇIKAR", "PUT ON": "GİY", "USE": "KULLAN", "ON": "TAKILI", "OFF": "ÇIKARILDI"},
+  "vi": {"WEAPONS": "VŨ KHÍ", "ITEMS": "VẬT PHẨM", "UNARMED": "TAY KHÔNG", "EMPTY": "TRỐNG", "BINOCULARS": "ỐNG NHÒM", "FLASHLIGHT": "ĐÈN PIN", "FISHING ROD": "CẦN CÂU", "HUNTING KNIFE": "DAO SĂN", "CURRENT OUTFIT": "TRANG PHỤC HIỆN TẠI", "BRIAN'S MARINA CAP": "MŨ BRIAN'S MARINA", "SQUARE SHADES": "KÍNH RÂM VUÔNG", "COKE BAGGIE": "TÚI COCAINE", "IN HAND": "TRÊN TAY", "SIDEARM": "SÚNG NGẮN", "LONGARM": "SÚNG DÀI", "MELEE": "CẬN CHIẾN", "EXPLOSIVES": "CHẤT NỔ", "EQUIPMENT": "TRANG BỊ", "HEADWEAR": "ĐỒ ĐỘI ĐẦU", "HEADGEAR": "ĐỒ ĐỘI ĐẦU", "OUTFITS": "TRANG PHỤC", "BAGS": "TÚI XÁCH", "GEAR": "ĐỒ NGHỀ", "EYEWEAR": "KÍNH MẮT", "SMOKES & DRUGS": "THUỐC LÁ & MA TÚY", "COMPACT REVOLVER": "SÚNG LỤC Ổ XOAY NHỎ GỌN", "MILITARY PISTOL": "SÚNG LỤC QUÂN DỤNG", "PUMP ACTION SHOTGUN": "SHOTGUN BƠM", "DAMAGE": "SÁT THƯƠNG", "ACCURACY": "ĐỘ CHÍNH XÁC", "HANDLING": "ĐỘ ĐIỀU KHIỂN", "RANGE": "TẦM BẮN", "MODS": "NÂNG CẤP", "MAG SIZE": "DUNG LƯỢNG BĂNG ĐẠN", "HELD AMMO": "ĐẠN MANG THEO", "FIRE STYLE": "KIỂU BẮN", "BRAND": "THƯƠNG HIỆU", "CALIBER": "CỠ NÒNG", "SEMI-AUTO": "BÁN TỰ ĐỘNG", "PUMP ACTION": "BƠM", "TAKE AMMO PACK": "LẤY GÓI ĐẠN", "TAKE EXPLOSIVES PACK": "LẤY GÓI CHẤT NỔ", "WEAR STYLE": "KIỂU MẶC", "TAKE OFF": "CỞI RA", "PUT ON": "MẶC VÀO", "USE": "SỬ DỤNG", "ON": "ĐANG MẶC", "OFF": "ĐÃ CỞI"},
+  "fa": {"WEAPONS": "سلاح‌ها", "ITEMS": "آیتم‌ها", "UNARMED": "بدون سلاح", "EMPTY": "خالی", "BINOCULARS": "دوربین دوچشمی", "FLASHLIGHT": "چراغ‌قوه", "FISHING ROD": "چوب ماهیگیری", "HUNTING KNIFE": "چاقوی شکاری", "CURRENT OUTFIT": "دست‌لباس فعلی", "BRIAN'S MARINA CAP": "کلاه برایانز مارینا", "SQUARE SHADES": "عینک آفتابی مربعی", "COKE BAGGIE": "کیسه کوکائین", "IN HAND": "در دست", "SIDEARM": "سلاح کمری", "LONGARM": "سلاح بلند", "MELEE": "نبرد تن‌به‌تن", "EXPLOSIVES": "مواد منفجره", "EQUIPMENT": "تجهیزات", "HEADWEAR": "سرپوش‌ها", "HEADGEAR": "سرپوش‌ها", "OUTFITS": "دست‌لباس‌ها", "BAGS": "کیف‌ها", "GEAR": "ابزار", "EYEWEAR": "عینک‌ها", "SMOKES & DRUGS": "سیگار و مواد", "COMPACT REVOLVER": "هفت‌تیر جمع‌وجور", "MILITARY PISTOL": "کلت نظامی", "PUMP ACTION SHOTGUN": "شات‌گان پمپی", "DAMAGE": "آسیب", "ACCURACY": "دقت", "HANDLING": "کنترل", "RANGE": "برد", "MODS": "ارتقاها", "MAG SIZE": "ظرفیت خشاب", "HELD AMMO": "مهمات همراه", "FIRE STYLE": "حالت شلیک", "BRAND": "برند", "CALIBER": "کالیبر", "SEMI-AUTO": "نیمه‌خودکار", "PUMP ACTION": "پمپی", "TAKE AMMO PACK": "برداشتن بسته مهمات", "TAKE EXPLOSIVES PACK": "برداشتن بسته مواد منفجره", "WEAR STYLE": "نحوه پوشیدن", "TAKE OFF": "درآوردن", "PUT ON": "پوشیدن", "USE": "استفاده", "ON": "پوشیده", "OFF": "درآورده"},
+  "th": {"WEAPONS": "อาวุธ", "ITEMS": "ไอเทม", "UNARMED": "มือเปล่า", "EMPTY": "ว่าง", "BINOCULARS": "กล้องส่องทางไกล", "FLASHLIGHT": "ไฟฉาย", "FISHING ROD": "คันเบ็ด", "HUNTING KNIFE": "มีดล่าสัตว์", "CURRENT OUTFIT": "ชุดปัจจุบัน", "BRIAN'S MARINA CAP": "หมวกไบรอันส์ มารีนา", "SQUARE SHADES": "แว่นกันแดดทรงเหลี่ยม", "COKE BAGGIE": "ถุงโคเคน", "IN HAND": "ในมือ", "SIDEARM": "อาวุธพก", "LONGARM": "อาวุธยาว", "MELEE": "ประชิดตัว", "EXPLOSIVES": "วัตถุระเบิด", "EQUIPMENT": "อุปกรณ์", "HEADWEAR": "เครื่องสวมศีรษะ", "HEADGEAR": "เครื่องสวมศีรษะ", "OUTFITS": "ชุด", "BAGS": "กระเป๋า", "GEAR": "เครื่องมือ", "EYEWEAR": "แว่นตา", "SMOKES & DRUGS": "บุหรี่และยาเสพติด", "COMPACT REVOLVER": "ปืนลูกโม่คอมแพค", "MILITARY PISTOL": "ปืนพกทหาร", "PUMP ACTION SHOTGUN": "ปืนลูกซองแบบปั๊ม", "DAMAGE": "ความเสียหาย", "ACCURACY": "ความแม่นยำ", "HANDLING": "การควบคุม", "RANGE": "ระยะ", "MODS": "ม็อด", "MAG SIZE": "ความจุแม็กกาซีน", "HELD AMMO": "กระสุนที่มี", "FIRE STYLE": "รูปแบบการยิง", "BRAND": "ยี่ห้อ", "CALIBER": "ขนาดลำกล้อง", "SEMI-AUTO": "กึ่งอัตโนมัติ", "PUMP ACTION": "แบบปั๊ม", "TAKE AMMO PACK": "หยิบแพ็กกระสุน", "TAKE EXPLOSIVES PACK": "หยิบแพ็กระเบิด", "WEAR STYLE": "รูปแบบการสวม", "TAKE OFF": "ถอด", "PUT ON": "สวม", "USE": "ใช้", "ON": "สวมอยู่", "OFF": "ถอดแล้ว"},
+  "ta": {"WEAPONS": "ஆயுதங்கள்", "ITEMS": "பொருட்கள்", "UNARMED": "ஆயுதமின்றி", "EMPTY": "காலி", "BINOCULARS": "தொலைநோக்கி", "FLASHLIGHT": "டார்ச்", "FISHING ROD": "தூண்டில்", "HUNTING KNIFE": "வேட்டைக் கத்தி", "CURRENT OUTFIT": "தற்போதைய உடைத் தொகுப்பு", "BRIAN'S MARINA CAP": "பிரையன்ஸ் மரீனா தொப்பி", "SQUARE SHADES": "சதுர குளிர் கண்ணாடி", "COKE BAGGIE": "கோகைன் பை", "IN HAND": "கையில்", "SIDEARM": "கைத்துப்பாக்கி", "LONGARM": "நீள் துப்பாக்கி", "MELEE": "கைகலப்பு", "EXPLOSIVES": "வெடிபொருட்கள்", "EQUIPMENT": "உபகரணங்கள்", "HEADWEAR": "தலையணிகள்", "HEADGEAR": "தலையணிகள்", "OUTFITS": "உடைத் தொகுப்புகள்", "BAGS": "பைகள்", "GEAR": "கியர்", "EYEWEAR": "கண்ணாடிகள்", "SMOKES & DRUGS": "சிகரெட் & போதைப்பொருள்", "COMPACT REVOLVER": "காம்பேக்ட் ரிவால்வர்", "MILITARY PISTOL": "ராணுவ பிஸ்டல்", "PUMP ACTION SHOTGUN": "பம்ப் ஆக்ஷன் ஷாட்கன்", "DAMAGE": "சேதம்", "ACCURACY": "துல்லியம்", "HANDLING": "கையாளுதல்", "RANGE": "வரம்பு", "MODS": "மாட்கள்", "MAG SIZE": "மேகசின் அளவு", "HELD AMMO": "கையிருப்பு வெடிமருந்து", "FIRE STYLE": "சுடும் முறை", "BRAND": "பிராண்ட்", "CALIBER": "காலிபர்", "SEMI-AUTO": "செமி-ஆட்டோ", "PUMP ACTION": "பம்ப் ஆக்ஷன்", "TAKE AMMO PACK": "வெடிமருந்து பேக்கை எடு", "TAKE EXPLOSIVES PACK": "வெடிபொருள் பேக்கை எடு", "WEAR STYLE": "அணியும் விதம்", "TAKE OFF": "கழற்று", "PUT ON": "அணி", "USE": "பயன்படுத்து", "ON": "அணிந்துள்ளது", "OFF": "கழற்றப்பட்டது"},
+  "te": {"WEAPONS": "ఆయుధాలు", "ITEMS": "వస్తువులు", "UNARMED": "నిరాయుధం", "EMPTY": "ఖాళీ", "BINOCULARS": "బైనాక్యులర్స్", "FLASHLIGHT": "టార్చ్", "FISHING ROD": "చేపల గాలం", "HUNTING KNIFE": "వేట కత్తి", "CURRENT OUTFIT": "ప్రస్తుత అవుట్‌ఫిట్", "BRIAN'S MARINA CAP": "బ్రయాన్స్ మరీనా టోపీ", "SQUARE SHADES": "చతురస్ర సన్‌గ్లాసెస్", "COKE BAGGIE": "కొకైన్ పొట్లం", "IN HAND": "చేతిలో", "SIDEARM": "చిన్న ఆయుధం", "LONGARM": "పొడవాటి ఆయుధం", "MELEE": "మెలీ", "EXPLOSIVES": "పేలుడు పదార్థాలు", "EQUIPMENT": "పరికరాలు", "HEADWEAR": "తలకు ధరించేవి", "HEADGEAR": "తలకు ధరించేవి", "OUTFITS": "అవుట్‌ఫిట్‌లు", "BAGS": "బ్యాగులు", "GEAR": "గేర్", "EYEWEAR": "కళ్లద్దాలు", "SMOKES & DRUGS": "సిగరెట్లు & డ్రగ్స్", "COMPACT REVOLVER": "కాంపాక్ట్ రివాల్వర్", "MILITARY PISTOL": "మిలిటరీ పిస్టల్", "PUMP ACTION SHOTGUN": "పంప్ యాక్షన్ షాట్‌గన్", "DAMAGE": "నష్టం", "ACCURACY": "ఖచ్చితత్వం", "HANDLING": "హ్యాండ్లింగ్", "RANGE": "పరిధి", "MODS": "మోడ్స్", "MAG SIZE": "మ్యాగజైన్ సైజు", "HELD AMMO": "దగ్గరున్న మందుగుండు", "FIRE STYLE": "ఫైర్ స్టైల్", "BRAND": "బ్రాండ్", "CALIBER": "క్యాలిబర్", "SEMI-AUTO": "సెమీ-ఆటో", "PUMP ACTION": "పంప్ యాక్షన్", "TAKE AMMO PACK": "మందుగుండు ప్యాక్ తీసుకో", "TAKE EXPLOSIVES PACK": "పేలుడు ప్యాక్ తీసుకో", "WEAR STYLE": "ధరించే విధానం", "TAKE OFF": "తీసేయి", "PUT ON": "ధరించు", "USE": "వాడు", "ON": "ధరించారు", "OFF": "తీసేశారు"},
+  "mr": {"WEAPONS": "शस्त्रे", "ITEMS": "वस्तू", "UNARMED": "निःशस्त्र", "EMPTY": "रिकामे", "BINOCULARS": "दुर्बीण", "FLASHLIGHT": "टॉर्च", "FISHING ROD": "मासेमारीचा गळ", "HUNTING KNIFE": "शिकारी चाकू", "CURRENT OUTFIT": "सध्याचा पोशाख", "BRIAN'S MARINA CAP": "ब्रायन्स मरीना टोपी", "SQUARE SHADES": "चौकोनी गॉगल", "COKE BAGGIE": "कोकेनची पुडी", "IN HAND": "हातात", "SIDEARM": "लहान शस्त्र", "LONGARM": "लांब शस्त्र", "MELEE": "मेली", "EXPLOSIVES": "स्फोटके", "EQUIPMENT": "उपकरणे", "HEADWEAR": "शिरोवस्त्रे", "HEADGEAR": "शिरोवस्त्रे", "OUTFITS": "पोशाख", "BAGS": "बॅगा", "GEAR": "गिअर", "EYEWEAR": "चष्मे", "SMOKES & DRUGS": "सिगारेट आणि ड्रग्ज", "COMPACT REVOLVER": "कॉम्पॅक्ट रिव्हॉल्व्हर", "MILITARY PISTOL": "मिलिटरी पिस्तूल", "PUMP ACTION SHOTGUN": "पंप ॲक्शन शॉटगन", "DAMAGE": "नुकसान", "ACCURACY": "अचूकता", "HANDLING": "हाताळणी", "RANGE": "पल्ला", "MODS": "मॉड्स", "MAG SIZE": "मॅगझिन क्षमता", "HELD AMMO": "जवळचा दारूगोळा", "FIRE STYLE": "फायर पद्धत", "BRAND": "ब्रँड", "CALIBER": "कॅलिबर", "SEMI-AUTO": "सेमी-ऑटो", "PUMP ACTION": "पंप ॲक्शन", "TAKE AMMO PACK": "दारूगोळा पॅक घ्या", "TAKE EXPLOSIVES PACK": "स्फोटक पॅक घ्या", "WEAR STYLE": "घालण्याची पद्धत", "TAKE OFF": "काढा", "PUT ON": "घाला", "USE": "वापरा", "ON": "घातलेले", "OFF": "काढलेले"},
+  "uk": {"WEAPONS": "ЗБРОЯ", "ITEMS": "ПРЕДМЕТИ", "UNARMED": "БЕЗ ЗБРОЇ", "EMPTY": "ПОРОЖНЬО", "BINOCULARS": "БІНОКЛЬ", "FLASHLIGHT": "ЛІХТАРИК", "FISHING ROD": "ВУДКА", "HUNTING KNIFE": "МИСЛИВСЬКИЙ НІЖ", "CURRENT OUTFIT": "ПОТОЧНЕ ВБРАННЯ", "BRIAN'S MARINA CAP": "КЕПКА «БРАЙАНС МАРИНА»", "SQUARE SHADES": "КВАДРАТНІ СОНЦЕЗАХИСНІ ОКУЛЯРИ", "COKE BAGGIE": "ПАКЕТИК КОКАЇНУ", "IN HAND": "У РУКАХ", "SIDEARM": "КОРОТКОСТВОЛЬНА ЗБРОЯ", "LONGARM": "ДОВГОСТВОЛЬНА ЗБРОЯ", "MELEE": "БЛИЖНІЙ БІЙ", "EXPLOSIVES": "ВИБУХІВКА", "EQUIPMENT": "СПОРЯДЖЕННЯ", "HEADWEAR": "ГОЛОВНІ УБОРИ", "HEADGEAR": "ГОЛОВНІ УБОРИ", "OUTFITS": "ВБРАННЯ", "BAGS": "СУМКИ", "GEAR": "ЕКІПІРУВАННЯ", "EYEWEAR": "ОКУЛЯРИ", "SMOKES & DRUGS": "ЦИГАРКИ Й НАРКОТИКИ", "COMPACT REVOLVER": "КОМПАКТНИЙ РЕВОЛЬВЕР", "MILITARY PISTOL": "ВІЙСЬКОВИЙ ПІСТОЛЕТ", "PUMP ACTION SHOTGUN": "ПОМПОВА РУШНИЦЯ", "DAMAGE": "ШКОДА", "ACCURACY": "ВЛУЧНІСТЬ", "HANDLING": "КЕРОВАНІСТЬ", "RANGE": "ДАЛЬНІСТЬ", "MODS": "МОДИФІКАЦІЇ", "MAG SIZE": "ЄМНІСТЬ МАГАЗИНА", "HELD AMMO": "НАБОЇ З СОБОЮ", "FIRE STYLE": "РЕЖИМ ВОГНЮ", "BRAND": "ВИРОБНИК", "CALIBER": "КАЛІБР", "SEMI-AUTO": "НАПІВАВТОМАТ", "PUMP ACTION": "ПОМПОВИЙ", "TAKE AMMO PACK": "ВЗЯТИ НАБІР НАБОЇВ", "TAKE EXPLOSIVES PACK": "ВЗЯТИ НАБІР ВИБУХІВКИ", "WEAR STYLE": "СПОСІБ НОСІННЯ", "TAKE OFF": "ЗНЯТИ", "PUT ON": "ВДЯГНУТИ", "USE": "ВИКОРИСТАТИ", "ON": "ВДЯГНЕНО", "OFF": "ЗНЯТО"},
+  "nl": {"WEAPONS": "WAPENS", "ITEMS": "VOORWERPEN", "UNARMED": "ONGEWAPEND", "EMPTY": "LEEG", "BINOCULARS": "VERREKIJKER", "FLASHLIGHT": "ZAKLAMP", "FISHING ROD": "HENGEL", "HUNTING KNIFE": "JACHTMES", "CURRENT OUTFIT": "HUIDIGE OUTFIT", "BRIAN'S MARINA CAP": "BRIAN'S MARINA-PET", "SQUARE SHADES": "VIERKANTE ZONNEBRIL", "COKE BAGGIE": "ZAKJE COKE", "IN HAND": "IN HAND", "SIDEARM": "HANDWAPEN", "LONGARM": "LANG WAPEN", "MELEE": "MELEE", "EXPLOSIVES": "EXPLOSIEVEN", "EQUIPMENT": "UITRUSTING", "HEADWEAR": "HOOFDDEKSELS", "HEADGEAR": "HOOFDDEKSELS", "OUTFITS": "OUTFITS", "BAGS": "TASSEN", "GEAR": "SPULLEN", "EYEWEAR": "BRILLEN", "SMOKES & DRUGS": "SIGARETTEN & DRUGS", "COMPACT REVOLVER": "COMPACTE REVOLVER", "MILITARY PISTOL": "MILITAIR PISTOOL", "PUMP ACTION SHOTGUN": "POMPACTIE-SHOTGUN", "DAMAGE": "SCHADE", "ACCURACY": "PRECISIE", "HANDLING": "HANTEERBAARHEID", "RANGE": "BEREIK", "MODS": "MODS", "MAG SIZE": "MAGAZIJNGROOTTE", "HELD AMMO": "MUNITIE BIJ JE", "FIRE STYLE": "VUURMODUS", "BRAND": "MERK", "CALIBER": "KALIBER", "SEMI-AUTO": "SEMI-AUTOMATISCH", "PUMP ACTION": "POMPACTIE", "TAKE AMMO PACK": "MUNITIEPAKKET PAKKEN", "TAKE EXPLOSIVES PACK": "EXPLOSIEVENPAKKET PAKKEN", "WEAR STYLE": "DRAAGSTIJL", "TAKE OFF": "UITDOEN", "PUT ON": "AANDOEN", "USE": "GEBRUIKEN", "ON": "AAN", "OFF": "UIT"},
+  "fil": {"WEAPONS": "MGA ARMAS", "ITEMS": "MGA GAMIT", "UNARMED": "WALANG ARMAS", "EMPTY": "WALANG LAMAN", "BINOCULARS": "BINOCULARS", "FLASHLIGHT": "FLASHLIGHT", "FISHING ROD": "PAMINGWIT", "HUNTING KNIFE": "KUTSILYO PANGANGASO", "CURRENT OUTFIT": "KASALUKUYANG OUTFIT", "BRIAN'S MARINA CAP": "SUMBRERO NG BRIAN'S MARINA", "SQUARE SHADES": "PARISUKAT NA SHADES", "COKE BAGGIE": "SUPOT NG KOKAINA", "IN HAND": "SA KAMAY", "SIDEARM": "PISTOLA", "LONGARM": "MAHABANG BARIL", "MELEE": "MELEE", "EXPLOSIVES": "PAMPASABOG", "EQUIPMENT": "KAGAMITAN", "HEADWEAR": "PANTAKIP SA ULO", "HEADGEAR": "PANTAKIP SA ULO", "OUTFITS": "MGA OUTFIT", "BAGS": "MGA BAG", "GEAR": "GEAR", "EYEWEAR": "SALAMIN SA MATA", "SMOKES & DRUGS": "SIGARILYO AT DROGA", "COMPACT REVOLVER": "COMPACT REVOLVER", "MILITARY PISTOL": "MILITARY PISTOL", "PUMP ACTION SHOTGUN": "PUMP ACTION SHOTGUN", "DAMAGE": "PINSALA", "ACCURACY": "KATUMPAKAN", "HANDLING": "HANDLING", "RANGE": "ABOT", "MODS": "MODS", "MAG SIZE": "LAKI NG MAGASIN", "HELD AMMO": "DALANG BALA", "FIRE STYLE": "ESTILO NG PAGPUTOK", "BRAND": "BRAND", "CALIBER": "KALIBRE", "SEMI-AUTO": "SEMI-AUTO", "PUMP ACTION": "PUMP ACTION", "TAKE AMMO PACK": "KUNIN ANG PACK NG BALA", "TAKE EXPLOSIVES PACK": "KUNIN ANG PACK NG PAMPASABOG", "WEAR STYLE": "ESTILO NG PAGSUOT", "TAKE OFF": "HUBARIN", "PUT ON": "ISUOT", "USE": "GAMITIN", "ON": "SUOT", "OFF": "HINUBAD"},
+  "ms": {"WEAPONS": "SENJATA", "ITEMS": "ITEM", "UNARMED": "TANPA SENJATA", "EMPTY": "KOSONG", "BINOCULARS": "TEROPONG", "FLASHLIGHT": "LAMPU SULUH", "FISHING ROD": "JORAN", "HUNTING KNIFE": "PISAU MEMBURU", "CURRENT OUTFIT": "PERSALINAN SEMASA", "BRIAN'S MARINA CAP": "TOPI BRIAN'S MARINA", "SQUARE SHADES": "CERMIN MATA HITAM SEGI EMPAT", "COKE BAGGIE": "UNCANG KOKAIN", "IN HAND": "DI TANGAN", "SIDEARM": "SENJATA TANGAN", "LONGARM": "SENJATA LARAS PANJANG", "MELEE": "JARAK DEKAT", "EXPLOSIVES": "BAHAN LETUPAN", "EQUIPMENT": "PERALATAN", "HEADWEAR": "PENUTUP KEPALA", "HEADGEAR": "PENUTUP KEPALA", "OUTFITS": "PERSALINAN", "BAGS": "BEG", "GEAR": "KELENGKAPAN", "EYEWEAR": "CERMIN MATA", "SMOKES & DRUGS": "ROKOK & DADAH", "COMPACT REVOLVER": "REVOLVER KOMPAK", "MILITARY PISTOL": "PISTOL TENTERA", "PUMP ACTION SHOTGUN": "SENAPANG PATAH PAM", "DAMAGE": "KEROSAKAN", "ACCURACY": "KETEPATAN", "HANDLING": "KAWALAN", "RANGE": "JULAT", "MODS": "MOD", "MAG SIZE": "SAIZ MAGAZIN", "HELD AMMO": "PELURU DIBAWA", "FIRE STYLE": "GAYA TEMBAKAN", "BRAND": "JENAMA", "CALIBER": "KALIBER", "SEMI-AUTO": "SEPARA AUTO", "PUMP ACTION": "PAM", "TAKE AMMO PACK": "AMBIL PEK PELURU", "TAKE EXPLOSIVES PACK": "AMBIL PEK LETUPAN", "WEAR STYLE": "GAYA PAKAI", "TAKE OFF": "TANGGALKAN", "PUT ON": "PAKAI", "USE": "GUNA", "ON": "DIPAKAI", "OFF": "DITANGGALKAN"},
+  "sw": {"WEAPONS": "SILAHA", "ITEMS": "VITU", "UNARMED": "BILA SILAHA", "EMPTY": "TUPU", "BINOCULARS": "DARUBINI", "FLASHLIGHT": "TOCHI", "FISHING ROD": "FIMBO YA KUVULIA SAMAKI", "HUNTING KNIFE": "KISU CHA KUWINDA", "CURRENT OUTFIT": "MAVAZI YA SASA", "BRIAN'S MARINA CAP": "KOFIA YA BRIAN'S MARINA", "SQUARE SHADES": "MIWANI YA JUA YA MRABA", "COKE BAGGIE": "KIFUKO CHA KOKEINI", "IN HAND": "MKONONI", "SIDEARM": "BASTOLA", "LONGARM": "SILAHA NDEFU", "MELEE": "MAPIGANO YA KARIBU", "EXPLOSIVES": "VILIPUZI", "EQUIPMENT": "VIFAA", "HEADWEAR": "VAZI LA KICHWA", "HEADGEAR": "VAZI LA KICHWA", "OUTFITS": "MAVAZI KAMILI", "BAGS": "MIKOBA", "GEAR": "ZANA", "EYEWEAR": "MIWANI", "SMOKES & DRUGS": "SIGARA NA DAWA ZA KULEVYA", "COMPACT REVOLVER": "RIVOLVA NDOGO", "MILITARY PISTOL": "BASTOLA YA KIJESHI", "PUMP ACTION SHOTGUN": "SHOTGUN YA PAMPU", "DAMAGE": "UHARIBIFU", "ACCURACY": "USAHIHI", "HANDLING": "UDHIBITI", "RANGE": "UMBALI", "MODS": "MAREKEBISHO", "MAG SIZE": "UKUBWA WA MAGAZINI", "HELD AMMO": "RISASI ULIZOBEBA", "FIRE STYLE": "MTINDO WA KUFYATUA", "BRAND": "CHAPA", "CALIBER": "KALIBA", "SEMI-AUTO": "NUSU-OTOMATIKI", "PUMP ACTION": "PAMPU", "TAKE AMMO PACK": "CHUKUA PAKITI YA RISASI", "TAKE EXPLOSIVES PACK": "CHUKUA PAKITI YA VILIPUZI", "WEAR STYLE": "MTINDO WA KUVAA", "TAKE OFF": "VUA", "PUT ON": "VAA", "USE": "TUMIA", "ON": "IMEVALIWA", "OFF": "IMEVULIWA"},
+  "ro": {"WEAPONS": "ARME", "ITEMS": "OBIECTE", "UNARMED": "NEÎNARMAT", "EMPTY": "GOL", "BINOCULARS": "BINOCLU", "FLASHLIGHT": "LANTERNĂ", "FISHING ROD": "UNDIȚĂ", "HUNTING KNIFE": "CUȚIT DE VÂNĂTOARE", "CURRENT OUTFIT": "ȚINUTA ACTUALĂ", "BRIAN'S MARINA CAP": "ȘAPCĂ BRIAN'S MARINA", "SQUARE SHADES": "OCHELARI DE SOARE PĂTRAȚI", "COKE BAGGIE": "PUNGULIȚĂ DE COCAINĂ", "IN HAND": "ÎN MÂNĂ", "SIDEARM": "ARMĂ SCURTĂ", "LONGARM": "ARMĂ LUNGĂ", "MELEE": "CORP LA CORP", "EXPLOSIVES": "EXPLOZIBILI", "EQUIPMENT": "ECHIPAMENT", "HEADWEAR": "ACOPERĂMINTE PENTRU CAP", "HEADGEAR": "ACOPERĂMINTE PENTRU CAP", "OUTFITS": "ȚINUTE", "BAGS": "GENȚI", "GEAR": "DOTĂRI", "EYEWEAR": "OCHELARI", "SMOKES & DRUGS": "ȚIGĂRI ȘI DROGURI", "COMPACT REVOLVER": "REVOLVER COMPACT", "MILITARY PISTOL": "PISTOL MILITAR", "PUMP ACTION SHOTGUN": "PUȘCĂ CU POMPĂ", "DAMAGE": "DAUNE", "ACCURACY": "PRECIZIE", "HANDLING": "MANEVRABILITATE", "RANGE": "RAZĂ", "MODS": "MODIFICĂRI", "MAG SIZE": "CAPACITATE ÎNCĂRCĂTOR", "HELD AMMO": "MUNIȚIE DEȚINUTĂ", "FIRE STYLE": "MOD DE TRAGERE", "BRAND": "MARCĂ", "CALIBER": "CALIBRU", "SEMI-AUTO": "SEMIAUTOMAT", "PUMP ACTION": "CU POMPĂ", "TAKE AMMO PACK": "PRELUARE PACHET MUNIȚIE", "TAKE EXPLOSIVES PACK": "PRELUARE PACHET EXPLOZIBILI", "WEAR STYLE": "MOD DE PURTARE", "TAKE OFF": "SCOATERE", "PUT ON": "PUNERE", "USE": "UTILIZARE", "ON": "PURTAT", "OFF": "SCOS"},
+  "el": {"WEAPONS": "ΟΠΛΑ", "ITEMS": "ΑΝΤΙΚΕΙΜΕΝΑ", "UNARMED": "ΑΟΠΛΟΣ", "EMPTY": "ΚΕΝΟ", "BINOCULARS": "ΚΙΑΛΙΑ", "FLASHLIGHT": "ΦΑΚΟΣ", "FISHING ROD": "ΚΑΛΑΜΙ ΨΑΡΕΜΑΤΟΣ", "HUNTING KNIFE": "ΚΥΝΗΓΕΤΙΚΟ ΜΑΧΑΙΡΙ", "CURRENT OUTFIT": "ΤΡΕΧΟΝ ΝΤΥΣΙΜΟ", "BRIAN'S MARINA CAP": "ΚΑΣΚΕΤΟ ΜΠΡΑΪΑΝΣ ΜΑΡΙΝΑ", "SQUARE SHADES": "ΤΕΤΡΑΓΩΝΑ ΓΥΑΛΙΑ ΗΛΙΟΥ", "COKE BAGGIE": "ΣΑΚΟΥΛΑΚΙ ΚΟΚΑΪΝΗΣ", "IN HAND": "ΣΤΟ ΧΕΡΙ", "SIDEARM": "ΠΙΣΤΟΛΙ", "LONGARM": "ΜΑΚΡΥΚΑΝΟ", "MELEE": "ΣΩΜΑ ΜΕ ΣΩΜΑ", "EXPLOSIVES": "ΕΚΡΗΚΤΙΚΑ", "EQUIPMENT": "ΕΞΟΠΛΙΣΜΟΣ", "HEADWEAR": "ΚΑΛΥΜΜΑΤΑ ΚΕΦΑΛΗΣ", "HEADGEAR": "ΚΑΛΥΜΜΑΤΑ ΚΕΦΑΛΗΣ", "OUTFITS": "ΝΤΥΣΙΜΑΤΑ", "BAGS": "ΤΣΑΝΤΕΣ", "GEAR": "ΣΥΝΕΡΓΑ", "EYEWEAR": "ΓΥΑΛΙΑ", "SMOKES & DRUGS": "ΤΣΙΓΑΡΑ & ΝΑΡΚΩΤΙΚΑ", "COMPACT REVOLVER": "ΜΙΚΡΟ ΠΕΡΙΣΤΡΟΦΟ", "MILITARY PISTOL": "ΣΤΡΑΤΙΩΤΙΚΟ ΠΙΣΤΟΛΙ", "PUMP ACTION SHOTGUN": "ΚΑΡΑΜΠΙΝΑ ΜΕ ΑΝΤΛΙΑ", "DAMAGE": "ΖΗΜΙΑ", "ACCURACY": "ΑΚΡΙΒΕΙΑ", "HANDLING": "ΧΕΙΡΙΣΜΟΣ", "RANGE": "ΒΕΛΗΝΕΚΕΣ", "MODS": "ΤΡΟΠΟΠΟΙΗΣΕΙΣ", "MAG SIZE": "ΧΩΡΗΤΙΚΟΤΗΤΑ ΓΕΜΙΣΤΗΡΑ", "HELD AMMO": "ΠΥΡΟΜΑΧΙΚΑ ΠΑΝΩ ΣΟΥ", "FIRE STYLE": "ΤΡΟΠΟΣ ΒΟΛΗΣ", "BRAND": "ΜΑΡΚΑ", "CALIBER": "ΔΙΑΜΕΤΡΗΜΑ", "SEMI-AUTO": "ΗΜΙΑΥΤΟΜΑΤΟ", "PUMP ACTION": "ΜΕ ΑΝΤΛΙΑ", "TAKE AMMO PACK": "ΛΗΨΗ ΠΑΚΕΤΟΥ ΠΥΡΟΜΑΧΙΚΩΝ", "TAKE EXPLOSIVES PACK": "ΛΗΨΗ ΠΑΚΕΤΟΥ ΕΚΡΗΚΤΙΚΩΝ", "WEAR STYLE": "ΤΡΟΠΟΣ ΕΝΔΥΣΗΣ", "TAKE OFF": "ΑΦΑΙΡΕΣΗ", "PUT ON": "ΦΟΡΕΜΑ", "USE": "ΧΡΗΣΗ", "ON": "ΦΟΡΕΜΕΝΟ", "OFF": "ΒΓΑΛΜΕΝΟ"},
+  "cs": {"WEAPONS": "ZBRANĚ", "ITEMS": "PŘEDMĚTY", "UNARMED": "BEZ ZBRANĚ", "EMPTY": "PRÁZDNÉ", "BINOCULARS": "DALEKOHLED", "FLASHLIGHT": "SVÍTILNA", "FISHING ROD": "RYBÁŘSKÝ PRUT", "HUNTING KNIFE": "LOVECKÝ NŮŽ", "CURRENT OUTFIT": "AKTUÁLNÍ OBLEČENÍ", "BRIAN'S MARINA CAP": "KŠILTOVKA BRIAN'S MARINA", "SQUARE SHADES": "HRANATÉ SLUNEČNÍ BRÝLE", "COKE BAGGIE": "SÁČEK KOKAINU", "IN HAND": "V RUCE", "SIDEARM": "KRÁTKÁ ZBRAŇ", "LONGARM": "DLOUHÁ ZBRAŇ", "MELEE": "BOJ ZBLÍZKA", "EXPLOSIVES": "VÝBUŠNINY", "EQUIPMENT": "VYBAVENÍ", "HEADWEAR": "POKRÝVKY HLAVY", "HEADGEAR": "POKRÝVKY HLAVY", "OUTFITS": "OBLEČENÍ", "BAGS": "TAŠKY", "GEAR": "VÝSTROJ", "EYEWEAR": "BRÝLE", "SMOKES & DRUGS": "CIGARETY A DROGY", "COMPACT REVOLVER": "KOMPAKTNÍ REVOLVER", "MILITARY PISTOL": "VOJENSKÁ PISTOLE", "PUMP ACTION SHOTGUN": "PUMPOVACÍ BROKOVNICE", "DAMAGE": "POŠKOZENÍ", "ACCURACY": "PŘESNOST", "HANDLING": "OVLADATELNOST", "RANGE": "DOSTŘEL", "MODS": "ÚPRAVY", "MAG SIZE": "KAPACITA ZÁSOBNÍKU", "HELD AMMO": "MUNICE U SEBE", "FIRE STYLE": "REŽIM PALBY", "BRAND": "ZNAČKA", "CALIBER": "RÁŽE", "SEMI-AUTO": "POLOAUTOMAT", "PUMP ACTION": "PUMPOVACÍ", "TAKE AMMO PACK": "VZÍT BALÍČEK MUNICE", "TAKE EXPLOSIVES PACK": "VZÍT BALÍČEK VÝBUŠNIN", "WEAR STYLE": "ZPŮSOB NOŠENÍ", "TAKE OFF": "SUNDAT", "PUT ON": "NASADIT", "USE": "POUŽÍT", "ON": "NASAZENO", "OFF": "SUNDÁNO"},
+};
+for (const [l, w] of Object.entries(WHEEL_WORDS)) WORDS[l] = Object.assign(WORDS[l] || {}, w);
+BUTTON_NAMES.push("TAKE AMMO PACK", "TAKE EXPLOSIVES PACK", "WEAR STYLE", "TAKE OFF", "PUT ON", "USE");
+
+// the wheel's tabs, at 16:9 (fractions of the picture)
+const WHEEL_TABS = [
+  { en: "WEAPONS", r: { x: 0.4464, y: 0.088, w: 0.0588, h: 0.0324 }, inner: { x: 0.449, y: 0.093, w: 0.053, h: 0.022 } },
+  { en: "ITEMS", r: { x: 0.5094, y: 0.088, w: 0.0448, h: 0.0324 }, inner: { x: 0.512, y: 0.093, w: 0.040, h: 0.022 } },
+];
+
+/** Share of an area's pixels (every other one) that fit `rule`. */
+function share(f, r, rule) {
+  const p = f.pixels(r, Object.assign({ step: 2 }, rule));
+  return p.count / Math.max(Math.ceil(r.w / 2) * Math.ceil(r.h / 2), 1);
+}
+
+/** Which tab is open, from pixels only: one tab white with dark letters, the other dark with white letters, nothing
+ *  white just around them. "weapons" | "items" | null. */
+function wheelTab(f) {
+  const s = WHEEL_TABS.map((t) => {
+    const r = pxRect(f, t.inner);
+    return { white: share(f, r, { bright: [215, 255], spread: [0, 36] }), dark: share(f, r, { bright: [0, 95] }) };
+  });
+  const open = (a) => a.white > 0.5 && a.dark > 0.04 && a.dark < 0.45;
+  const shut = (a) => a.dark > 0.45 && a.white > 0.04 && a.white < 0.4;
+  const which = open(s[0]) && shut(s[1]) ? "weapons" : open(s[1]) && shut(s[0]) ? "items" : null;
+  if (!which) return null;
+  // (the tabs stand alone: no white just left of them nor under them)
+  const left = pxRect(f, { x: 0.425, y: 0.093, w: 0.018, h: 0.022 }), under = pxRect(f, { x: 0.45, y: 0.126, w: 0.1, h: 0.012 });
+  if (share(f, left, { bright: [215, 255] }) > 0.3 || share(f, under, { bright: [215, 255] }) > 0.3) return null;
+  return { tab: which };
+}
+
+/** A segment's words joined (marks OCR read from icons left out). */
+const segText = (s) => s.words.map((w) => w.text).filter((t) => /[\p{L}\p{N}]/u.test(t)).join(" ").trim();
+
+/** One line of the wheel as a text box over the English: its colours from the picture, `align` its place. */
+function wheelBox(f, s, en, ar, opts) {
+  const lh = s.y1 - s.y0;
+  const pad = Math.max(Math.round(lh * 0.35), 3);
+  let x0 = s.x0 - pad, x1 = s.x1 + pad;
+  // (room for a longer translation: grown from the English's edge, or both ways when centred)
+  const need = Math.round((ar ? ar.length : en.length * 0.8) * lh * 0.62 + 2 * pad);
+  if (need > x1 - x0) {
+    const more = need - (x1 - x0);
+    if (opts.align === "center") (x0 -= Math.round(more / 2)), (x1 += Math.round(more / 2));
+    else if (opts.align === "right") x0 -= more;
+    else x1 += more;
+  }
+  x0 = Math.max(x0, 0);
+  x1 = Math.min(x1, f.w - 1);
+  const y0 = Math.max(s.y0 - Math.round(lh * 0.45), 0), y1 = Math.min(s.y1 + Math.round(lh * 0.3), f.h - 1);
+  const ring = f.median({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }, { step_x: 2, step_y: 1, exclude: [s.x0, s.y0, s.x1, s.y1] }) || { r: 0, g: 0, b: 0 };
+  const fg = f.contrast({ x: s.x0, y: s.y0, w: s.x1 - s.x0 + 1, h: lh + 1 }, ring, 0.125) || { r: 255, g: 255, b: 255 };
+  return {
+    en, ar, icons: [], fixed: !!ar, lines: 1,
+    rect: f.box(x0, y0, x1 - x0, y1 - y0),
+    bg: backdrop(f, x0, y0, x1, y1, s) || hex(ring), fg: hex(fg),
+    line_h: (lh / f.h) * (opts.scale || 1.15), size: 1,
+    font: textFont(), weight: opts.weight || 700, align: opts.align || "left",
+    item: false, right: opts.align === "right", wrap: "no", missed: 0,
+  };
+}
+
+function readWheel(f, k) {
+  const menu = [];
+  // the tabs: the open one white with dark letters, the other the other way round
+  for (const t of WHEEL_TABS) {
+    const ar = ownWord(t.en, true);
+    if (!ar) continue;
+    const r = pxRect(f, t.r), inner = pxRect(f, t.inner);
+    const bg = f.median(inner, { step_x: 2, step_y: 2 }) || { r: 0, g: 0, b: 0 };
+    const fg = f.contrast(inner, bg, 0.125) || (bg.r + bg.g + bg.b > 382 ? { r: 20, g: 20, b: 24 } : { r: 255, g: 255, b: 255 });
+    menu.push({
+      en: t.en, ar, icons: [], fixed: true, lines: 1, rect: f.box(r.x, r.y, r.w, r.h), bg: hex(bg), fg: hex(fg),
+      line_h: 0.0215, size: 1, font: textFont(), weight: 700, align: "center", item: false, right: false, wrap: "no", missed: 0,
+    });
+  }
+  // the selected slot's name and kind, in the middle of the ring
+  const mid = segments(f, pxRect(f, { x: 0.38, y: 0.445, w: 0.24, h: 0.095 }), { scale: 1 }, 3);
+  mid.forEach((s, i) => {
+    const en = segText(s);
+    if (!/\p{L}{2}/u.test(en)) return;
+    const ar = ownWord(en);
+    // a weapon's make and model ("WORTHAM WCR1", "FORTUNE & SON MORELAND 850", OCR reading "WCRI"): the game's
+    // name, left as it is; on the items' tab a name the script doesn't know goes to the translator
+    if (!ar && (k.tab === "weapons" || /\d/.test(en))) return;
+    menu.push(wheelBox(f, s, en, ar, { align: "center", weight: i === 0 ? 700 : 500 }));
+  });
+  // a weapon's panel at the right: its kind under its name, the stats' names, the words among their values
+  const P = pxRect(f, { x: 0.757, y: 0.565, w: 0.228, h: 0.36 });
+  if (f.mean(pxRect(f, { x: 0.765, y: 0.59, w: 0.2, h: 0.3 }), { step: 6 }) < 110) {
+    const segs = segments(f, P, { scale: 1 }, 3);
+    const head = segs.length ? segs[0].y0 : 0;
+    for (const s of segs) {
+      const en = segText(s);
+      if (!/\p{L}{2}/u.test(en)) continue;
+      const value = s.x0 > P.x + P.w * 0.45;
+      const ar = ownWord(en, true);
+      const kind = !value && s.y0 > head + f.h * 0.012 && s.y0 < head + f.h * 0.05; // the line under the name
+      if (!ar && !kind) continue;
+      if (!ar && /\d/.test(en)) continue;
+      menu.push(wheelBox(f, s, en, ar, { align: value ? "right" : "left", weight: 700, scale: 1.1 }));
+    }
+  }
+  // worn or not, under the items' slots ("ON" / "OFF")
+  if (k.tab === "items") {
+    // (the three rows the slots' labels sit on: a small search, the words are short)
+    const rows = [0.365, 0.512, 0.662].flatMap((y) => segments(f, pxRect(f, { x: 0.29, y, w: 0.42, h: 0.04 }), { scale: 2 }, 3));
+    for (const s of rows) {
+      const en = segText(s).toUpperCase();
+      if ((en !== "ON" && en !== "OFF") || (s.x0 > f.w * 0.42 && s.x1 < f.w * 0.58)) continue;
+      const ar = ownWord(en, true);
+      if (ar) menu.push(wheelBox(f, s, en, ar, { align: "center", weight: 700 }));
+    }
+  }
+  const buttons = readButtons(f);
+  return { menu, buttons };
+}
+
+pages.add({
+  id: "gta6_wheel",
+  option: "weapon_wheel",
+  hold: { follow: "menu", content: { x: 0.29, y: 0.08, w: 0.7, h: 0.86 }, buttons: { x: 0.45, y: 0.935, w: 0.535, h: 0.05 } },
+  present(f) {
+    return wheelTab(f);
+  },
+  read(f, k) {
+    if (!k) return null;
+    const r = readWheel(f, k);
+    if (r.menu.length < 2) return null;
+    this.tab = k.tab;
+    return {
+      id: "gta6_wheel", title: { x: 0, y: 0, w: 0, h: 0 }, menu: r.menu, buttons: r.buttons, buttons_row: buttonsRow(r.buttons),
+      follow: "menu", content_rect: { x: 0.29, y: 0.08, w: 0.7, h: 0.86 }, buttons_rect: { x: 0.45, y: 0.935, w: 0.535, h: 0.05 },
+    };
+  },
+  // still the wheel, on the same tab (the other tab is a new read)
+  same(f) {
+    const k = wheelTab(f);
+    return !!k && k.tab === this.tab;
   },
 });

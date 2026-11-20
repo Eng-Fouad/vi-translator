@@ -680,6 +680,188 @@ impl Translator {
         Ok(self.llm_reply(&ar, &colors, icons, line))
     }
 
+    /// Snapshots with Claude or ChatGPT: the whole picture (a JPEG, base64) and the text blocks the
+    /// app read on it (number, English), in one request. The model sees where each block is and what is
+    /// around it, fixes what OCR misread, and answers each block's translation by its number. Blocks it
+    /// finds aren't real text come back empty.
+    pub fn picture(&mut self, cfg: &Config, jpeg_b64: &str, blocks: &[(usize, String)]) -> Result<HashMap<usize, String>> {
+        let lang = crate::langs::get(&cfg.target_lang);
+        let target = if lang.code == "ar" {
+            DIALECTS.iter().find(|d| d.0 == cfg.dialect).unwrap_or(&DIALECTS[0]).1.to_string()
+        } else {
+            format!("{} ({}), natural and readable", lang.name, lang.native)
+        };
+        let name = lang.name;
+        let system = format!(
+            "You translate the text on a video-game screenshot into {name}, like a translated photo.\n\
+             Target language: {target}.\n\
+             You get the screenshot and a numbered list of the text blocks an OCR read on it, top to bottom.\n\
+             Rules:\n\
+             - Answer ONLY a JSON object: {{\"1\": \"translation\", \"2\": \"translation\", ...}}, one entry per block number.\n\
+             - The OCR may have misread letters: use the picture to read each block correctly, then translate it.\n\
+             - Use the whole screen as context (a menu, a map, a phone, a mission briefing) for the right words.\n\
+             - Keep names of people, places, brands, vehicles and numbers as they are.\n\
+             - Menu items, tabs and buttons stay short; sentences read naturally.\n\
+             - A block that is not real text (OCR noise, a logo) gets an empty string."
+        );
+        let list: Vec<String> = blocks.iter().map(|(n, en)| format!("{n}: {en}")).collect();
+        let prompt = format!("Text blocks:\n{}", list.join("\n"));
+        let text = if cfg.engine == "openai" {
+            need(&cfg.openai_key, "OpenAI API key")?;
+            let model = cfg.openai_model.trim();
+            let effort = if model.contains("luna") || model.contains("terra") { "none" } else { "low" };
+            let body = json!({
+                "model": model,
+                "instructions": system,
+                "input": [{ "role": "user", "content": [
+                    { "type": "input_image", "image_url": format!("data:image/jpeg;base64,{jpeg_b64}") },
+                    { "type": "input_text", "text": prompt },
+                ]}],
+                "max_output_tokens": 8000,
+                "reasoning": { "effort": effort },
+                "store": false,
+            });
+            let req = self.http.post("https://api.openai.com/v1/responses").bearer_auth(cfg.openai_key.trim());
+            let v = self.post_json(req.json(&body))?;
+            let (pin, pout) = openai_price(model);
+            self.cost_usd += (v["usage"]["input_tokens"].as_f64().unwrap_or(0.0) * pin + v["usage"]["output_tokens"].as_f64().unwrap_or(0.0) * pout) / 1e6;
+            openai_text(&v).unwrap_or_default()
+        } else {
+            need(&cfg.claude_key, "Anthropic API key")?;
+            let model = cfg.claude_model.trim();
+            let mut body = json!({
+                "model": model,
+                "max_tokens": 8000,
+                "system": system,
+                "messages": [{ "role": "user", "content": [
+                    { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": jpeg_b64 } },
+                    { "type": "text", "text": prompt },
+                ]}],
+                "output_config": { "effort": "low" },
+            });
+            if model.starts_with("claude-haiku") {
+                body["thinking"] = json!({ "type": "disabled" });
+            }
+            let req = self.http.post("https://api.anthropic.com/v1/messages").header("x-api-key", &cfg.claude_key).header("anthropic-version", "2026-10-21");
+            let v = self.post_json(req.json(&body))?;
+            let (pin, pout) = claude_price(model);
+            self.cost_usd += (v["usage"]["input_tokens"].as_f64().unwrap_or(0.0) * pin + v["usage"]["output_tokens"].as_f64().unwrap_or(0.0) * pout) / 1e6;
+            if v["stop_reason"] == "refusal" {
+                bail!("the model declined to translate this picture");
+            }
+            v["content"].as_array().map(|b| b.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect()).unwrap_or_default()
+        };
+        // the JSON object in the answer (a model may wrap it in a code fence)
+        let (a, b) = (text.find('{'), text.rfind('}'));
+        let Some(obj) = a.zip(b).filter(|(a, b)| a < b).map(|(a, b)| &text[a..=b]) else {
+            bail!("the answer had no translations: {}", text.chars().take(160).collect::<String>());
+        };
+        let v: Value = serde_json::from_str(obj).context("the answer wasn't valid JSON")?;
+        Ok(v.as_object().map(|m| m.iter().filter_map(|(k, v)| Some((k.trim().parse().ok()?, v.as_str()?.trim().to_string()))).collect()).unwrap_or_default())
+    }
+
+    /// Snapshots with Gemini's image model ("Nano Banana"): the picture goes to Google with an instruction
+    /// to put every bit of its text in the target language, keeping everything else as it is, and comes
+    /// back redrawn (the Interactions API).
+    pub fn gemini_image(&self, key: &str, model: &str, lang: &str, jpeg: &[u8], w: u32, h: u32) -> Result<(Vec<u8>, String)> {
+        use base64::Engine as _;
+        need(key, "Gemini API key")?;
+        let l = crate::langs::get(lang);
+        let prompt = format!(
+            "This is a screenshot of a video game. Make the same screenshot as if the game were localized into {name} ({native}).\n\
+             - Replace every piece of English text with its {name} translation: the phone and its apps, menus, subtitles, \
+             instructions, buttons and their labels, prompts, signs and logos on the screen. Translate naturally, as a \
+             professional game localization would; write names in {name} script.\n\
+             - Set the {name} text in the same place, size, colour, weight and style as the English it replaces{rtl}.\n\
+             - Change NOTHING else: keep the same composition, people, faces, vehicles, roads, sky, buildings, the minimap \
+             and its icons, the speedometer and every number, button icons and colours exactly as they are.\n\
+             - Keep the image's full frame and aspect ratio.",
+            name = l.name,
+            native = l.native,
+            rtl = if l.rtl { ", right-to-left and right-aligned where the English was left-aligned" } else { "" },
+        );
+        let ratio = w as f64 / h.max(1) as f64;
+        let aspect = [("16:9", 16.0 / 9.0), ("4:3", 4.0 / 3.0), ("3:2", 1.5), ("1:1", 1.0), ("21:9", 21.0 / 9.0), ("16:10", 1.6)]
+            .iter()
+            .min_by(|a, b| (a.1 - ratio).abs().total_cmp(&(b.1 - ratio).abs()))
+            .map(|a| a.0)
+            .unwrap_or("16:9");
+        let model = if model.trim().is_empty() { "gemini-nano-banana-2.1" } else { model.trim() };
+        let body = json!({
+            "model": model,
+            "input": [
+                { "type": "text", "text": prompt },
+                { "type": "image", "mime_type": "image/jpeg", "data": base64::engine::general_purpose::STANDARD.encode(jpeg) },
+            ],
+            "response_format": { "type": "image", "aspect_ratio": aspect, "image_size": "2K" },
+        });
+        let req = self
+            .http
+            .post("https://generativelanguage.googleapis.com/v1beta/interactions")
+            .header("x-goog-api-key", key.trim())
+            .header("Api-Revision", "2026-05-20")
+            .timeout(std::time::Duration::from_secs(120))
+            .json(&body);
+        let v = self.post_json(req)?;
+        // the picture: an "image" block somewhere in the answer's steps, its base64 in "data"
+        fn find(v: &Value) -> Option<String> {
+            match v {
+                Value::Object(m) => {
+                    if m.get("type").and_then(Value::as_str) == Some("image") {
+                        if let Some(d) = m.get("data").and_then(Value::as_str) {
+                            return Some(d.to_string());
+                        }
+                    }
+                    m.values().find_map(find)
+                }
+                Value::Array(a) => a.iter().find_map(find),
+                _ => None,
+            }
+        }
+        let Some(b64) = find(&v) else {
+            let why = v.to_string().chars().take(240).collect::<String>();
+            bail!("Gemini answered without a picture: {why}");
+        };
+        let bytes = base64::engine::general_purpose::STANDARD.decode(b64.trim()).context("Gemini's picture")?;
+        let mime = if bytes.starts_with(b"\x89PNG") { "image/png" } else if bytes.starts_with(b"RIFF") { "image/webp" } else { "image/jpeg" };
+        Ok((bytes, mime.to_string()))
+    }
+
+    /// Snapshots with Azure Translator's image translation: the picture goes to the resource's own
+    /// endpoint (document translation, one file at once) and comes back translated, as a picture.
+    pub fn azure_image(&self, endpoint: &str, key: &str, lang: &str, png: &[u8]) -> Result<(Vec<u8>, String)> {
+        need(key, "Azure key for image translation")?;
+        let endpoint = endpoint.trim().trim_end_matches('/');
+        if !endpoint.starts_with("https://") {
+            bail!("the Azure endpoint must be your resource's address, like https://<name>.cognitiveservices.azure.com");
+        }
+        let to = crate::langs::get(lang).azure;
+        let url = format!("{endpoint}/translator/document:translate?api-version=2026-03-01&sourceLanguage=en&targetLanguage={to}");
+        let boundary = "----vitranslator-snapshot-7d1f";
+        let mut body = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"snapshot.png\"\r\nContent-Type: image/png\r\n\r\n").into_bytes();
+        body.extend_from_slice(png);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let resp = self
+            .http
+            .post(url)
+            .header("Ocp-Apim-Subscription-Key", key.trim())
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .timeout(std::time::Duration::from_secs(90))
+            .body(body)
+            .send()
+            .context("network error")?;
+        let code = resp.status();
+        let mime = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+        let bytes = resp.bytes().context("network error")?.to_vec();
+        if !code.is_success() || mime.contains("json") {
+            let v: Value = serde_json::from_slice(&bytes).unwrap_or_default();
+            let msg = v["error"]["message"].as_str().map(str::to_string).unwrap_or_else(|| String::from_utf8_lossy(&bytes).chars().take(200).collect());
+            bail!("Azure: HTTP {code}: {msg}");
+        }
+        let mime = if mime.starts_with("image/") { mime } else { "image/png".to_string() };
+        Ok((bytes, mime))
+    }
+
     /// A language model's answer -> segments: "<c1>…</c1>" coloured as the game highlighted them,
     /// "<b1/>" the game's button icon; the line kept as context for the next ones.
     fn llm_reply(&mut self, ar: &str, colors: &HashMap<String, String>, icons: &[String], line: &str) -> Segments {

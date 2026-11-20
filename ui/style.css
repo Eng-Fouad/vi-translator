@@ -238,6 +238,14 @@ body.no-fps .fps-badge { display: none !important; }
   place-items: center; border: 0; border-radius: 10px; cursor: pointer; color: #fff;
   background: rgba(0, 0, 0, .55); opacity: .75; transition: opacity .15s, background .15s; }
 .fs-btn svg { width: 20px; height: 20px; }
+/* Play: the snapshot button, left of the full-screen one (spins while the picture is translated) */
+.fs-btn.snap-btn { right: 56px; }
+.snap-btn.busy { pointer-events: none; opacity: 1; background: var(--sunset); }
+.snap-btn.busy svg { animation: snap-pulse 1s ease-in-out infinite; }
+@keyframes snap-pulse { 50% { opacity: .35; } }
+.snap-last { margin: 10px 0 0; }
+.snap-last img { width: 100%; border-radius: 8px; cursor: zoom-in; display: block; border: 1px solid var(--line, #0002); }
+.snap-last .muted { margin: 4px 0 0; }
 .fs-btn:hover { opacity: 1; background: var(--sunset); }
 body[data-mode="play"] .fs-btn, html.fullscreen .fs-btn { display: grid; }
 .fs-btn .fs-off, html.fullscreen .fs-btn .fs-on { display: none; }

@@ -115,6 +115,23 @@ impl Ocr {
         Ok(self.recognize_checked(crop)?.0)
     }
 
+    /// Snapshots: every word on a whole frame, read both ways (bright text; white or coloured text),
+    /// the second reading adding the words the first one missed.
+    pub fn read_screen(&self, crop: &Crop) -> Result<Vec<Word>> {
+        let mut words = drop_junk(self.recognize_with(crop, Prep::Brightest)?);
+        let overlaps = |a: (u32, u32, u32, u32), b: (u32, u32, u32, u32)| {
+            let w = (a.0 + a.2).min(b.0 + b.2) as i64 - a.0.max(b.0) as i64;
+            let h = (a.1 + a.3).min(b.1 + b.3) as i64 - a.1.max(b.1) as i64;
+            w > 0 && h > 0 && (w * h) as f64 > 0.3 * (a.2 as f64 * a.3 as f64).min(b.2 as f64 * b.3 as f64)
+        };
+        for w in drop_junk(self.recognize_with(crop, Prep::WhiteOrColour)?) {
+            if !words.iter().any(|o| overlaps(o.rect, w.rect)) {
+                words.push(w);
+            }
+        }
+        Ok(words)
+    }
+
     /// `recognize`, and whether the reading is sure: the two ways of reading agree (or one only
     /// missed a line the other has, like a grey speaker's). Not sure: text still animating in —
     /// GTA VI's instructions start with a white glow around their outline that fades away.

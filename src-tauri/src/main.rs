@@ -21,6 +21,7 @@ mod preview_shot;
 mod lan;
 mod langs;
 mod screens;
+mod snapshot;
 mod pagescript;
 mod speaker;
 mod sync;
@@ -560,6 +561,80 @@ async fn save_preview(webview: tauri::Webview, area: preview_shot::Area, state: 
         debug_frames::save_png_fast(&f, &full).map_err(|e| format!("the full-size frame: {e:#}"))?;
     }
     Ok(path.display().to_string())
+}
+
+/// Where snapshots are kept: Pictures\VI Translator\snapshots.
+fn snapshots_dir() -> PathBuf {
+    pictures_dir().map(|p| p.join(FOLDER).join("snapshots")).unwrap_or_else(|| data_dir().join("snapshots"))
+}
+
+/// The translator snapshots use (its local model stays loaded between snapshots).
+static SNAP_TR: Mutex<Option<Translator>> = Mutex::new(None);
+
+/// A snapshot of the picture on screen now: translated with the snapshot service; with "Keep every
+/// snapshot", its picture is saved (and Azure's translated picture; the app saves its own drawing of
+/// the others, see `save_snapshot_render`).
+fn snapshot_now(cfg: &Mutex<Config>, shared: &Shared, memory: &Mutex<memory::Memory>) -> anyhow::Result<snapshot::Snapshot> {
+    let Some(_busy) = snapshot::Busy::take() else { anyhow::bail!("a snapshot is already being translated") };
+    let Some(frame) = shared.latest() else { anyhow::bail!("no picture yet: pick a source first") };
+    let private = shared.screen_private.lock().unwrap().clone();
+    let c = cfg.lock().unwrap().clone();
+    let mut slot = SNAP_TR.lock().unwrap();
+    let tr = slot.get_or_insert_with(|| Translator::new(model_dir()));
+    let lang = c.target_lang.clone();
+    // (the reviewed translations only: the memory's own lines come from whatever service was in use, and
+    // the snapshot has its own; looked at line by line, not held while a translator is asked)
+    let lookup = |en: &str| -> Option<translate::Segments> {
+        let m = memory.lock().unwrap();
+        m.get(en, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(segs, _)| translate::polite(&lang, segs))
+    };
+    let id = debug_frames::timestamp();
+    let snap = snapshot::make(&frame, &private, snapshot::Tools { cfg: &c, tr, memory: &lookup }, id.clone())?;
+    if c.snap_save {
+        let dir = snapshots_dir();
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join(format!("{id}_original.png")), snapshot::png_bytes(&snapshot::covered(&frame, &private))?)?;
+        if let Some((bytes, ext)) = snap.translated_image.as_deref().and_then(snapshot::data_url_bytes) {
+            std::fs::write(dir.join(format!("{id}_{}.{ext}", snap.lang)), bytes)?;
+        }
+    }
+    Ok(snap)
+}
+
+/// Translate the whole picture now (the Snapshot tab's button and Play's).
+#[tauri::command]
+async fn take_snapshot(webview: tauri::Webview, state: tauri::State<'_, AppState>) -> Result<snapshot::Snapshot, String> {
+    main_only(&webview)?;
+    let (cfg, shared, memory) = (state.cfg.clone(), state.shared.clone(), state.memory.clone());
+    tauri::async_runtime::spawn_blocking(move || snapshot_now(&cfg, &shared, &memory).map_err(|e| format!("{e:#}")))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The app's drawing of a snapshot (its picture with the translation over it), saved next to its picture.
+#[tauri::command]
+fn save_snapshot_render(webview: tauri::Webview, id: String, lang: String, data: String) -> Result<String, String> {
+    main_only(&webview)?;
+    // (names the app made: a timestamp and a language code)
+    let ok = |t: &str, max: usize| !t.is_empty() && t.len() <= max && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !ok(&id, 40) || !ok(&lang, 10) {
+        return Err("bad name".into());
+    }
+    let (bytes, ext) = snapshot::data_url_bytes(&data).ok_or("not a picture")?;
+    let dir = snapshots_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{id}_{lang}.{ext}"));
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
+fn open_snapshots_folder(webview: tauri::Webview) -> Result<String, String> {
+    main_only(&webview)?;
+    let dir = snapshots_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    debug_frames::open_folder(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.display().to_string())
 }
 
 /// Debugging: open the folder the preview pictures go to (this run's, or the one for all of them).
@@ -1274,6 +1349,7 @@ fn ocr_loop(
                 // translation memory; anything else is sent to the translator and shows on a later read.
                 // Other players' names (a friends list): the script marks them private — never
                 // translated, sent or kept.
+                *shared.screen_private.lock().unwrap() = layout.menu.iter().filter(|m| m.private).map(|m| [m.rect.x, m.rect.y, m.rect.w, m.rect.h]).collect();
                 layout.menu.retain(|m| !m.private);
                 for m in layout.menu.iter_mut() {
                     if m.fixed {
@@ -2501,6 +2577,40 @@ fn main() {
         }
         return;
     }
+    // --test-snapshot <frame.png> [--service <id>]: a snapshot of a saved frame, its blocks printed
+    if let Some(file) = args.iter().position(|a| a == "--test-snapshot").and_then(|i| args.get(i + 1)) {
+        let run = || -> anyhow::Result<()> {
+            let img = image::open(file)?.to_rgba8();
+            let (w, h) = img.dimensions();
+            let frame = capture::FrameData { w, h, rgba: img.into_raw(), seq: 0 };
+            let mut c = Config::load(&config_path());
+            if let Some(s) = args.iter().position(|a| a == "--service").and_then(|j| args.get(j + 1)) {
+                c.snap_service = s.clone();
+            }
+            let mut mem = memory::Memory::load(db_dir(), &c.target_lang);
+            if let Some(entries) = sync::kept_pack_in(&data_dir(), &c.game(), &c.target_lang) {
+                mem.set_shared(&c.target_lang, entries);
+            }
+            let lang = c.target_lang.clone();
+            let lookup = |en: &str| mem.get(en, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(segs, _)| translate::polite(&lang, segs));
+            let mut tr = Translator::new(model_dir());
+            let snap = snapshot::make(&frame, &[], snapshot::Tools { cfg: &c, tr: &mut tr, memory: &lookup }, "test".into())?;
+            println!("{} block(s), {} ms, service {}", snap.blocks.len(), snap.ms, snap.service);
+            for b in &snap.blocks {
+                let t: String = b.segs.iter().map(|s| s.0.as_str()).collect();
+                println!("[{:.3} {:.3} {:.3} {:.3}] {} line(s) {} fg {} bg {} | {} -> {}", b.rect[0], b.rect[1], b.rect[2], b.rect[3], b.lines, b.align, b.fg, b.bg, b.en, t);
+            }
+            if let Some(out) = args.iter().position(|a| a == "--json").and_then(|j| args.get(j + 1)) {
+                std::fs::write(out, serde_json::to_string(&snap)?)?;
+            }
+            Ok(())
+        };
+        if let Err(e) = run() {
+            eprintln!("error: {e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Some(i) = args.iter().position(|a| a == "--test-image") {
         let area = args.iter().position(|a| a == "--area").and_then(|j| args.get(j + 1)).map(String::as_str).unwrap_or("subtitles");
         let Some(image) = args.get(i + 1) else {
@@ -2535,7 +2645,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, memory_status, memory_clear])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));
@@ -2833,6 +2943,7 @@ fn hide_screen(app: &AppHandle, shared: &Shared, latest: &Mutex<HashMap<String, 
     latest.lock().unwrap().remove(SCREEN_REASON);
     shared.screen_active.store(false, std::sync::atomic::Ordering::Relaxed);
     *shared.screen.lock().unwrap() = None;
+    shared.screen_private.lock().unwrap().clear();
     *shared.screen_reason.lock().unwrap() = serde_json::json!([]);
     let _ = app.emit("screen", None::<screens::ScreenLayout>);
 }

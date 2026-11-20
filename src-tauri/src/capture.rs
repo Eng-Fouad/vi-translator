@@ -42,6 +42,9 @@ pub struct Shared {
     /// The profile screen currently shown (layout JSON) and its translated reason line, for windows
     /// that open after the screen appeared.
     pub screen: Mutex<Option<serde_json::Value>>,
+    /// Where the game page on screen has text marked private (other players' names): x, y, w, h
+    /// fractions. Snapshots leave it out.
+    pub screen_private: Mutex<Vec<[f64; 4]>>,
     pub screen_reason: Mutex<serde_json::Value>,
     /// Area id -> {"en": ..., "ar": ...} currently shown by that area's overlay (for saved frames).
     pub on_screen: Mutex<std::collections::HashMap<String, serde_json::Value>>,

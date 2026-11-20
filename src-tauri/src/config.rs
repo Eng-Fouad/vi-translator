@@ -301,6 +301,25 @@ pub struct Config {
     pub capture_fps: u32,
     /// Frames per second of the live preview in the app (small frames, only while it's visible).
     pub preview_fps: u32,
+    /// Snapshots (the whole picture translated at once): the service ("" = the live translations'
+    /// one; an engine id; "azure-image" = Azure's image translation, with its own endpoint and key).
+    pub snap_service: String,
+    pub snap_azure_endpoint: String,
+    pub snap_azure_key: String,
+    /// "gemini-image": Google's image model and its API key
+    pub snap_gemini_model: String,
+    pub snap_gemini_key: String,
+    /// Keep every snapshot (the picture and its translation) in Pictures\VI Translator\snapshots.
+    pub snap_save: bool,
+    /// The player's own showing and hiding of a profile's read areas and game pages, by profile id: kept
+    /// outside the profile, so a built-in one's can be switched too (its other settings stay locked).
+    pub shown: std::collections::BTreeMap<String, Shown>,
+    /// The home-network page may switch the overlays, the live translations and what is shown.
+    pub lan_control: bool,
+    /// The home-network page can take snapshots too.
+    pub snap_lan: bool,
+    /// What covers the English under a translation: "blur" (the picture, blurred) or "solid".
+    pub snap_style: String,
     /// Debugging: save captured frames as PNG files while on.
     pub debug_save_frames: bool,
     /// Debugging: minimum time between saved frames.
@@ -333,6 +352,14 @@ pub struct Config {
     pub profile_opts: ProfileOpts,
     pub areas: Vec<Area>,
     pub style: Style,
+}
+
+/// The player's own show/hide of one profile's read areas and game pages (see `Config::shown`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Shown {
+    pub areas: std::collections::BTreeMap<String, bool>,
+    pub pages: std::collections::BTreeMap<String, bool>,
 }
 
 /// A game profile: where the text is read and where its translation goes (read areas), how the
@@ -577,6 +604,16 @@ impl Default for Config {
             obs_page_port: 8790,
             capture_fps: 12,
             preview_fps: 30,
+            snap_service: String::new(),
+            snap_azure_endpoint: String::new(),
+            snap_azure_key: String::new(),
+            snap_gemini_model: "gemini-nano-banana-2.1".into(),
+            snap_gemini_key: String::new(),
+            shown: Default::default(),
+            lan_control: true,
+            snap_save: true,
+            snap_lan: true,
+            snap_style: "blur".into(),
             debug_save_frames: false,
             debug_frame_interval_ms: 1000,
             profile: "gta6".into(),
@@ -597,8 +634,10 @@ impl Default for Config {
 }
 
 /// Changes of the app's defaults that settings saved before them take too, where the player had kept
-/// the old default: 1 = text is read from 12 frames a second (was 8).
-pub const DEFAULTS_VERSION: u32 = 1;
+/// the old default: 1 = text is read from 12 frames a second (was 8); 2 = GTA VI's top-left
+/// instructions are read only inside the game's own box (settings saved before `needs_box` existed had
+/// it off: menu text and credits there were translated).
+pub const DEFAULTS_VERSION: u32 = 2;
 
 impl Config {
     /// Moves settings still on an old default to the new one, once (`defaults_version`); a value the
@@ -608,6 +647,14 @@ impl Config {
         if self.defaults_version < 1 && self.capture_fps == 8 {
             self.capture_fps = 12;
             moved = true;
+        }
+        if self.defaults_version < 2 {
+            for p in self.builtins.iter_mut().filter(|p| p.id == "gta6") {
+                for a in p.areas.iter_mut().filter(|a| a.id == "help" && !a.needs_box) {
+                    a.needs_box = true;
+                    moved = true;
+                }
+            }
         }
         let bumped = self.defaults_version < DEFAULTS_VERSION;
         self.defaults_version = self.defaults_version.max(DEFAULTS_VERSION);
@@ -745,13 +792,46 @@ impl Config {
         self.areas = active.areas;
         self.style = active.style;
         self.profile_opts = active.pages;
+        // what the player showed or hid in this profile (a built-in one too)
+        if let Some(s) = self.shown.get(&self.profile) {
+            for a in self.areas.iter_mut() {
+                if let Some(&on) = s.areas.get(&a.id) {
+                    a.enabled = on;
+                }
+            }
+            for (k, &on) in &s.pages {
+                self.profile_opts.more.insert(k.clone(), on);
+            }
+        }
+    }
+
+    /// Show or hide a read area ("area") or a game page's switch ("page") of the profile in use, from
+    /// anywhere (the window, the home-network page): kept in `shown`, and in the profile itself when it
+    /// is the player's own. False for anything else.
+    pub fn set_shown(&mut self, kind: &str, id: &str, on: bool) -> bool {
+        let entry = self.shown.entry(self.profile.clone()).or_default();
+        match kind {
+            "area" => entry.areas.insert(id.to_string(), on),
+            "page" => entry.pages.insert(id.to_string(), on),
+            _ => return false,
+        };
+        if let Some(p) = self.profiles.iter_mut().find(|p| p.id == self.profile) {
+            match kind {
+                "area" => p.areas.iter_mut().filter(|a| a.id == id).for_each(|a| a.enabled = on),
+                _ => {
+                    p.pages.more.insert(id.to_string(), on);
+                }
+            }
+        }
+        self.normalize();
+        true
     }
 
     /// The settings without secrets (translator keys, the OBS password, the install id): what goes
     /// to windows other than the main one, and in events (any window can listen to those).
     pub fn redacted(&self) -> Config {
         let mut c = self.clone();
-        for s in [&mut c.deepl_key, &mut c.azure_key, &mut c.google_key, &mut c.libre_key, &mut c.claude_key, &mut c.openai_key, &mut c.obs_password, &mut c.install_id] {
+        for s in [&mut c.deepl_key, &mut c.azure_key, &mut c.google_key, &mut c.libre_key, &mut c.claude_key, &mut c.openai_key, &mut c.snap_azure_key, &mut c.snap_gemini_key, &mut c.obs_password, &mut c.install_id] {
             s.clear();
         }
         c
@@ -850,6 +930,39 @@ mod profile_tests {
         assert_eq!(c.capture_fps, 20);
         // a new install already has the new defaults
         assert_eq!((Config::default().capture_fps, Config::default().defaults_version), (12, DEFAULTS_VERSION));
+    }
+
+    #[test]
+    fn areas_and_pages_can_be_hidden_in_a_built_in_profile() {
+        let mut c = Config::default();
+        c.normalize();
+        assert!(c.is_builtin(&c.profile));
+        assert!(c.areas.iter().find(|a| a.id == "help").unwrap().enabled);
+        assert!(c.set_shown("area", "help", false));
+        assert!(c.set_shown("page", "weapon_wheel", false));
+        // (saving copies the built-in profile in again: the choice stays)
+        c.normalize();
+        assert!(!c.areas.iter().find(|a| a.id == "help").unwrap().enabled);
+        assert_eq!(c.profile_opts.more.get("weapon_wheel"), Some(&false));
+        // the built-in profile itself is unchanged
+        assert!(c.builtins.iter().find(|p| p.id == "gta6").unwrap().areas.iter().find(|a| a.id == "help").unwrap().enabled);
+        assert!(!c.set_shown("colour", "x", true));
+    }
+
+    #[test]
+    fn gta6_help_needs_its_box_after_the_update() {
+        let mut c = Config::default();
+        c.normalize();
+        for p in c.builtins.iter_mut() {
+            for a in p.areas.iter_mut() {
+                a.needs_box = false;
+            }
+        }
+        c.defaults_version = 1;
+        assert!(c.move_to_new_defaults());
+        let gta6 = c.builtins.iter().find(|p| p.id == "gta6").unwrap();
+        assert!(gta6.areas.iter().find(|a| a.id == "help").unwrap().needs_box);
+        assert!(!gta6.areas.iter().find(|a| a.id == "subtitles").unwrap().needs_box);
     }
 
     #[test]

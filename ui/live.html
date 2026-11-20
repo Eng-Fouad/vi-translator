@@ -15,6 +15,12 @@
       header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel);
         position: sticky; top: 0; border-bottom: 1px solid #2c2450; direction: ltr; }
       header b { font-size: 16px; flex: 1; }
+      .ctl { padding: 10px 14px 4px; background: var(--panel); border-bottom: 1px solid #3a3063; direction: ltr;
+        font-family: "Segoe UI", system-ui, sans-serif; font-size: 15px; }
+      .ctl h4 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+      .ctl label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; cursor: pointer; }
+      .ctl input { width: 20px; height: 20px; accent-color: var(--accent); }
+      .ctl .err { color: #ff8a8a; font-size: 13px; padding: 4px 0; }
       .dot { width: 10px; height: 10px; border-radius: 50%; background: #d33; }
       .dot.on { background: #3c6; }
       button { background: #2a2147; color: var(--text); border: 1px solid #3a3063; border-radius: 10px;
@@ -38,12 +44,17 @@
     <header>
       <span class="dot" id="dot"></span>
       <b>VI Translator</b>
+      <button id="snap" title="Translate the whole picture" hidden>📷</button>
+      <button id="ctl" title="Switches" hidden>⚙</button>
       <button id="en" class="on" title="Show the English">EN</button>
       <button id="smaller" title="Smaller text">A−</button>
       <button id="bigger" title="Bigger text">A+</button>
     </header>
+    <!-- the app's switches, when it allows changes from this page -->
+    <div class="ctl" id="ctl-panel" hidden></div>
     <div class="paused" id="paused" hidden>Paused: Live translations are switched off in VI Translator.</div>
     <main id="list"><div class="empty" id="empty">Waiting for translations…</div></main>
+    <script src="snapshot.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
       const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -89,6 +100,8 @@
           run = d.run;
           $("dot").classList.add("on");
           $("paused").hidden = d.live !== false;
+          $("snap").hidden = d.snap !== true;
+          showControls(d.control || null);
           const rtl = !!(d.lang && d.lang.rtl);
           if (d.lang && d.lang.code) document.documentElement.lang = d.lang.code;
           if (d.lines.length) {
@@ -117,6 +130,71 @@
         setTimeout(poll, 700);
       }
       poll();
+    </script>
+    <script>
+      // The app's switches (overlays, live translations, read areas, game pages): shown with ⚙ when the app allows
+      // changes from this page; a change goes to the app at once.
+      let control = null, ctlBusy = false;
+      $("ctl").onclick = () => { $("ctl-panel").hidden = !$("ctl-panel").hidden; };
+      function showControls(c) {
+        $("ctl").hidden = !c;
+        if (!c) { $("ctl-panel").hidden = true; control = null; return; }
+        // (not redrawn while a change is on its way, nor when nothing changed)
+        if (ctlBusy || JSON.stringify(c) === JSON.stringify(control)) return;
+        control = c;
+        const row = (what, id, name, on) =>
+          `<label><span>${esc(name)}</span><input type="checkbox" data-what="${what}" data-id="${esc(id)}" ${on ? "checked" : ""}></label>`;
+        let html = `<h4>Show</h4>${row("overlays", "", "Overlays on the game", c.overlays)}${row("live", "", "Live translations", c.live)}`;
+        if (c.areas.length) html += `<h4>Read areas</h4>` + c.areas.map((a) => row("area", a.id, a.name || a.id, a.on)).join("");
+        if (c.pages.length) html += `<h4>Game pages</h4>` + c.pages.map((p) => row("page", p.id, p.name || p.id, p.on)).join("");
+        $("ctl-panel").innerHTML = html + `<div class="err" id="ctl-err" hidden></div>`;
+      }
+      $("ctl-panel").addEventListener("change", async (e) => {
+        const el = e.target.closest("input[data-what]");
+        if (!el) return;
+        ctlBusy = true;
+        try {
+          const r = await fetch("control", { method: "POST", cache: "no-store", body: JSON.stringify({ what: el.dataset.what, id: el.dataset.id, on: el.checked }) });
+          if (!r.ok) throw new Error(await r.text());
+          ctlBusy = false;
+          control = null;
+          showControls(await r.json());
+        } catch (err) {
+          ctlBusy = false;
+          el.checked = !el.checked;
+          const m = $("ctl-err");
+          if (m) { m.hidden = false; m.textContent = "Could not change it: " + (err.message || err); }
+        }
+      });
+
+      // A snapshot: the whole picture in the game, its text translated in place (made by the app on the PC).
+      $("snap").onclick = async () => {
+        const b = $("snap");
+        if (b.disabled) return;
+        b.disabled = true;
+        b.textContent = "⏳";
+        try {
+          const r = await fetch("snapshot", { method: "POST", cache: "no-store" });
+          if (!r.ok) throw new Error(await r.text());
+          const snap = await r.json();
+          await Snap.show(snap, {
+            info: `${snap.blocks.length} · ${(snap.ms / 1000).toFixed(1)} s`,
+            actions: {
+              save: (canvas, s, translated) => {
+                const a = document.createElement("a");
+                a.href = canvas.toDataURL("image/png");
+                a.download = `vi-translator_${s.id}_${translated ? s.lang : "original"}.png`;
+                a.click();
+              },
+            },
+          });
+        } catch (e) {
+          alert("Could not translate the picture: " + (e.message || e));
+        } finally {
+          b.disabled = false;
+          b.textContent = "📷";
+        }
+      };
     </script>
   </body>
 </html>

@@ -380,6 +380,7 @@ $("update-now").addEventListener("click", async () => {
 async function updateLan() {
   const box = $("lan-info");
   $("lan-on").checked = !!cfg.lan_page;
+  $("lan-control").checked = cfg.lan_control !== false;
   if (!cfg.lan_page) { box.textContent = t("Off. Turn it on to read the live translations on another device on your home network."); return; }
   try {
     const i = await invoke("lan_info");
@@ -403,6 +404,7 @@ $("lan-info").addEventListener("click", (e) => {
   invoke("open_lan_page").catch((err) => log({ error: String(err) }));
 });
 $("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
+$("lan-control").addEventListener("change", (e) => { cfg.lan_control = e.target.checked; save(false); });
 setInterval(() => { if (cfg && !$("tab-show").classList.contains("hidden")) { updateLan(); updateTvs(); } }, 3000);
 
 // TVs (the VI Translator app on the TV): find the ones waiting on the home network, connect one with the
@@ -571,6 +573,7 @@ function renderEngines() {
     el.querySelector("input").addEventListener("change", () => {
       cfg.engine = e.id;
       renderEngines();
+      renderSnapForm();
       save(false);
     });
     $("engines").appendChild(el);
@@ -682,7 +685,7 @@ function renderAreas() {
             .map(([v, txt]) => `<option value="${v}" ${a.out_halign === v ? "selected" : ""}>${t(txt)}</option>`).join("")}</select>
         </div>` : ""}`;
     c.addEventListener("mousedown", () => { if (selected !== a.id) { selected = a.id; highlightCards(); drawLayer(); } });
-    c.querySelector(".en").addEventListener("change", (e) => { a.enabled = e.target.checked; save(); });
+    c.querySelector(".en").addEventListener("change", (e) => { a.enabled = e.target.checked; setShown("area", a.id, a.enabled); save(); });
     c.querySelector(".nm").addEventListener("input", (e) => { a.name = e.target.value; save(); });
     c.querySelector(".pl").addEventListener("change", (e) => {
       if (e.target.value === "custom") toCustom(a); // start the custom region where the Arabic is now
@@ -984,6 +987,161 @@ async function updateMemory() {
   }
 }
 setInterval(() => { if (!$("tab-translator").classList.contains("hidden")) updateMemory(); }, 2000);
+
+
+// ------------------------------------------------------------------------------------- snapshot
+
+// The whole picture translated at once, like a translated photo (Setup: the Snapshot tab; Play: the
+// camera button; the home-network page has one too). Each is kept in Pictures\VI Translator\snapshots.
+let lastSnap = null;
+let snapBusy = false;
+
+function snapStatus(text, error = false) {
+  const el = $("snap-status");
+  el.hidden = !text;
+  el.textContent = text || "";
+  el.classList.toggle("err", error);
+}
+
+function snapLabels() {
+  return { translated: t("Translated"), original: t("Original"), save: t("Save"), close: t("Close"), folder: t("Open snapshots folder") };
+}
+
+function serviceName(id) {
+  if (id === "azure-image") return t("Azure image translation");
+  if (id === "gemini-image") return "Gemini (Nano Banana)";
+  const e = ENGINES.find((x) => x.id === id);
+  return e ? t(e.name) : id;
+}
+
+async function takeSnapshot() {
+  if (snapBusy) return;
+  snapBusy = true;
+  $("snap-btn").classList.add("busy");
+  $("snap-take").disabled = true;
+  snapStatus(t("Translating the whole picture…"));
+  try {
+    const snap = await invoke("take_snapshot");
+    await gotSnapshot(snap, true);
+  } catch (e) {
+    snapStatus(t("Could not translate the picture: {e}", { e }), true);
+    log({ error: t("Could not translate the picture: {e}", { e }) });
+  } finally {
+    snapBusy = false;
+    $("snap-btn").classList.remove("busy");
+    $("snap-take").disabled = false;
+  }
+}
+
+// A snapshot made (here, or from the home-network page): kept (the app's drawing of it), shown in the tab.
+async function gotSnapshot(snap, open) {
+  lastSnap = snap;
+  const done = snap.translated_image
+    ? t("Translated by {service} in {s} s", { service: serviceName(snap.service), s: (snap.ms / 1000).toFixed(1) })
+    : t("{n} text block(s) translated by {service} in {s} s", { n: snap.blocks.length, service: serviceName(snap.service), s: (snap.ms / 1000).toFixed(1) });
+  snapStatus(snap.blocks.length || snap.translated_image ? done : t("No text found on the picture."));
+  renderLastSnap();
+  if (open) openSnap(snap);
+  if (cfg.snap_save && !snap.translated_image && snap.blocks.length) {
+    try {
+      await invoke("save_snapshot_render", { id: snap.id, lang: snap.lang, data: await Snap.png(snap, cfg.snap_style) });
+    } catch (e) {
+      log({ error: String(e) });
+    }
+  }
+}
+
+function openSnap(snap) {
+  Snap.show(snap, {
+    labels: snapLabels(),
+    style: cfg.snap_style,
+    info: $("snap-status").textContent,
+    actions: {
+      save: async (canvas, s, translated) => {
+        try {
+          const file = await invoke("save_snapshot_render", { id: s.id, lang: translated ? s.lang : "original", data: canvas.toDataURL("image/png") });
+          log({ info: t("Saved {file}", { file }) });
+        } catch (e) {
+          log({ error: String(e) });
+        }
+      },
+      folder: openSnapsFolder,
+    },
+  });
+}
+
+async function openSnapsFolder() {
+  try {
+    log({ info: t("Opened {dir}", { dir: await invoke("open_snapshots_folder") }) });
+  } catch (e) {
+    log({ error: String(e) });
+  }
+}
+
+function renderLastSnap() {
+  const box = $("snap-last");
+  if (!lastSnap) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = `<img alt="" src="${AS.esc(lastSnap.translated_image || lastSnap.image)}" /><div class="muted small">${AS.esc(t("Last snapshot — click to open"))}</div>`;
+  box.querySelector("img").addEventListener("click", () => openSnap(lastSnap));
+}
+
+const GEMINI_MODELS = [
+  ["gemini-nano-banana-2.1", "Nano Banana 2.1 — recommended, about $0.05 a picture"],
+  ["gemini-3-pro-image", "Nano Banana Pro — best text, about $0.13 a picture"],
+  ["gemini-3.1-flash-lite-image", "Nano Banana 2 Lite — fastest, about $0.03 a picture"],
+];
+
+function renderSnapForm() {
+  const form = $("snap-form");
+  const live = ENGINES.find((x) => x.id === cfg.engine);
+  const opts = [["", t("Same as live translations ({name})", { name: live ? t(live.name) : cfg.engine })]];
+  for (const e of ENGINES) opts.push([e.id, e.id === "claude" || e.id === "openai" ? t("{name} — reads the picture", { name: t(e.name) }) : t(e.name)]);
+  opts.push(["gemini-image", t("Gemini (Nano Banana) — redraws the picture in the language")]);
+  opts.push(["azure-image", t("Azure image translation — picture in, picture out")]);
+  const svc = cfg.snap_service || "";
+  const used = svc || cfg.engine;
+  const help = used === "gemini-image"
+    ? t("Google's image model redraws the whole picture with its text in the language: the most natural look. It can change small details (an icon, a number, a car), takes 10–30 s and Google bills about $0.03–0.13 per picture. Needs a Gemini API key from Google AI Studio.")
+    : used === "azure-image"
+    ? t("Azure redraws the picture with the translation. Needs an Azure Translator resource with its own endpoint (https://<name>.cognitiveservices.azure.com) and its key. Billed by Azure per picture.")
+    : used === "claude" || used === "openai"
+      ? t("The picture and the text the app found go to the model in one request: it fixes misread words and translates with the whole screen as context. Uses the key and model from the Translator tab.")
+      : t("Each piece of text is translated on its own, the translation memory first, so the game's words match the subtitles.");
+  form.innerHTML = `
+    <div class="field"><label for="snap-service">${t("Service")}</label>
+      <select id="snap-service">${opts.map(([v, txt]) => `<option value="${v}" ${v === svc ? "selected" : ""}>${AS.esc(txt)}</option>`).join("")}</select>
+      <div class="muted small" style="margin:4px 0 0">${AS.esc(help)}</div></div>
+    ${used === "azure-image" ? `
+    <div class="field"><label for="snap-az-ep">${t("Azure endpoint")}</label><input type="text" id="snap-az-ep" spellcheck="false" placeholder="https://<name>.cognitiveservices.azure.com" value="${AS.esc(cfg.snap_azure_endpoint || "")}" /></div>
+    <div class="field"><label for="snap-az-key">${t("Azure key")}</label><input type="password" id="snap-az-key" autocomplete="off" value="${AS.esc(cfg.snap_azure_key || "")}" /></div>` : ""}
+    ${used === "gemini-image" ? `
+    <div class="field"><label for="snap-gm-key">${t("Gemini API key")}</label><input type="password" id="snap-gm-key" autocomplete="off" value="${AS.esc(cfg.snap_gemini_key || "")}" /></div>
+    <div class="field"><label for="snap-gm-model">${t("Model")}</label><select id="snap-gm-model">${GEMINI_MODELS.map(([v, txt]) => `<option value="${v}" ${v === (cfg.snap_gemini_model || GEMINI_MODELS[0][0]) ? "selected" : ""}>${AS.esc(t(txt))}</option>`).join("")}</select></div>` : ""}
+    <div class="field"><label for="snap-style">${t("Behind the translation")}</label>
+      <select id="snap-style"><option value="blur" ${cfg.snap_style !== "solid" ? "selected" : ""}>${t("The picture, blurred")}</option><option value="solid" ${cfg.snap_style === "solid" ? "selected" : ""}>${t("A solid colour")}</option></select></div>
+    <label class="check"><input type="checkbox" id="snap-save" ${cfg.snap_save !== false ? "checked" : ""}/> ${t("Keep every snapshot in Pictures\\VI Translator\\snapshots")}</label>
+    <label class="check"><input type="checkbox" id="snap-lan" ${cfg.snap_lan !== false ? "checked" : ""}/> ${t("Allow snapshots from the home-network page")}</label>
+    <div class="muted small" style="margin:-6px 0 0">${AS.esc(t("Phones and tablets showing the live translations get a snapshot button too."))}</div>
+    <button class="btn" id="snap-folder">${t("Open snapshots folder")}</button>
+    <div class="muted small">${AS.esc(t("Text a game page marks as private (other players' names) is never read or sent: it's covered in the picture."))}</div>`;
+  $("snap-service").addEventListener("change", (e) => { cfg.snap_service = e.target.value; save(false); renderSnapForm(); });
+  $("snap-az-ep")?.addEventListener("input", (e) => { cfg.snap_azure_endpoint = e.target.value.trim(); save(false); });
+  $("snap-az-key")?.addEventListener("input", (e) => { cfg.snap_azure_key = e.target.value.trim(); save(false); });
+  $("snap-gm-key")?.addEventListener("input", (e) => { cfg.snap_gemini_key = e.target.value.trim(); save(false); });
+  $("snap-gm-model")?.addEventListener("change", (e) => { cfg.snap_gemini_model = e.target.value; save(false); });
+  $("snap-style").addEventListener("change", (e) => { cfg.snap_style = e.target.value; save(false); });
+  $("snap-save").addEventListener("change", (e) => { cfg.snap_save = e.target.checked; save(false); });
+  $("snap-lan").addEventListener("change", (e) => { cfg.snap_lan = e.target.checked; save(false); });
+  $("snap-folder").addEventListener("click", openSnapsFolder);
+}
+
+$("snap-take").addEventListener("click", takeSnapshot);
+$("snap-btn").addEventListener("click", (e) => { e.stopPropagation(); takeSnapshot(); });
+$("snap-btn").addEventListener("dblclick", (e) => e.stopPropagation());
+listen("snapshot", (e) => gotSnapshot(e.payload, false));
 
 // ------------------------------------------------------------------------------------- debugging
 
@@ -1340,6 +1498,28 @@ listen("pages", () => {
 });
 // The app changed the built-in profiles (a layout update, a game the server added): take those
 // (the rest of the settings are the window's own, being edited here), and ask the pages again.
+// A switch changed on the home-network page: this window's copy of the settings takes it (its next save would
+// otherwise undo it), and the switches here show it.
+listen("lan-control", (e) => {
+  if (!cfg) return;
+  const v = e.payload;
+  cfg.overlays_enabled = v.overlays_enabled;
+  cfg.live_translations = v.live_translations;
+  cfg.shown = v.shown;
+  if (v.profile === cfg.profile) {
+    for (const a of cfg.areas) if (a.id in v.areas) a.enabled = v.areas[a.id];
+    cfg.profile_opts.more = v.more;
+    syncProfile();
+  }
+  $("overlays_enabled").checked = cfg.overlays_enabled;
+  $("live_translations").checked = cfg.live_translations !== false;
+  $("log-paused").hidden = cfg.live_translations !== false;
+  renderAreas();
+  renderPages();
+  drawLayer();
+  updateGlance();
+});
+
 listen("config", (e) => {
   if (!cfg) return;
   const now = e.payload;
@@ -1399,6 +1579,16 @@ const profileGame = () => activeProfile()?.game || "gta6";
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 /** One of the player's profiles is in use: keep it equal to what is being edited. */
+/** Show or hide a read area or a game page of the profile in use: the player's own choice, kept apart from the
+ *  profile (a built-in one's too; see Config::shown). */
+function setShown(kind, id, on) {
+  cfg.shown = cfg.shown || {};
+  const s = (cfg.shown[cfg.profile] = cfg.shown[cfg.profile] || {});
+  s.areas = s.areas || {};
+  s.pages = s.pages || {};
+  (kind === "area" ? s.areas : s.pages)[id] = on;
+}
+
 function syncProfile() {
   const p = (cfg.profiles || []).find((x) => x.id === cfg.profile);
   if (p) Object.assign(p, { areas: clone(cfg.areas), style: clone(cfg.style), pages: clone(cfg.profile_opts) });
@@ -1532,7 +1722,7 @@ async function renderPages() {
       <div class="field"><label>${t("Title font")}</label><select id="pf-title">${fontOptions(o.title_font)}</select></div>
       <div class="field" style="margin-top:10px"><label>${t("Reason and button font")}</label><select id="pf-text">${fontOptions(o.text_font)}</select></div>
     </div>`;
-  f.querySelectorAll("[data-more]").forEach((el) => el.addEventListener("change", () => { o.more[el.dataset.more] = el.checked; save(); }));
+  f.querySelectorAll("[data-more]").forEach((el) => el.addEventListener("change", () => { o.more[el.dataset.more] = el.checked; setShown("page", el.dataset.more, el.checked); save(); }));
   for (const [id, key] of [["pf-title", "title_font"], ["pf-text", "text_font"]]) {
     const sel = $(id);
     paintFonts(sel);
@@ -1551,11 +1741,11 @@ function applyTheme() {
 }
 
 // A built-in profile in use: the controls of its parts are switched off (not just dimmed), so they
-// can't be reached with the keyboard either.
+// can't be reached with the keyboard either. Showing or hiding an area or a game page stays the player's.
 function lockControls() {
   const on = locked();
   document.querySelectorAll("#tab-areas, #tab-pages").forEach((tab) =>
-    tab.querySelectorAll("input, select, textarea, button:not([data-copy])").forEach((el) => { el.disabled = on; }));
+    tab.querySelectorAll("input:not(.en):not([data-more]), select, textarea, button:not([data-copy])").forEach((el) => { el.disabled = on; }));
   $("add-area").disabled = on;
   // (its boxes can't be moved or resized, so the hint about doing that is gone too)
   $("drag-hint").hidden = on;
@@ -1603,6 +1793,7 @@ function lockControls() {
   renderPreviewForm();
   renderMemory();
   renderDebug();
+  renderSnapForm();
   try {
     saver = await invoke("frame_saver_status");
     updateSaver();
