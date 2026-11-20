@@ -335,4 +335,6 @@ I18N.add("cs", {
   "Could not change it: {e}": "Nelze změnit: {e}",
   "Instructions (bottom)": "Pokyny (dole)",
   "Translate into": "Překládat do",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Poslední minuta: čtení {read} na průchod · překlad {tr} · překlad hotov {ready} po zobrazení anglického textu (nejpomalejší {max})",
+  "Running for {m} min": "Běží {m} min",
 });

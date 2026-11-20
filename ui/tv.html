@@ -63,14 +63,23 @@
         AS.renderScreen(screenEl, state.screen, state.reason || [], state.profile_opts);
       }
 
+      // A request the network dropped without a word (Wi-Fi) would wait forever and the page would stop:
+      // each one has a time limit (the PC answers within about a second), then the next is asked.
+      const timed = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("no answer")), ms))]);
+      // (tells the TV app the page is alive: it loads a page that went quiet again. Android TV gives the page
+      // a VITTV object; on webOS the page is in a frame of the app, told with a message)
+      function alive() {
+        if (window.VITTV) window.VITTV.alive();
+        try { if (window.parent !== window) window.parent.postMessage({ vit: "alive" }, "*"); } catch (e) {}
+      }
+
       async function poll() {
         let wait = 0;
         try {
-          const r = await fetch(`tv.json?t=${encodeURIComponent(key)}&h=${encodeURIComponent(version)}`, { cache: "no-store" });
-          // (tells the TV app the page is alive: it loads a page that went quiet again)
-          if (window.VITTV) window.VITTV.alive();
+          const r = await timed(fetch(`tv.json?t=${encodeURIComponent(key)}&h=${encodeURIComponent(version)}`, { cache: "no-store" }), 6000);
+          alive();
           if (r.status === 200) {
-            const next = await r.json();
+            const next = await timed(r.json(), 6000);
             version = r.headers.get("X-State") || "";
             // the app was restarted (maybe updated): load its current code. A TV app that doesn't let the
             // page reload itself keeps this one going: it draws the new state, never stuck empty

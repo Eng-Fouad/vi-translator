@@ -981,6 +981,16 @@ async function updateMemory() {
     } else {
       lines.push(t("No lines seen yet this session."));
     }
+    // how the app keeps up (last minute): a slow PC, or one that slows down after a long session, shows here
+    try {
+      const p = await invoke("perf_status");
+      if (p && p.read) {
+        const ms = (x) => (x ? `${x.avg} ms` : "—");
+        lines.push(t("Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})", {
+          read: ms(p.read), tr: ms(p.translate), ready: ms(p.ready), max: p.ready ? `${p.ready.max} ms` : "—" }));
+        lines.push(t("Running for {m} min", { m: p.minutes }));
+      }
+    } catch {}
     el.innerHTML = lines.map(AS.esc).join("<br>");
   } catch (e) {
     el.textContent = String(e);

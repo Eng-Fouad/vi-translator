@@ -335,4 +335,6 @@ I18N.add("vi", {
   "Could not change it: {e}": "Không thể thay đổi: {e}",
   "Instructions (bottom)": "Hướng dẫn (dưới cùng)",
   "Translate into": "Dịch sang",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Phút vừa qua: đọc {read} mỗi lượt · dịch {tr} · bản dịch sẵn sàng {ready} sau khi tiếng Anh xuất hiện (chậm nhất {max})",
+  "Running for {m} min": "Đã chạy {m} phút",
 });

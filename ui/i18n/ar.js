@@ -335,4 +335,6 @@ I18N.add("ar", {
   "Could not change it: {e}": "تعذّر التغيير: {e}",
   "Instructions (bottom)": "التعليمات (أسفل)",
   "Translate into": "الترجمة إلى",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "آخر دقيقة: القراءة {read} لكل مرور · الترجمة {tr} · جاهزية الترجمة {ready} بعد ظهور النص الإنجليزي (الأبطأ {max})",
+  "Running for {m} min": "قيد التشغيل منذ {m} دقيقة",
 });

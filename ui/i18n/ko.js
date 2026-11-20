@@ -335,4 +335,6 @@ I18N.add("ko", {
   "Could not change it: {e}": "변경할 수 없습니다: {e}",
   "Instructions (bottom)": "안내(아래)",
   "Translate into": "번역할 언어",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "최근 1분: 1회 읽기 {read} · 번역 {tr} · 영어 표시 후 번역 준비 {ready} (최대 {max})",
+  "Running for {m} min": "{m}분째 실행 중",
 });

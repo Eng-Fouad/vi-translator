@@ -335,4 +335,6 @@ I18N.add("mr", {
   "Could not change it: {e}": "बदलता आले नाही: {e}",
   "Instructions (bottom)": "सूचना (खाली)",
   "Translate into": "या भाषेत भाषांतर",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "मागील मिनिट: प्रति पास वाचन {read} · अनुवाद {tr} · इंग्रजी दिसल्यानंतर {ready} मध्ये अनुवाद तयार (सर्वात मंद {max})",
+  "Running for {m} min": "{m} मिनिटांपासून चालू आहे",
 });

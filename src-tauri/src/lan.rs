@@ -148,7 +148,7 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
                 (c.snap_lan, c.lan_control.then(|| controls(&c)), c.ui_lang.clone())
             };
             // ("ui": the app's own interface language, which the page takes for its buttons and notices)
-            let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live, "snap": snap, "control": control, "ui": ui });
+            let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live, "snap": snap, "control": control, "ui": ui, "perf": crate::perf_status() });
             respond(s, "200 OK", "application/json; charset=utf-8", body.to_string().as_bytes());
         }
         // the TV app's page: the overlays over the whole picture, as on the OBS page, for a TV

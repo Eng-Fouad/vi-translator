@@ -335,4 +335,6 @@ I18N.add("fa", {
   "Could not change it: {e}": "تغییر ممکن نشد: {e}",
   "Instructions (bottom)": "راهنما (پایین)",
   "Translate into": "ترجمه به",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "دقیقهٔ اخیر: خواندن {read} در هر دور · ترجمه {tr} · آماده شدن ترجمه {ready} پس از ظاهر شدن متن انگلیسی (کندترین {max})",
+  "Running for {m} min": "در حال اجرا از {m} دقیقه پیش",
 });

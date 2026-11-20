@@ -335,4 +335,6 @@ I18N.add("ta", {
   "Could not change it: {e}": "மாற்ற முடியவில்லை: {e}",
   "Instructions (bottom)": "வழிமுறைகள் (கீழே)",
   "Translate into": "மொழிபெயர்க்கும் மொழி",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "கடந்த நிமிடம்: ஒரு சுற்றுக்கு வாசிப்பு {read} · மொழிபெயர்ப்பு {tr} · ஆங்கிலம் தோன்றிய {ready} பின் மொழிபெயர்ப்பு தயார் (மிக மெதுவானது {max})",
+  "Running for {m} min": "{m} நிமிடங்களாக இயங்குகிறது",
 });

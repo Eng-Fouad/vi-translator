@@ -335,4 +335,6 @@ I18N.add("el", {
   "Could not change it: {e}": "Δεν ήταν δυνατή η αλλαγή: {e}",
   "Instructions (bottom)": "Οδηγίες (κάτω)",
   "Translate into": "Μετάφραση σε",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Τελευταίο λεπτό: ανάγνωση {read} ανά πέρασμα · μετάφραση {tr} · μετάφραση έτοιμη {ready} μετά την εμφάνιση του αγγλικού (πιο αργή {max})",
+  "Running for {m} min": "Σε λειτουργία για {m} λεπ.",
 });

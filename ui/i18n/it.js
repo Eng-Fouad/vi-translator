@@ -335,4 +335,6 @@ I18N.add("it", {
   "Could not change it: {e}": "Impossibile modificarlo: {e}",
   "Instructions (bottom)": "Istruzioni (in basso)",
   "Translate into": "Traduci in",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Ultimo minuto: lettura {read} per passaggio · traduzione {tr} · traduzione pronta {ready} dopo la comparsa del testo inglese (più lenta {max})",
+  "Running for {m} min": "In esecuzione da {m} min",
 });

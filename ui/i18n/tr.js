@@ -335,4 +335,6 @@ I18N.add("tr", {
   "Could not change it: {e}": "Değiştirilemedi: {e}",
   "Instructions (bottom)": "Talimatlar (alt)",
   "Translate into": "Çeviri dili",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Son dakika: geçiş başına okuma {read} · çeviri {tr} · İngilizce göründükten {ready} sonra çeviri hazır (en yavaş {max})",
+  "Running for {m} min": "{m} dakikadır çalışıyor",
 });

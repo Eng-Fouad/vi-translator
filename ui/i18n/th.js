@@ -335,4 +335,6 @@ I18N.add("th", {
   "Could not change it: {e}": "เปลี่ยนไม่ได้: {e}",
   "Instructions (bottom)": "คำแนะนำ (ด้านล่าง)",
   "Translate into": "แปลเป็น",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "นาทีที่ผ่านมา: อ่าน {read} ต่อรอบ · แปล {tr} · คำแปลพร้อม {ready} หลังภาษาอังกฤษปรากฏ (ช้าที่สุด {max})",
+  "Running for {m} min": "ทำงานมาแล้ว {m} นาที",
 });

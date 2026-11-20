@@ -335,4 +335,6 @@ I18N.add("fil", {
   "Could not change it: {e}": "Hindi ito mabago: {e}",
   "Instructions (bottom)": "Mga tagubilin (ibaba)",
   "Translate into": "Isalin sa",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Huling minuto: pagbasa {read} bawat pasada · pagsasalin {tr} · handa ang salin {ready} pagkalabas ng Ingles (pinakamabagal {max})",
+  "Running for {m} min": "Tumatakbo nang {m} min",
 });

@@ -335,4 +335,6 @@ I18N.add("zh-Hans", {
   "Could not change it: {e}": "无法更改：{e}",
   "Instructions (bottom)": "提示（底部）",
   "Translate into": "翻译成",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "最近一分钟：每轮读取 {read} · 翻译 {tr} · 英文出现后 {ready} 译文就绪（最慢 {max}）",
+  "Running for {m} min": "已运行 {m} 分钟",
 });

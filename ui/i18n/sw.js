@@ -335,4 +335,6 @@ I18N.add("sw", {
   "Could not change it: {e}": "Imeshindwa kubadilisha: {e}",
   "Instructions (bottom)": "Maelekezo (chini)",
   "Translate into": "Tafsiri kwa",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Dakika iliyopita: kusoma {read} kwa kila mzunguko · kutafsiri {tr} · tafsiri iko tayari {ready} baada ya Kiingereza kuonekana (polepole zaidi {max})",
+  "Running for {m} min": "Inaendeshwa kwa dakika {m}",
 });

@@ -335,4 +335,6 @@ I18N.add("ru", {
   "Could not change it: {e}": "Не удалось изменить: {e}",
   "Instructions (bottom)": "Подсказки (внизу)",
   "Translate into": "Переводить на",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Последняя минута: чтение {read} за проход · перевод {tr} · перевод готов через {ready} после появления английского текста (самый медленный {max})",
+  "Running for {m} min": "Работает {m} мин",
 });

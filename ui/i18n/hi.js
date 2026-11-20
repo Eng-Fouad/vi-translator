@@ -335,4 +335,6 @@ I18N.add("hi", {
   "Could not change it: {e}": "बदला नहीं जा सका: {e}",
   "Instructions (bottom)": "निर्देश (नीचे)",
   "Translate into": "इस भाषा में अनुवाद",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "पिछला मिनट: पढ़ना {read} प्रति पास · अनुवाद {tr} · अंग्रेज़ी दिखने के {ready} बाद अनुवाद तैयार (सबसे धीमा {max})",
+  "Running for {m} min": "{m} मिनट से चल रहा है",
 });

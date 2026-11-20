@@ -1705,8 +1705,60 @@ fn ocr_loop(
             }
         }
         let spent = t0.elapsed();
+        perf_note(PerfKind::Read, spent.as_secs_f64() * 1000.0);
         std::thread::sleep(Duration::from_millis(interval_ms.max(50)).saturating_sub(spent));
     }
+}
+
+// ------------------------------------------------------------------------------------- speed
+
+/// How the app keeps up, over the last minute, for the Translator tab: a read of the areas (OCR), a
+/// translation, and how long after the English appeared its translation was ready. Shown to players so a
+/// slow PC (or a slowdown after a long session) can be told from a missing translation.
+#[derive(Clone, Copy)]
+enum PerfKind {
+    Read,
+    Translate,
+    Ready,
+}
+
+struct Perf {
+    started: Instant,
+    samples: [std::collections::VecDeque<(Instant, f64)>; 3],
+}
+
+static PERF: Mutex<Option<Perf>> = Mutex::new(None);
+const PERF_WINDOW: Duration = Duration::from_secs(60);
+
+fn perf_note(kind: PerfKind, ms: f64) {
+    let mut p = PERF.lock().unwrap();
+    let p = p.get_or_insert_with(|| Perf { started: Instant::now(), samples: Default::default() });
+    let q = &mut p.samples[kind as usize];
+    let now = Instant::now();
+    q.push_back((now, ms));
+    while q.front().is_some_and(|(t, _)| now - *t > PERF_WINDOW) || q.len() > 5000 {
+        q.pop_front();
+    }
+}
+
+#[tauri::command]
+fn perf_status() -> serde_json::Value {
+    let p = PERF.lock().unwrap();
+    let Some(p) = p.as_ref() else { return serde_json::json!(null) };
+    let now = Instant::now();
+    let stat = |k: PerfKind| {
+        let v: Vec<f64> = p.samples[k as usize].iter().filter(|(t, _)| now - *t <= PERF_WINDOW).map(|(_, ms)| *ms).collect();
+        if v.is_empty() {
+            return serde_json::json!(null);
+        }
+        let avg = v.iter().sum::<f64>() / v.len() as f64;
+        let max = v.iter().cloned().fold(0.0, f64::max);
+        serde_json::json!({ "avg": avg.round(), "max": max.round(), "n": v.len() })
+    };
+    serde_json::json!({
+        "minutes": (now - p.started).as_secs() / 60,
+        "read": stat(PerfKind::Read), "translate": stat(PerfKind::Translate), "ready": stat(PerfKind::Ready),
+    })
 }
 
 fn translate_loop(
@@ -1756,6 +1808,7 @@ fn translate_loop(
         // Two speakers' lines (white and grey) are translated one by one: as one sentence the
         // translator merges or drops one ("… so... What?" lost the "What?"). Each comes back in its own
         // line, the other speaker's in grey like the game's.
+        let t_translate = Instant::now();
         let (result, hit) = if job.parts.len() > 1 {
             let mut all: translate::Segments = Vec::new();
             let mut hits = true;
@@ -1780,9 +1833,13 @@ fn translate_loop(
         } else {
             translate_spoken(&mut tr, &c, &memory, &job.en, &job.icons, &job.phrases, &status)
         };
+        perf_note(PerfKind::Translate, t_translate.elapsed().as_secs_f64() * 1000.0);
         let hit_from = if hit { "memory" } else { "" };
         // time from the English line appearing to its Arabic being ready
         let ready_ms = job.en_start.elapsed().as_secs_f64() * 1000.0;
+        if job.area != MENU_TEXT {
+            perf_note(PerfKind::Ready, ready_ms);
+        }
         let mem_note = {
             let mut m = memory.lock().unwrap();
             if m.lang() == c.target_lang {
@@ -2508,7 +2565,11 @@ fn main() {
                 let mut any = false;
                 for info in &pages.list {
                     let t = Instant::now();
-                    let Some(k) = pages.present(&info.id, &frame, &ocr) else { continue };
+                    let present = pages.present(&info.id, &frame, &ocr);
+                    if std::env::var_os("VI_TRANSLATOR_TIMING").is_some() {
+                        eprintln!("[timing] {name} {} present {} µs", info.id, t.elapsed().as_micros());
+                    }
+                    let Some(k) = present else { continue };
                     let read = pages.read(&info.id, &frame, &ocr, &k);
                     let ms = t.elapsed().as_millis();
                     any = true;
@@ -2645,7 +2706,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, memory_status, memory_clear])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

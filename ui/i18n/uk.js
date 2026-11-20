@@ -335,4 +335,6 @@ I18N.add("uk", {
   "Could not change it: {e}": "Не вдалося змінити: {e}",
   "Instructions (bottom)": "Підказки (унизу)",
   "Translate into": "Перекладати на",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Остання хвилина: читання {read} за прохід · переклад {tr} · переклад готовий через {ready} після появи англійського тексту (найповільніше {max})",
+  "Running for {m} min": "Працює {m} хв",
 });

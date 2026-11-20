@@ -335,4 +335,6 @@ I18N.add("nl", {
   "Could not change it: {e}": "Kon het niet wijzigen: {e}",
   "Instructions (bottom)": "Instructies (onderaan)",
   "Translate into": "Vertalen naar",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Afgelopen minuut: lezen {read} per ronde · vertalen {tr} · vertaling klaar {ready} na verschijnen van het Engels (traagst {max})",
+  "Running for {m} min": "Actief sinds {m} min",
 });

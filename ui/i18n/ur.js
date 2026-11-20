@@ -335,4 +335,6 @@ I18N.add("ur", {
   "Could not change it: {e}": "تبدیل نہیں ہو سکا: {e}",
   "Instructions (bottom)": "ہدایات (نیچے)",
   "Translate into": "اس زبان میں ترجمہ",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "پچھلا منٹ: فی پاس پڑھنا {read} · ترجمہ {tr} · انگریزی ظاہر ہونے کے {ready} بعد ترجمہ تیار (سب سے سست {max})",
+  "Running for {m} min": "{m} منٹ سے چل رہا ہے",
 });

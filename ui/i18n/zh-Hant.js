@@ -335,4 +335,6 @@ I18N.add("zh-Hant", {
   "Could not change it: {e}": "無法變更：{e}",
   "Instructions (bottom)": "提示（底部）",
   "Translate into": "翻譯成",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "最近一分鐘：每輪讀取 {read} · 翻譯 {tr} · 英文出現後 {ready} 譯文就緒（最慢 {max}）",
+  "Running for {m} min": "已執行 {m} 分鐘",
 });

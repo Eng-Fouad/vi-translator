@@ -335,4 +335,6 @@ I18N.add("bn", {
   "Could not change it: {e}": "পরিবর্তন করা যায়নি: {e}",
   "Instructions (bottom)": "নির্দেশনা (নিচে)",
   "Translate into": "যে ভাষায় অনুবাদ",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "গত এক মিনিট: প্রতি পাসে পড়া {read} · অনুবাদ {tr} · ইংরেজি দেখা দেওয়ার {ready} পর অনুবাদ প্রস্তুত (সবচেয়ে ধীর {max})",
+  "Running for {m} min": "{m} মিনিট ধরে চলছে",
 });

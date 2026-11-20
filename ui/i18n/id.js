@@ -335,4 +335,6 @@ I18N.add("id", {
   "Could not change it: {e}": "Tidak dapat mengubahnya: {e}",
   "Instructions (bottom)": "Petunjuk (bawah)",
   "Translate into": "Terjemahkan ke",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Satu menit terakhir: membaca {read} per putaran · menerjemahkan {tr} · terjemahan siap {ready} setelah teks Inggris muncul (paling lambat {max})",
+  "Running for {m} min": "Berjalan selama {m} menit",
 });

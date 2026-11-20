@@ -335,4 +335,6 @@ I18N.add("ja", {
   "Could not change it: {e}": "変更できませんでした: {e}",
   "Instructions (bottom)": "指示 (下)",
   "Translate into": "翻訳先の言語",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "直近1分: 読み取り 1回 {read} · 翻訳 {tr} · 英語の表示から翻訳まで {ready} (最遅 {max})",
+  "Running for {m} min": "{m} 分間実行中",
 });

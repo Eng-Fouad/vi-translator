@@ -335,4 +335,6 @@ I18N.add("te", {
   "Could not change it: {e}": "మార్చడం సాధ్యం కాలేదు: {e}",
   "Instructions (bottom)": "సూచనలు (కింద)",
   "Translate into": "అనువాద భాష",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "గత నిమిషం: ఒక్కో పాస్‌కు చదవడం {read} · అనువాదం {tr} · ఆంగ్లం కనిపించిన {ready} తర్వాత అనువాదం సిద్ధం (అత్యంత నెమ్మది {max})",
+  "Running for {m} min": "{m} నిమిషాలుగా నడుస్తోంది",
 });

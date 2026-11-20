@@ -335,4 +335,6 @@ I18N.add("ms", {
   "Could not change it: {e}": "Tidak dapat mengubahnya: {e}",
   "Instructions (bottom)": "Arahan (bawah)",
   "Translate into": "Terjemah ke",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Seminit terakhir: membaca {read} setiap pusingan · menterjemah {tr} · terjemahan sedia {ready} selepas teks Inggeris muncul (paling perlahan {max})",
+  "Running for {m} min": "Berjalan selama {m} minit",
 });

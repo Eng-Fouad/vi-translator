@@ -335,4 +335,6 @@ I18N.add("ro", {
   "Could not change it: {e}": "Nu s-a putut schimba: {e}",
   "Instructions (bottom)": "Instrucțiuni (jos)",
   "Translate into": "Tradu în",
+  "Last minute: reading {read} per pass · translating {tr} · translation ready {ready} after the English (slowest {max})": "Ultimul minut: citire {read} pe trecere · traducere {tr} · traducere gata la {ready} după apariția textului în engleză (cel mai lent {max})",
+  "Running for {m} min": "Rulează de {m} min",
 });
