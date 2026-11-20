@@ -101,7 +101,12 @@
               const t = l.at ? new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "";
               el.innerHTML = `<div class="meta"><span class="when">${t}</span><span class="en">${l.en_segs?.length ? segs(l.en_segs) : esc(l.en)}</span></div>
                 <div class="text" dir="${rtl ? "rtl" : "ltr"}">${l.segs?.length ? segs(l.segs) : esc(l.text)}</div>`;
-              $("list").appendChild(el);
+              // the same line sent again with the game's colours (same area and start): it replaces the first
+              const key = `${l.area}|${l.at}`;
+              el.dataset.key = key;
+              const old = l.at ? [...$("list").children].reverse().find((e) => e.dataset.key === key) : null;
+              if (old) old.replaceWith(el);
+              else $("list").appendChild(el);
             }
             while ($("list").children.length > 200) $("list").firstElementChild.remove();
             if (stick) $("list").scrollTop = $("list").scrollHeight;

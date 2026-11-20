@@ -667,6 +667,9 @@ struct AreaState {
     /// that line as sent to translation (icons as ⟦n⟧) and when it appeared — for the lines log
     current_en: String,
     current_start: Option<Instant>,
+    /// The line on screen was sent without the game's coloured words: read on its first frame, while
+    /// GTA VI's instructions still fade in with a white glow. Its colours are looked for again until then.
+    colors_until: Option<Instant>,
 }
 
 /// Instant -> Unix milliseconds.
@@ -1475,21 +1478,21 @@ fn ocr_loop(
                 let st = states.entry(area.id.clone()).or_default();
                 let now = Instant::now();
                 let crop = Crop::from_frame(&frame.rgba, frame.w, frame.h, area.x, area.y, area.w, area.h);
-                let (mut text, words, sure) = match &crop {
+                let (mut text, mut words, sure) = match &crop {
                     Some(cr) => match ocr.recognize_checked(cr) {
                         Ok((words, sure)) => (ocr::clean(&words), words, sure),
                         Err(_) => (String::new(), Vec::new(), true),
                     },
                     None => (String::new(), Vec::new(), true),
                 };
-                // Subtitles are centred in the picture: text whose middle is off-centre (a menu's
-                // "Browse" at the bottom right) is not a subtitle.
+                // Subtitles are centred in the picture: text off-centre (a menu's "Browse" at the bottom
+                // right) is not a subtitle, and a panel at the side of the area (a garage's car stats) is
+                // left out of the line instead of pushing it off-centre.
                 if area.centered_only && !words.is_empty() {
-                    let x0 = words.iter().map(|w| w.rect.0).min().unwrap_or(0) as f64;
-                    let x1 = words.iter().map(|w| w.rect.0 + w.rect.2).max().unwrap_or(0) as f64;
-                    let cx = area.x.clamp(0.0, 1.0) + (x0 + x1) / 2.0 / frame.w as f64;
-                    if (cx - 0.5).abs() > 0.04 {
-                        text.clear();
+                    let kept = ocr::centered_words(&words, area.x.clamp(0.0, 1.0) * frame.w as f64, frame.w as f64);
+                    if kept.len() != words.len() {
+                        words = kept;
+                        text = ocr::clean(&words);
                     }
                 }
                 // An area of the game's own box (GTA VI's help): no box around the text, no text here.
@@ -1531,10 +1534,21 @@ fn ocr_loop(
                     // replaced it, or it really is what's on screen.
                     let wait = if sure { stable_ms } else { stable_ms * 3 };
                     let settled = !is_new && st.candidate_since.is_some_and(|s| now - s >= Duration::from_millis(wait));
-                    if (known || settled) && !ocr::similar(&st.candidate, &st.current) {
-                        // Stable new text: translate it once. Colours are measured only now.
+                    // The same line, sent without colours, now shows them: sent again with them (the same
+                    // line on screen, not a new one: its start and the lines log stay as they are).
+                    let recolor = st.colors_until.is_some_and(|t| now < t)
+                        && !st.current.is_empty()
+                        && ocr::similar(&st.candidate, &st.current)
+                        && crop.as_ref().is_some_and(|cr| !ocr::colored_phrases(cr, &words).is_empty());
+                    if st.colors_until.is_some_and(|t| now >= t) {
+                        st.colors_until = None;
+                    }
+                    if ((known || settled) && !ocr::similar(&st.candidate, &st.current)) || recolor {
+                        // Stable new text: translate it once. Colours are measured now (and again for a
+                        // moment if there were none: see `colors_until`).
                         st.current = st.candidate.clone();
                         let phrases = crop.as_ref().map(|cr| ocr::colored_phrases(cr, &words)).unwrap_or_default();
+                        st.colors_until = if phrases.is_empty() && !recolor { Some(now + Duration::from_millis(2000)) } else { None };
                         // Controller button icons inside the text ("Press ✕ to ...") come along as placeholders.
                         let (en_icons, icons_found, block) =
                             crop.as_ref().map(|cr| ocr::text_with_icons(cr, &words)).unwrap_or((String::new(), Vec::new(), None));
@@ -1564,10 +1578,10 @@ fn ocr_loop(
                         seq_counter += 1;
                         latest.lock().unwrap().insert(area.id.clone(), seq_counter);
                         // the previous English line ended when this one appeared
-                        let en_start = st.candidate_since.unwrap_or(now);
+                        let en_start = if recolor { st.current_start.unwrap_or(now) } else { st.candidate_since.unwrap_or(now) };
                         if st.current_seq != 0 {
-                            let _ = present.send(PMsg::Ended { area: area.id.clone(), seq: st.current_seq, at: en_start });
-                            if let Some(s0) = st.current_start {
+                            let _ = present.send(PMsg::Ended { area: area.id.clone(), seq: st.current_seq, at: if recolor { now } else { en_start } });
+                            if let (Some(s0), false) = (st.current_start, recolor) {
                                 memory.lock().unwrap().log_line(&area.id, &st.current_en, unix_ms(s0), unix_ms(en_start));
                             }
                         }
@@ -1726,9 +1740,9 @@ fn translate_loop(
                 }
                 s.push((p.0.clone(), None));
             }
-            s
+            with_phrase_colors(s, &job.phrases)
         } else {
-            english_segments(&job.en, &job.icons)
+            with_phrase_colors(english_segments(&job.en, &job.icons), &job.phrases)
         };
         let job = Job { en: strip_icon_tokens(&job.en), ..job };
         // The Mission Failed reason is only useful while it is current. (Area lines go to the
@@ -1965,7 +1979,10 @@ fn read_video(file: &str, fps: f64, from: f64, to: f64) -> anyhow::Result<()> {
         n += 1;
         for area in &areas {
             let Some(crop) = Crop::from_frame(&frame, w, h, area.x, area.y, area.w, area.h) else { continue };
-            let (words, sure) = ocr.recognize_checked(&crop)?;
+            let (mut words, sure) = ocr.recognize_checked(&crop)?;
+            if area.centered_only {
+                words = ocr::centered_words(&words, area.x.clamp(0.0, 1.0) * w as f64, w as f64);
+            }
             let en = ocr::clean(&words);
             if en.is_empty() {
                 continue;
@@ -2098,7 +2115,10 @@ fn translate_frames(file: &str, times_file: &str, out_dir: &str) -> anyhow::Resu
         let mut shown = Vec::new();
         for area in &areas {
             let Some(crop) = Crop::from_frame(&frame, w, h, area.x, area.y, area.w, area.h) else { continue };
-            let (words, sure) = ocr.recognize_checked(&crop)?;
+            let (mut words, sure) = ocr.recognize_checked(&crop)?;
+            if area.centered_only {
+                words = ocr::centered_words(&words, area.x.clamp(0.0, 1.0) * w as f64, w as f64);
+            }
             let en = ocr::clean(&words);
             // (a reading the app isn't sure of, text still fading in, is one it would wait out)
             if en.is_empty() || (!sure && area.id != "subtitles") {
@@ -2183,9 +2203,12 @@ fn test_image(path: &str, area_id: &str) -> anyhow::Result<()> {
     Ocr::init_thread();
     let ocr = Ocr::new()?;
     let t = Instant::now();
-    let words = ocr.recognize(&crop)?;
+    let mut words = ocr.recognize(&crop)?;
     if std::env::var_os("VI_TRANSLATOR_DEBUG").is_some() {
         eprintln!("[ocr] words: {:?}", words.iter().map(|w| (&w.text, w.rect)).collect::<Vec<_>>());
+    }
+    if area.centered_only {
+        words = ocr::centered_words(&words, area.x.clamp(0.0, 1.0) * w as f64, w as f64);
     }
     let en = ocr::clean(&words);
     let phrases = ocr::colored_phrases(&crop, &words);
@@ -2615,6 +2638,41 @@ fn english_segments(en: &str, icons: &[String]) -> Segments {
     segs
 }
 
+/// The game's coloured words (`phrases`: text and colour, in reading order) as coloured segments of the
+/// English, as the translation has them: "Restore the engine" with "engine" in pink. Icon segments and
+/// text already coloured stay as they are; a phrase not found in the text is skipped.
+fn with_phrase_colors(segs: Segments, phrases: &[(String, String)]) -> Segments {
+    let mut out = segs;
+    for (phrase, color) in phrases {
+        let phrase = phrase.trim();
+        if phrase.is_empty() {
+            continue;
+        }
+        let mut next: Segments = Vec::with_capacity(out.len() + 2);
+        let mut done = false;
+        for (text, c) in out {
+            let at = if done || c.is_some() { None } else { text.find(phrase).or_else(|| text.to_lowercase().find(&phrase.to_lowercase()).filter(|&i| text.is_char_boundary(i) && text.is_char_boundary(i + phrase.len()))) };
+            match at {
+                Some(i) => {
+                    let (before, rest) = text.split_at(i);
+                    let (word, after) = rest.split_at(phrase.len());
+                    if !before.is_empty() {
+                        next.push((before.to_string(), None));
+                    }
+                    next.push((word.to_string(), Some(color.clone())));
+                    if !after.is_empty() {
+                        next.push((after.to_string(), None));
+                    }
+                    done = true;
+                }
+                None => next.push((text, c)),
+            }
+        }
+        out = next;
+    }
+    out
+}
+
 /// "Press ⟦1⟧ to jump" -> "Press 🎮 to jump" (for showing English lines in the log).
 fn strip_icon_tokens(s: &str) -> String {
     s.split_whitespace()
@@ -2777,4 +2835,22 @@ fn hide_screen(app: &AppHandle, shared: &Shared, latest: &Mutex<HashMap<String, 
     *shared.screen.lock().unwrap() = None;
     *shared.screen_reason.lock().unwrap() = serde_json::json!([]);
     let _ = app.emit("screen", None::<screens::ScreenLayout>);
+}
+
+#[cfg(test)]
+mod english_color_tests {
+    use super::*;
+
+    #[test]
+    fn the_games_coloured_words_are_coloured_in_the_english() {
+        let segs = with_phrase_colors(english_segments("Restore the engine", &[]), &[("engine".into(), "#ff86bf".into())]);
+        assert_eq!(segs, vec![("Restore the ".to_string(), None), ("engine".to_string(), Some("#ff86bf".to_string()))]);
+    }
+
+    #[test]
+    fn icons_stay_and_a_phrase_not_found_is_skipped() {
+        let icons = vec!["data:x".to_string()];
+        let segs = with_phrase_colors(english_segments("Press ⟦1⟧ to follow Nate", &icons), &[("Nate".into(), "#ff86bf".into()), ("Lucia".into(), "#ff86bf".into())]);
+        assert_eq!(segs, vec![("Press ".to_string(), None), (String::new(), Some("icon:data:x".to_string())), (" to follow ".to_string(), None), ("Nate".to_string(), Some("#ff86bf".to_string()))]);
+    }
 }

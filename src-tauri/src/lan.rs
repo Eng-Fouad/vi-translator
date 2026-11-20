@@ -39,6 +39,8 @@ pub fn push(shared: &Shared, area: &str, en: &str, en_segments: &[(String, Optio
     }
     let id = shared.live_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     let mut log = shared.live_log.lock().unwrap();
+    // the same line sent again with the game's colours (same area and start): the first goes
+    log.retain(|l| !(l["area"] == area && l["at"] == at_ms));
     log.push_back(serde_json::json!({ "id": id, "at": at_ms, "area": area, "en": en, "text": text.trim(), "en_segs": en_segments, "segs": segments }));
     while log.len() > KEEP {
         log.pop_front();

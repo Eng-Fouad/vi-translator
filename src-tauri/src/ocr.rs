@@ -363,6 +363,52 @@ fn agreed(words: &[Word], other: &str) -> usize {
     words.iter().map(|w| norm(&w.text)).filter(|t| seen.contains(t)).map(|t| t.chars().count()).sum()
 }
 
+/// Areas that read only centred text (subtitles): the words of the centred part. Another block of text at
+/// the side of the area (a garage's or shop's panel on the right: "STRENGTH", "RATING") is dropped, so it
+/// doesn't push the subtitle off-centre and lose it. Words are grouped in columns (a gap wider than three
+/// text heights splits them); while the columns together are off-centre, the outermost one on that side
+/// goes. Nothing is left when even one column is off-centre (a menu's "Browse" at the bottom right).
+/// `crop_x` is where the crop starts in the frame and `frame_w` the frame's width, in pixels.
+pub fn centered_words(words: &[Word], crop_x: f64, frame_w: f64) -> Vec<Word> {
+    if words.is_empty() || frame_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut hs: Vec<u32> = words.iter().map(|w| w.rect.3).collect();
+    hs.sort_unstable();
+    let gap = (hs[hs.len() / 2] as f64 * 3.0).max(24.0);
+    // columns: runs of words (by x) with no gap wider than `gap` between them
+    let mut order: Vec<usize> = (0..words.len()).collect();
+    order.sort_by_key(|&i| words[i].rect.0);
+    let mut cols: Vec<(f64, f64, Vec<usize>)> = Vec::new();
+    for i in order {
+        let (x0, x1) = (words[i].rect.0 as f64, (words[i].rect.0 + words[i].rect.2) as f64);
+        match cols.last_mut() {
+            Some(c) if x0 <= c.1 + gap => {
+                c.1 = c.1.max(x1);
+                c.2.push(i);
+            }
+            _ => cols.push((x0, x1, vec![i])),
+        }
+    }
+    loop {
+        let x0 = cols.first().map_or(0.0, |c| c.0);
+        let x1 = cols.iter().map(|c| c.1).fold(0.0, f64::max);
+        let cx = (crop_x + (x0 + x1) / 2.0) / frame_w;
+        if (cx - 0.5).abs() <= 0.04 {
+            let keep: std::collections::HashSet<usize> = cols.iter().flat_map(|c| c.2.iter().copied()).collect();
+            return words.iter().enumerate().filter(|(i, _)| keep.contains(i)).map(|(_, w)| w.clone()).collect();
+        }
+        if cols.len() <= 1 {
+            return Vec::new();
+        }
+        if cx > 0.5 {
+            cols.pop();
+        } else {
+            cols.remove(0);
+        }
+    }
+}
+
 /// Join words and drop OCR noise (almost no letters).
 pub fn clean(words: &[Word]) -> String {
     let text = words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ");
@@ -1501,4 +1547,36 @@ fn drop_junk(words: Vec<Word>) -> Vec<Word> {
             !(junky && letters <= 2)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod centered_tests {
+    use super::*;
+
+    fn w(text: &str, x: u32, y: u32, width: u32) -> Word {
+        Word { text: text.into(), rect: (x, y, width, 24), line: 0 }
+    }
+    fn texts(ws: &[Word]) -> String {
+        ws.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ")
+    }
+
+    #[test]
+    fn a_panel_at_the_side_is_left_out_of_the_subtitle() {
+        // GTA VI's garage: the area (from x 192 of a 1920 frame) has the subtitle in the middle and the car's
+        // stats panel on the right; the OCR missed the middle words of the line
+        let ws = vec![w("STRENGTH", 1291, 10, 110), w("Joey:", 490, 95, 58), w("to", 900, 95, 20), w("the", 925, 95, 36), w("action", 966, 95, 80), w("RATING", 1291, 70, 76)];
+        assert_eq!(texts(&centered_words(&ws, 192.0, 1920.0)), "Joey: to the action");
+    }
+
+    #[test]
+    fn a_centred_line_is_kept_whole() {
+        let ws = vec![w("Come", 700, 10, 60), w("on,", 768, 10, 40), w("let's", 816, 10, 60), w("go.", 884, 10, 40)];
+        assert_eq!(centered_words(&ws, 192.0, 1920.0).len(), 4);
+    }
+
+    #[test]
+    fn text_only_at_the_side_is_not_a_subtitle() {
+        let ws = vec![w("Browse", 1400, 10, 90)];
+        assert!(centered_words(&ws, 192.0, 1920.0).is_empty());
+    }
 }

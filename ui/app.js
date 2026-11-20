@@ -1085,9 +1085,17 @@ function log(ev) {
   } else {
     const ar = AS.segHtml(ev.segments);
     const where = area?.name ?? (ev.area === "__screen_reason" ? t("Game page text") : ev.area);
-    el.innerHTML = `<div class="head"><span class="when" title="${AS.esc(when.toLocaleString(I18N.lang))}">${time}</span><span class="en" dir="ltr">${ev.en_segments?.length ? AS.segHtml(ev.en_segments, false) : AS.esc(ev.en)}</span></div><div class="ar" dir="auto">${ar}</div><div class="meta">${AS.esc(where)}${ev.stats ? ` · ${AS.esc(ev.stats)}` : ""}</div>`;
+    el.innerHTML = `<div class="head"><span class="when" title="${AS.esc(when.toLocaleString(I18N.lang))}">${time}</span><span class="en" dir="ltr">${ev.en_segments?.length ? AS.segHtml(ev.en_segments) : AS.esc(ev.en)}</span></div><div class="ar" dir="auto">${ar}</div><div class="meta">${AS.esc(where)}${ev.stats ? ` · ${AS.esc(ev.stats)}` : ""}</div>`;
   }
   const box = $("log");
+  // the same line sent again with the game's colours (same area and start): it replaces the first
+  const key = ev.at && !ev.error && !ev.info ? `${ev.area}|${ev.at}` : "";
+  el.dataset.key = key;
+  const old = key ? [...box.children].find((e) => e.dataset.key === key) : null;
+  if (old) {
+    old.replaceWith(el);
+    return;
+  }
   box.prepend(el);
   while (box.children.length > 100) box.lastChild.remove();
 }
