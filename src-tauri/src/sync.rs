@@ -367,14 +367,14 @@ fn download_pack_with(key: &[u8; 32], http: &reqwest::blocking::Client, url: &st
     let base = format!("{url}/v1/data/{game}/{lang}/{series}");
     let changed = have.filter(|(s, v)| *s == series && *v > 0 && *v < version).and_then(|(_, from)| {
         let mine = std::fs::read(paths.shared(game, lang)).ok().and_then(|b| open_pack_with(key, &b, game, lang, &from.to_string()))?;
-        let file = get(http, &format!("{base}/changes-{from}-{version}.bin"))?;
+        let file = get_pack(http, &format!("{base}/changes-{from}-{version}.bin"))?;
         let changes = open_changes(key, &file, &format!("{game}/{lang}/{from}-{version}"))?;
         Some(apply_changes(mine, changes))
     });
     let entries = match changed {
         Some(e) => e,
         None => {
-            let file = get(http, &format!("{base}/full-{version}.bin"))?;
+            let file = get_pack(http, &format!("{base}/full-{version}.bin"))?;
             open_pack_with(key, &file, game, lang, &version.to_string())?
         }
     };
@@ -389,6 +389,16 @@ fn download_pack_with(key: &[u8; 32], http: &reqwest::blocking::Client, url: &st
 /// A plain GET: the body when the answer is 200.
 fn get(http: &reqwest::blocking::Client, url: &str) -> Option<Vec<u8>> {
     let r = http.get(url).send().ok()?;
+    r.status().is_success().then(|| r.bytes().ok().map(|b| b.to_vec())).flatten()
+}
+
+/// How long a pack file may take to download: a whole game's translations are several megabytes, more
+/// than the client's 30 seconds allow on a slow connection (the download would fail every time).
+const PACK_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// A GET for a pack file (whole, or its changes): as `get`, with the time a big file needs.
+fn get_pack(http: &reqwest::blocking::Client, url: &str) -> Option<Vec<u8>> {
+    let r = http.get(url).timeout(PACK_TIMEOUT).send().ok()?;
     r.status().is_success().then(|| r.bytes().ok().map(|b| b.to_vec())).flatten()
 }
 
