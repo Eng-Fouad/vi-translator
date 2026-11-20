@@ -1505,6 +1505,15 @@ listen("lan-control", (e) => {
   const v = e.payload;
   cfg.overlays_enabled = v.overlays_enabled;
   cfg.live_translations = v.live_translations;
+  // another language to translate into: as if picked in the Translator tab
+  if (v.target_lang && v.target_lang !== cfg.target_lang) {
+    cfg.target_lang = v.target_lang;
+    AS.setLang(cfg.target_lang);
+    for (const k of Object.keys(lastSegs)) delete lastSegs[k];
+    renderLang();
+    renderEngines();
+    renderProfile();
+  }
   cfg.shown = v.shown;
   if (v.profile === cfg.profile) {
     for (const a of cfg.areas) if (a.id in v.areas) a.enabled = v.areas[a.id];

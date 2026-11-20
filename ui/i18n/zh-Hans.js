@@ -323,4 +323,16 @@ I18N.add("zh-Hans", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — 最快，每张图片约 $0.03",
   "Allow changes from that page": "允许从该页面进行更改",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "让该页面开关叠加层和实时翻译，并显示或隐藏读取区域和游戏页面。",
+  // live translations page
+  "Switches": "开关",
+  "Show the English": "显示英文",
+  "Smaller text": "缩小文字",
+  "Bigger text": "放大文字",
+  "Paused: Live translations are switched off in VI Translator.": "已暂停：VI Translator 中的实时翻译已关闭。",
+  "Waiting for translations…": "正在等待翻译…",
+  "Show": "显示",
+  "Overlays on the game": "游戏上的叠加层",
+  "Could not change it: {e}": "无法更改：{e}",
+  "Instructions (bottom)": "提示（底部）",
+  "Translate into": "翻译成",
 });

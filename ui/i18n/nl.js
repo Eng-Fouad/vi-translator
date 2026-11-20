@@ -323,4 +323,16 @@ I18N.add("nl", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — snelst, ongeveer $0.03 per beeld",
   "Allow changes from that page": "Wijzigingen vanaf die pagina toestaan",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Laat de pagina de overlays en live vertalingen aan- of uitzetten, en leesgebieden en gamepagina's tonen of verbergen.",
+  // live translations page
+  "Switches": "Schakelaars",
+  "Show the English": "Engels tonen",
+  "Smaller text": "Kleinere tekst",
+  "Bigger text": "Grotere tekst",
+  "Paused: Live translations are switched off in VI Translator.": "Gepauzeerd: live vertalingen staan uit in VI Translator.",
+  "Waiting for translations…": "Wachten op vertalingen…",
+  "Show": "Tonen",
+  "Overlays on the game": "Overlays op het spel",
+  "Could not change it: {e}": "Kon het niet wijzigen: {e}",
+  "Instructions (bottom)": "Instructies (onderaan)",
+  "Translate into": "Vertalen naar",
 });

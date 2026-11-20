@@ -323,4 +323,16 @@ I18N.add("ro", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — cel mai rapid, circa $0.03 per imagine",
   "Allow changes from that page": "Permite modificări de pe acea pagină",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Permite paginii să pornească sau să oprească suprapunerea și traducerile în timp real și să afișeze sau să ascundă zonele de citire și paginile din joc.",
+  // live translations page
+  "Switches": "Comutatoare",
+  "Show the English": "Arată textul în engleză",
+  "Smaller text": "Text mai mic",
+  "Bigger text": "Text mai mare",
+  "Paused: Live translations are switched off in VI Translator.": "În pauză: traducerile în timp real sunt oprite în VI Translator.",
+  "Waiting for translations…": "Se așteaptă traducerile…",
+  "Show": "Afișare",
+  "Overlays on the game": "Traducere peste joc",
+  "Could not change it: {e}": "Nu s-a putut schimba: {e}",
+  "Instructions (bottom)": "Instrucțiuni (jos)",
+  "Translate into": "Tradu în",
 });

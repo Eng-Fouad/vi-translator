@@ -323,4 +323,16 @@ I18N.add("fa", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — سریع‌ترین، حدود $0.03 برای هر تصویر",
   "Allow changes from that page": "اجازهٔ تغییرات از آن صفحه",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "به صفحه اجازه می‌دهد اورلی‌ها و ترجمه‌های زنده را روشن و خاموش کند و ناحیه‌های خواندن و صفحه‌های بازی را نشان دهد یا پنهان کند.",
+  // live translations page
+  "Switches": "کلیدها",
+  "Show the English": "نمایش انگلیسی",
+  "Smaller text": "متن کوچک‌تر",
+  "Bigger text": "متن بزرگ‌تر",
+  "Paused: Live translations are switched off in VI Translator.": "متوقف: ترجمه‌های زنده در VI Translator خاموش است.",
+  "Waiting for translations…": "در انتظار ترجمه‌ها…",
+  "Show": "نمایش",
+  "Overlays on the game": "اورلی روی بازی",
+  "Could not change it: {e}": "تغییر ممکن نشد: {e}",
+  "Instructions (bottom)": "راهنما (پایین)",
+  "Translate into": "ترجمه به",
 });

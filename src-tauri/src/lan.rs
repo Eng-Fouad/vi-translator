@@ -143,11 +143,12 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
                 shared.live_log.lock().unwrap().iter().filter(|l| l["id"].as_u64().unwrap_or(0) > after).cloned().collect();
             let live = !shared.live_off.load(std::sync::atomic::Ordering::Relaxed);
             // ("run": new each time the app starts; line ids start again then, and the page with it)
-            let (snap, control) = {
+            let (snap, control, ui) = {
                 let c = cfg.lock().unwrap();
-                (c.snap_lan, c.lan_control.then(|| controls(&c)))
+                (c.snap_lan, c.lan_control.then(|| controls(&c)), c.ui_lang.clone())
             };
-            let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live, "snap": snap, "control": control });
+            // ("ui": the app's own interface language, which the page takes for its buttons and notices)
+            let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live, "snap": snap, "control": control, "ui": ui });
             respond(s, "200 OK", "application/json; charset=utf-8", body.to_string().as_bytes());
         }
         // the TV app's page: the overlays over the whole picture, as on the OBS page, for a TV
@@ -177,8 +178,13 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
         }
         "/common.js" => serve_asset(app, s, "common.js"),
         "/snapshot.js" => serve_asset(app, s, "snapshot.js"),
+        // the interface's words, in the app's languages (for the page's own text)
+        "/i18n.js" => serve_asset(app, s, "i18n.js"),
+        p if p.starts_with("/i18n/") && p.ends_with(".js") && p[6..p.len() - 3].chars().all(|c| c.is_ascii_alphanumeric() || c == '-') && p.len() <= 20 => {
+            serve_asset(app, s, p.trim_start_matches('/'))
+        }
         // a switch changed on this page (a POST from its own address, when the app allows it):
-        // {"what": "overlays" | "live" | "area" | "page", "id": "...", "on": true}
+        // {"what": "overlays" | "live" | "area" | "page" | "lang", "id": "...", "on": true}
         "/control" if req.method == "POST" && req.origin == format!("http://{}", req.host) => {
             let Ok(v) = serde_json::from_slice::<serde_json::Value>(&req.body) else {
                 return respond(s, "400 Bad Request", "text/plain", b"bad request");
@@ -192,6 +198,10 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
             let ok = match what {
                 "overlays" => {
                     c.overlays_enabled = on;
+                    true
+                }
+                "lang" if crate::langs::LANGS.iter().any(|l| l.code == id) => {
+                    c.target_lang = id.to_string();
                     true
                 }
                 "live" => {
@@ -211,7 +221,7 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
             // (the window keeps its own copy of the settings: told, so its next save doesn't undo this)
             use tauri::Emitter;
             let _ = app.emit_to("main", "lan-control", serde_json::json!({
-                "overlays_enabled": c.overlays_enabled, "live_translations": c.live_translations, "shown": c.shown,
+                "overlays_enabled": c.overlays_enabled, "live_translations": c.live_translations, "shown": c.shown, "target_lang": c.target_lang,
                 "profile": c.profile, "areas": c.areas.iter().map(|a| (a.id.clone(), a.enabled)).collect::<std::collections::BTreeMap<_, _>>(),
                 "more": c.profile_opts.more,
             }));
@@ -245,12 +255,15 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
 /// its game's pages (with each one's state).
 fn controls(c: &Config) -> serde_json::Value {
     let opts = page_options(&c.game());
-    let name = |v: &serde_json::Value| v.as_str().map(str::to_string).or_else(|| v["en"].as_str().map(str::to_string)).unwrap_or_default();
     serde_json::json!({
+        // the language the game is translated into, and the ones it can be
+        "lang": c.target_lang,
+        "langs": crate::langs::LANGS.iter().map(|l| serde_json::json!({ "code": l.code, "name": l.name, "native": l.native })).collect::<Vec<_>>(),
         "overlays": c.overlays_enabled,
         "live": c.live_translations,
         "areas": c.areas.iter().map(|a| serde_json::json!({ "id": a.id, "name": a.name, "on": a.enabled })).collect::<Vec<_>>(),
-        "pages": opts.iter().map(|o| serde_json::json!({ "id": o.id, "name": name(&o.name), "on": c.profile_opts.more.get(&o.id).copied().unwrap_or(o.on) })).collect::<Vec<_>>(),
+        // (a page's name as the script gives it: text, or {"en": …, "ar": …} for the page to pick from)
+        "pages": opts.iter().map(|o| serde_json::json!({ "id": o.id, "name": o.name, "on": c.profile_opts.more.get(&o.id).copied().unwrap_or(o.on) })).collect::<Vec<_>>(),
     })
 }
 

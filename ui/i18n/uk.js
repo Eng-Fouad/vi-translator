@@ -323,4 +323,16 @@ I18N.add("uk", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — найшвидша, близько $0.03 за зображення",
   "Allow changes from that page": "Дозволити зміни з тієї сторінки",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Сторінка зможе вмикати й вимикати переклад поверх гри та переклади наживо, а також показувати чи ховати області читання та сторінки гри.",
+  // live translations page
+  "Switches": "Перемикачі",
+  "Show the English": "Показати англійською",
+  "Smaller text": "Менший текст",
+  "Bigger text": "Більший текст",
+  "Paused: Live translations are switched off in VI Translator.": "Призупинено: переклади наживо вимкнено у VI Translator.",
+  "Waiting for translations…": "Очікування перекладів…",
+  "Show": "Показувати",
+  "Overlays on the game": "Переклад поверх гри",
+  "Could not change it: {e}": "Не вдалося змінити: {e}",
+  "Instructions (bottom)": "Підказки (унизу)",
+  "Translate into": "Перекладати на",
 });

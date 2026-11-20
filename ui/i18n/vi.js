@@ -323,4 +323,16 @@ I18N.add("vi", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — nhanh nhất, khoảng $0.03 mỗi hình",
   "Allow changes from that page": "Cho phép thay đổi từ trang đó",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Cho phép trang bật/tắt lớp phủ và bản dịch trực tiếp, cũng như hiện hoặc ẩn vùng đọc và trang trong game.",
+  // live translations page
+  "Switches": "Công tắc",
+  "Show the English": "Hiện tiếng Anh",
+  "Smaller text": "Chữ nhỏ hơn",
+  "Bigger text": "Chữ lớn hơn",
+  "Paused: Live translations are switched off in VI Translator.": "Tạm dừng: Bản dịch trực tiếp đang tắt trong VI Translator.",
+  "Waiting for translations…": "Đang chờ bản dịch…",
+  "Show": "Hiển thị",
+  "Overlays on the game": "Lớp phủ trên trò chơi",
+  "Could not change it: {e}": "Không thể thay đổi: {e}",
+  "Instructions (bottom)": "Hướng dẫn (dưới cùng)",
+  "Translate into": "Dịch sang",
 });

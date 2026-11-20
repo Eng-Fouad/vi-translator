@@ -323,4 +323,16 @@ I18N.add("ms", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — terpantas, kira-kira $0.03 setiap gambar",
   "Allow changes from that page": "Benarkan perubahan dari halaman itu",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Membolehkan halaman itu menghidupkan atau mematikan overlay dan terjemahan langsung, serta menunjukkan atau menyembunyikan kawasan bacaan dan halaman permainan.",
+  // live translations page
+  "Switches": "Suis",
+  "Show the English": "Tunjukkan bahasa Inggeris",
+  "Smaller text": "Teks lebih kecil",
+  "Bigger text": "Teks lebih besar",
+  "Paused: Live translations are switched off in VI Translator.": "Dijeda: Terjemahan langsung dimatikan dalam VI Translator.",
+  "Waiting for translations…": "Menunggu terjemahan…",
+  "Show": "Tunjukkan",
+  "Overlays on the game": "Overlay pada permainan",
+  "Could not change it: {e}": "Tidak dapat mengubahnya: {e}",
+  "Instructions (bottom)": "Arahan (bawah)",
+  "Translate into": "Terjemah ke",
 });

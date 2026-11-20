@@ -323,4 +323,16 @@ I18N.add("tr", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — en hızlı, görüntü başına yaklaşık $0.03",
   "Allow changes from that page": "O sayfadan değişikliklere izin ver",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Sayfanın çeviri katmanını ve canlı çevirileri açıp kapatmasına, okuma alanlarını ve oyun sayfalarını gösterip gizlemesine izin verir.",
+  // live translations page
+  "Switches": "Anahtarlar",
+  "Show the English": "İngilizceyi göster",
+  "Smaller text": "Daha küçük yazı",
+  "Bigger text": "Daha büyük yazı",
+  "Paused: Live translations are switched off in VI Translator.": "Duraklatıldı: VI Translator'da canlı çeviriler kapalı.",
+  "Waiting for translations…": "Çeviriler bekleniyor…",
+  "Show": "Göster",
+  "Overlays on the game": "Oyunun üzerinde çeviri katmanı",
+  "Could not change it: {e}": "Değiştirilemedi: {e}",
+  "Instructions (bottom)": "Talimatlar (alt)",
+  "Translate into": "Çeviri dili",
 });

@@ -13,9 +13,11 @@
         font-family: "Tajawal", "Segoe UI", "Noto Sans", system-ui, sans-serif; }
       body { display: flex; flex-direction: column; }
       header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel);
-        position: sticky; top: 0; border-bottom: 1px solid #2c2450; direction: ltr; }
+        position: sticky; top: 0; border-bottom: 1px solid #2c2450; }
       header b { font-size: 16px; flex: 1; }
-      .ctl { padding: 10px 14px 4px; background: var(--panel); border-bottom: 1px solid #3a3063; direction: ltr;
+      header select { background: #2a2147; color: var(--text); border: 1px solid #3a3063; border-radius: 10px; height: 38px;
+        padding: 0 6px; font-size: 14px; max-width: 9.5em; }
+      .ctl { padding: 10px 14px 4px; background: var(--panel); border-bottom: 1px solid #3a3063;
         font-family: "Segoe UI", system-ui, sans-serif; font-size: 15px; }
       .ctl h4 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
       .ctl label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; cursor: pointer; }
@@ -28,15 +30,15 @@
       button.on { border-color: var(--accent); color: var(--accent); }
       main { flex: 1; overflow-y: auto; padding: 12px 14px 40px; }
       .line { padding: 10px 0; border-bottom: 1px solid #241c40; }
-      .meta { display: flex; gap: 8px; align-items: baseline; direction: ltr; }
+      .meta { display: flex; gap: 8px; align-items: baseline; }
       .when { font-size: 12px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
       .en { font-size: 13px; color: var(--muted); font-family: "Segoe UI", system-ui, sans-serif; }
       .text { font-size: var(--size); line-height: 1.45; margin-top: 2px; unicode-bidi: plaintext; text-align: start; }
       body.no-en .en { display: none; }
-      .empty { color: var(--muted); text-align: center; margin-top: 30vh; font-size: 16px; direction: ltr; }
+      .empty { color: var(--muted); text-align: center; margin-top: 30vh; font-size: 16px; }
       /* "Live translations" switched off in the app */
       .paused { padding: 10px 14px; background: #2a2147; color: var(--accent); font-size: 14px; text-align: center;
-        border-bottom: 1px solid #3a3063; direction: ltr; font-family: "Segoe UI", system-ui, sans-serif; }
+        border-bottom: 1px solid #3a3063; font-family: "Segoe UI", system-ui, sans-serif; }
       .paused[hidden] { display: none; }
     </style>
   </head>
@@ -44,19 +46,56 @@
     <header>
       <span class="dot" id="dot"></span>
       <b>VI Translator</b>
-      <button id="snap" title="Translate the whole picture" hidden>📷</button>
-      <button id="ctl" title="Switches" hidden>⚙</button>
-      <button id="en" class="on" title="Show the English">EN</button>
-      <button id="smaller" title="Smaller text">A−</button>
-      <button id="bigger" title="Bigger text">A+</button>
+      <button id="snap" title="Translate the whole picture" data-i18n-title hidden>📷</button>
+      <button id="ctl" title="Switches" data-i18n-title hidden>⚙</button>
+      <button id="en" class="on" title="Show the English" data-i18n-title>EN</button>
+      <button id="smaller" title="Smaller text" data-i18n-title>A−</button>
+      <button id="bigger" title="Bigger text" data-i18n-title>A+</button>
+      <select id="ui" title="Language" data-i18n-title aria-label="Language"></select>
     </header>
     <!-- the app's switches, when it allows changes from this page -->
     <div class="ctl" id="ctl-panel" hidden></div>
-    <div class="paused" id="paused" hidden>Paused: Live translations are switched off in VI Translator.</div>
-    <main id="list"><div class="empty" id="empty">Waiting for translations…</div></main>
+    <div class="paused" id="paused" hidden data-i18n>Paused: Live translations are switched off in VI Translator.</div>
+    <main id="list"><div class="empty" id="empty" data-i18n>Waiting for translations…</div></main>
+    <script src="i18n.js"></script>
     <script src="snapshot.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
+      // The page's own words in the app's interface language (its dictionary comes from the app).
+      const t = (en, vars) => I18N.t(en, vars);
+      let uiLang = "en";
+      // this device's language among the app's (es-AR → es-MX, zh-TW → zh-Hant …), or null
+      function deviceLang() {
+        const codes = I18N.UI_LANGS.map((l) => l.code);
+        for (const raw of navigator.languages || [navigator.language || ""]) {
+          const l = String(raw), base = l.split("-")[0].toLowerCase();
+          if (codes.includes(l)) return l;
+          if (base === "zh") return /TW|HK|MO|Hant/i.test(l) ? "zh-Hant" : "zh-Hans";
+          if (base === "es") return /ES$/i.test(l) ? "es-ES" : "es-MX";
+          if (base === "pt") return "pt-BR";
+          if (base === "tl") return "fil";
+          if (codes.includes(base)) return base;
+        }
+        return null;
+      }
+      const uiSel = $("ui");
+      for (const l of I18N.UI_LANGS) uiSel.add(new Option(l.name, l.code));
+      uiSel.onchange = () => { store("ui", uiSel.value); useUiLang(uiSel.value); };
+      function useUiLang(code) {
+        uiLang = code;
+        uiSel.value = code;
+        const done = () => {
+          I18N.setLang(code);
+          document.title = "VI Translator · " + t("Live translations");
+          control = null; // (the switches drawn again in the language)
+          if (lastControl) showControls(lastControl);
+        };
+        if (code === "en") return done();
+        const sc = document.createElement("script");
+        sc.src = `i18n/${encodeURIComponent(code)}.js`;
+        sc.onload = done;
+        document.head.appendChild(sc);
+      }
       const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
       const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch {} return null; };
       let size = Number(store("size")) || 26;
@@ -100,6 +139,9 @@
           run = d.run;
           $("dot").classList.add("on");
           $("paused").hidden = d.live !== false;
+          // the page's language: the one picked here, else this device's, else the app's
+          const want = store("ui") || deviceLang() || d.ui || "en";
+          if (want !== uiLang) useUiLang(want);
           $("snap").hidden = d.snap !== true;
           showControls(d.control || null);
           const rtl = !!(d.lang && d.lang.rtl);
@@ -134,9 +176,10 @@
     <script>
       // The app's switches (overlays, live translations, read areas, game pages): shown with ⚙ when the app allows
       // changes from this page; a change goes to the app at once.
-      let control = null, ctlBusy = false;
+      let control = null, ctlBusy = false, lastControl = null;
       $("ctl").onclick = () => { $("ctl-panel").hidden = !$("ctl-panel").hidden; };
       function showControls(c) {
+        lastControl = c;
         $("ctl").hidden = !c;
         if (!c) { $("ctl-panel").hidden = true; control = null; return; }
         // (not redrawn while a change is on its way, nor when nothing changed)
@@ -144,26 +187,35 @@
         control = c;
         const row = (what, id, name, on) =>
           `<label><span>${esc(name)}</span><input type="checkbox" data-what="${what}" data-id="${esc(id)}" ${on ? "checked" : ""}></label>`;
-        let html = `<h4>Show</h4>${row("overlays", "", "Overlays on the game", c.overlays)}${row("live", "", "Live translations", c.live)}`;
-        if (c.areas.length) html += `<h4>Read areas</h4>` + c.areas.map((a) => row("area", a.id, a.name || a.id, a.on)).join("");
-        if (c.pages.length) html += `<h4>Game pages</h4>` + c.pages.map((p) => row("page", p.id, p.name || p.id, p.on)).join("");
+        const pick = (n) => (typeof n === "string" ? n : (n && (n[uiLang] || n.en)) || "");
+        let html = "";
+        if (c.langs && c.langs.length) {
+          html += `<h4>${esc(t("Translate into"))}</h4><label><select data-what="lang" style="width:100%;height:38px;border-radius:10px;background:#2a2147;color:var(--text);border:1px solid #3a3063;font-size:15px">` +
+            c.langs.map((l) => `<option value="${esc(l.code)}" ${l.code === c.lang ? "selected" : ""}>${esc(l.native)} — ${esc(l.name)}</option>`).join("") + `</select></label>`;
+        }
+        html += `<h4>${esc(t("Show"))}</h4>${row("overlays", "", t("Overlays on the game"), c.overlays)}${row("live", "", t("Live translations"), c.live)}`;
+        if (c.areas.length) html += `<h4>${esc(t("Read areas"))}</h4>` + c.areas.map((a) => row("area", a.id, t(a.name || a.id), a.on)).join("");
+        if (c.pages.length) html += `<h4>${esc(t("Game pages"))}</h4>` + c.pages.map((p) => row("page", p.id, pick(p.name) || p.id, p.on)).join("");
         $("ctl-panel").innerHTML = html + `<div class="err" id="ctl-err" hidden></div>`;
       }
       $("ctl-panel").addEventListener("change", async (e) => {
-        const el = e.target.closest("input[data-what]");
+        const el = e.target.closest("input[data-what], select[data-what]");
         if (!el) return;
         ctlBusy = true;
+        const lang = el.tagName === "SELECT";
         try {
-          const r = await fetch("control", { method: "POST", cache: "no-store", body: JSON.stringify({ what: el.dataset.what, id: el.dataset.id, on: el.checked }) });
+          const body = lang ? { what: "lang", id: el.value, on: true } : { what: el.dataset.what, id: el.dataset.id, on: el.checked };
+          const r = await fetch("control", { method: "POST", cache: "no-store", body: JSON.stringify(body) });
           if (!r.ok) throw new Error(await r.text());
           ctlBusy = false;
           control = null;
           showControls(await r.json());
         } catch (err) {
           ctlBusy = false;
-          el.checked = !el.checked;
+          if (lang) el.value = control ? control.lang : el.value;
+          else el.checked = !el.checked;
           const m = $("ctl-err");
-          if (m) { m.hidden = false; m.textContent = "Could not change it: " + (err.message || err); }
+          if (m) { m.hidden = false; m.textContent = t("Could not change it: {e}", { e: err.message || err }); }
         }
       });
 
@@ -178,6 +230,7 @@
           if (!r.ok) throw new Error(await r.text());
           const snap = await r.json();
           await Snap.show(snap, {
+            labels: { translated: t("Translated"), original: t("Original"), save: t("Save"), close: t("Close") },
             info: `${snap.blocks.length} · ${(snap.ms / 1000).toFixed(1)} s`,
             actions: {
               save: (canvas, s, translated) => {
@@ -189,7 +242,7 @@
             },
           });
         } catch (e) {
-          alert("Could not translate the picture: " + (e.message || e));
+          alert(t("Could not translate the picture: {e}", { e: e.message || e }));
         } finally {
           b.disabled = false;
           b.textContent = "📷";

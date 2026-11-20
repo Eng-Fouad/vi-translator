@@ -323,4 +323,16 @@ I18N.add("ru", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — самая быстрая, около $0.03 за изображение",
   "Allow changes from that page": "Разрешить изменения с той страницы",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Страница сможет включать и выключать перевод поверх игры и перевод в реальном времени, а также показывать или скрывать области чтения и страницы игры.",
+  // live translations page
+  "Switches": "Переключатели",
+  "Show the English": "Показать английский",
+  "Smaller text": "Мельче текст",
+  "Bigger text": "Крупнее текст",
+  "Paused: Live translations are switched off in VI Translator.": "Приостановлено: перевод в реальном времени выключен в VI Translator.",
+  "Waiting for translations…": "Ожидание переводов…",
+  "Show": "Показывать",
+  "Overlays on the game": "Перевод поверх игры",
+  "Could not change it: {e}": "Не удалось изменить: {e}",
+  "Instructions (bottom)": "Подсказки (внизу)",
+  "Translate into": "Переводить на",
 });

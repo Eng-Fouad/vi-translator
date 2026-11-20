@@ -323,4 +323,16 @@ I18N.add("te", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — అత్యంత వేగవంతం, ఒక్కో చిత్రానికి సుమారు $0.03",
   "Allow changes from that page": "ఆ పేజీ నుండి మార్పులను అనుమతించండి",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "ఓవర్‌లేలు, లైవ్ అనువాదాలను ఆన్/ఆఫ్ చేయడానికి, చదివే ప్రాంతాలు, గేమ్ పేజీలను చూపించడానికి లేదా దాచడానికి పేజీని అనుమతిస్తుంది.",
+  // live translations page
+  "Switches": "స్విచ్‌లు",
+  "Show the English": "ఇంగ్లీష్ చూపించు",
+  "Smaller text": "చిన్న అక్షరాలు",
+  "Bigger text": "పెద్ద అక్షరాలు",
+  "Paused: Live translations are switched off in VI Translator.": "పాజ్ అయింది: VI Translator‌లో లైవ్ అనువాదాలు ఆఫ్‌లో ఉన్నాయి.",
+  "Waiting for translations…": "అనువాదాల కోసం వేచి ఉంది…",
+  "Show": "చూపించు",
+  "Overlays on the game": "గేమ్‌పై ఓవర్‌లేలు",
+  "Could not change it: {e}": "మార్చడం సాధ్యం కాలేదు: {e}",
+  "Instructions (bottom)": "సూచనలు (కింద)",
+  "Translate into": "అనువాద భాష",
 });

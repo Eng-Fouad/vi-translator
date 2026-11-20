@@ -323,4 +323,16 @@ I18N.add("sw", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — ya haraka zaidi, takriban $0.03 kwa picha",
   "Allow changes from that page": "Ruhusu mabadiliko kutoka ukurasa huo",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Huruhusu ukurasa kuwasha au kuzima tafsiri juu ya mchezo na tafsiri za moja kwa moja, na kuonyesha au kuficha maeneo ya kusoma na kurasa za mchezo.",
+  // live translations page
+  "Switches": "Swichi",
+  "Show the English": "Onyesha Kiingereza",
+  "Smaller text": "Maandishi madogo",
+  "Bigger text": "Maandishi makubwa",
+  "Paused: Live translations are switched off in VI Translator.": "Imesitishwa: Tafsiri za moja kwa moja zimezimwa katika VI Translator.",
+  "Waiting for translations…": "Inasubiri tafsiri…",
+  "Show": "Onyesha",
+  "Overlays on the game": "Tafsiri juu ya mchezo",
+  "Could not change it: {e}": "Imeshindwa kubadilisha: {e}",
+  "Instructions (bottom)": "Maelekezo (chini)",
+  "Translate into": "Tafsiri kwa",
 });

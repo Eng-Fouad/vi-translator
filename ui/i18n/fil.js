@@ -323,4 +323,16 @@ I18N.add("fil", {
   "Nano Banana 2 Lite — fastest, about $0.03 a picture": "Nano Banana 2 Lite — pinakamabilis, mga $0.03 bawat larawan",
   "Allow changes from that page": "Payagan ang mga pagbabago mula sa page na iyon",
   "Lets the page switch the overlays and the live translations, and show or hide read areas and game pages.": "Hinahayaan ang page na i-on o i-off ang overlay at mga live na salin, at ipakita o itago ang mga bahaging babasahin at mga pahina ng laro.",
+  // live translations page
+  "Switches": "Mga switch",
+  "Show the English": "Ipakita ang Ingles",
+  "Smaller text": "Mas maliit na teksto",
+  "Bigger text": "Mas malaking teksto",
+  "Paused: Live translations are switched off in VI Translator.": "Naka-pause: Naka-off ang mga live na salin sa VI Translator.",
+  "Waiting for translations…": "Naghihintay ng mga salin…",
+  "Show": "Ipakita",
+  "Overlays on the game": "Overlay sa laro",
+  "Could not change it: {e}": "Hindi ito mabago: {e}",
+  "Instructions (bottom)": "Mga tagubilin (ibaba)",
+  "Translate into": "Isalin sa",
 });
