@@ -18,6 +18,8 @@ use vi_translator_core::frame::FrameData;
 use vi_translator_core::live::Live;
 use vi_translator_core::memory::Memory;
 use vi_translator_core::ocr::{Crop, Ocr, RawWord, TextEngine, Word};
+use vi_translator_core::lan_page::LivePage;
+use vi_translator_core::snapshot;
 use vi_translator_core::tv_server::TvServer;
 use vi_translator_core::{Paths, Sink, langs, sync, tv};
 
@@ -168,6 +170,8 @@ pub struct FoundTv {
 pub struct TvInfo {
     pub id: String,
     pub name: String,
+    /// its page asked for the overlays in the last few seconds
+    pub online: bool,
 }
 
 #[derive(Debug, uniffi::Error)]
@@ -306,6 +310,19 @@ pub struct Engine {
     tv_server: Mutex<Option<TvServer>>,
     sync_started: AtomicBool,
     frame_seq: AtomicU64,
+    /// the app's recognizer (snapshots read the whole picture with it)
+    recognizer: Arc<dyn TextRecognizer>,
+    /// the last frame given to `process_frame` (what the live page's snapshots translate)
+    last_frame: Arc<Mutex<Option<Arc<FrameData>>>>,
+}
+
+/// A snapshot of `frame` as the desktop's Snapshot button makes it (the game page's private text covered).
+fn snapshot_of(cfg: &Mutex<Config>, live: &Live, memory: &Mutex<Memory>, paths: &Paths, recognizer: &Arc<dyn TextRecognizer>, frame: &FrameData) -> anyhow::Result<snapshot::Snapshot> {
+    let private = live.screen_private.lock().unwrap().clone();
+    let c = cfg.lock().unwrap().clone();
+    let ocr = || Ok(Ocr::with_engine(Box::new(HostOcr(recognizer.clone()))));
+    let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0).to_string();
+    snapshot::now(frame, &private, &c, memory, paths, &ocr, id)
 }
 
 #[uniffi::export]
@@ -335,11 +352,12 @@ impl Engine {
         let sink: Arc<dyn Sink> = Arc::new(ListenerSink(listener));
         let ctx = engine::Context { cfg: cfg.clone(), live: live.clone(), memory: memory.clone(), sink: sink.clone(), paths: paths.clone() };
         let (tx, rx) = mpsc::channel::<(Job, mpsc::Sender<u64>)>();
+        let reading_recognizer = recognizer.clone();
         // (the reading lives on its own thread: a game's pages script can't move between threads)
         std::thread::Builder::new()
             .name("vit-reader".into())
             .spawn(move || {
-                let ocr = Ocr::with_engine(Box::new(HostOcr(recognizer)));
+                let ocr = Ocr::with_engine(Box::new(HostOcr(reading_recognizer)));
                 let mut reader = engine::start(ctx);
                 for (job, answer) in rx {
                     let wait = match job {
@@ -351,7 +369,7 @@ impl Engine {
                 }
             })
             .map_err(failed)?;
-        Ok(Arc::new(Engine { cfg, live, memory, sink, paths, reader: Mutex::new(tx), tv_server: Mutex::new(None), sync_started: AtomicBool::new(false), frame_seq: AtomicU64::new(0) }))
+        Ok(Arc::new(Engine { cfg, live, memory, sink, paths, reader: Mutex::new(tx), tv_server: Mutex::new(None), sync_started: AtomicBool::new(false), frame_seq: AtomicU64::new(0), recognizer, last_frame: Arc::new(Mutex::new(None)) }))
     }
 
     // ---- settings
@@ -441,7 +459,9 @@ impl Engine {
             return Err(failed(format!("{} bytes is not a {width}x{height} RGBA picture", rgba.len())));
         }
         let seq = self.frame_seq.fetch_add(1, Ordering::Relaxed) + 1;
-        self.run(Job::Frame(Arc::new(FrameData { w: width, h: height, rgba, seq })))
+        let frame = Arc::new(FrameData { w: width, h: height, rgba, seq });
+        *self.last_frame.lock().unwrap() = Some(frame.clone());
+        self.run(Job::Frame(frame))
     }
 
     /// Read each area from the crops and words the app's own OCR read (no game pages: they need
@@ -484,6 +504,56 @@ impl Engine {
             .collect()
     }
 
+    /// Forget everything the translation memory learned (the downloaded reviewed translations stay).
+    pub fn memory_clear(&self) {
+        self.memory.lock().unwrap().clear();
+    }
+
+    /// The game pages a game's script has, and the switches it declares (Game pages):
+    /// {"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}.
+    pub fn page_options(&self, game: String) -> String {
+        vi_translator_core::pagescript::page_options(&game, &self.paths.data).to_string()
+    }
+
+    /// The game page on show now, for a view opened after it appeared: {"layout", "reason"}.
+    pub fn screen_json(&self) -> String {
+        serde_json::json!({ "layout": self.live.screen.lock().unwrap().clone(), "reason": self.live.screen_reason.lock().unwrap().clone() }).to_string()
+    }
+
+    /// Translate the whole picture now, as the desktop's Snapshot button does (RGBA, rows `width * 4`
+    /// bytes): the snapshot service in the settings (`snap_service`, else `engine`), the reviewed
+    /// translations first, a game page's private text covered. The snapshot as JSON: {"id", "w", "h",
+    /// "image" (JPEG data URL), "translated_image" (a service that translates the picture itself),
+    /// "blocks" [{"rect", "en", "segs", "lines", "align", "fg", "bg", …}], "service", "lang", "rtl", "ms"}.
+    pub fn take_snapshot(&self, rgba: Vec<u8>, width: u32, height: u32) -> Result<String, CoreError> {
+        if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
+            return Err(failed(format!("{} bytes is not a {width}x{height} RGBA picture", rgba.len())));
+        }
+        let frame = FrameData { w: width, h: height, rgba, seq: 0 };
+        let snap = snapshot_of(&self.cfg, &self.live, &self.memory, &self.paths, &self.recognizer, &frame).map_err(|e| failed(format!("{e:#}")))?;
+        serde_json::to_string(&snap).map_err(failed)
+    }
+
+    /// The live page on the home network (served by the TV page server while the settings'
+    /// `lan_page` is on): {"enabled", "running", "url", "qr" (SVG), "error"}.
+    pub fn lan_info(&self) -> String {
+        let c = self.cfg.lock().unwrap().clone();
+        serde_json::to_string(&vi_translator_core::lan_page::info(&c, &self.live)).unwrap_or_default()
+    }
+
+    /// The TV page for this phone's own preview, exactly as the TVs draw it:
+    /// http://127.0.0.1:<port>/tv?t=<key> (a key for this run only, not a connected TV). None while
+    /// the TV page server isn't running.
+    pub fn local_viewer_url(&self) -> Option<String> {
+        let port = self.tv_server.lock().unwrap().as_ref().map(|s| s.port)?;
+        Some(format!("http://127.0.0.1:{port}/tv?t={}", self.live.tvs.local_key()))
+    }
+
+    /// The fonts bundled with the pages (what an area's `font_family` can be).
+    pub fn font_list(&self) -> Vec<String> {
+        vi_translator_core::tv_server::bundled_fonts()
+    }
+
     /// The translation memory: {"entries", "reviewed", "hits", "misses", …}.
     pub fn memory_stats_json(&self) -> String {
         serde_json::to_string(&self.memory.lock().unwrap().stats()).unwrap_or_default()
@@ -516,7 +586,16 @@ impl Engine {
             return Ok(s.port);
         }
         *slot = None;
-        let s = TvServer::start(port, self.cfg.clone(), self.live.clone()).map_err(failed)?;
+        // (with the live page, served while the settings' `lan_page` is on; its snapshots of the last frame)
+        let snap = {
+            let (c, l, m, p, r, f) = (self.cfg.clone(), self.live.clone(), self.memory.clone(), self.paths.clone(), self.recognizer.clone(), self.last_frame.clone());
+            move || {
+                let Some(frame) = f.lock().unwrap().clone() else { anyhow::bail!("no picture yet") };
+                snapshot_of(&c, &l, &m, &p, &r, &frame)
+            }
+        };
+        let page = Arc::new(LivePage { cfg: self.cfg.clone(), live: self.live.clone(), paths: self.paths.clone(), sink: self.sink.clone(), snapshot: Box::new(snap) });
+        let s = TvServer::start(port, self.cfg.clone(), self.live.clone(), Some(page)).map_err(failed)?;
         let port = s.port;
         *slot = Some(s);
         Ok(port)
@@ -551,7 +630,7 @@ impl Engine {
 
     /// The connected TVs.
     pub fn list_tvs(&self) -> Vec<TvInfo> {
-        self.live.tvs.list().into_iter().map(|t| TvInfo { id: t.id, name: t.name }).collect()
+        self.live.tvs.list().into_iter().map(|t| TvInfo { id: t.id, name: t.name, online: t.online }).collect()
     }
 
     /// Disconnect a TV: its key stops working, and the TV shows a new code.

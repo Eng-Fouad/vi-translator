@@ -1627,3 +1627,27 @@ mod tests {
         assert!(!signed("pages.add({id:'x'})", "AAAA"));
     }
 }
+
+/// The switches a game's pages script declares (loaded once per game and script version).
+pub fn options_for(game: &str, data_dir: &Path) -> Vec<OptionInfo> {
+    static CACHE: std::sync::Mutex<Option<(String, u64, Vec<OptionInfo>)>> = std::sync::Mutex::new(None);
+    let generation = GENERATION.load(Ordering::Relaxed);
+    let mut cache = CACHE.lock().unwrap();
+    if let Some((g, n, list)) = cache.as_ref() {
+        if g == game && *n == generation {
+            return list.clone();
+        }
+    }
+    let list = Pages::for_game(game, data_dir).map(|p| p.options.clone()).unwrap_or_default();
+    *cache = Some((game.to_string(), generation, list.clone()));
+    list
+}
+
+/// The game pages a game's script has, and the switches it declares (for Game pages):
+/// {"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}.
+pub fn page_options(game: &str, data_dir: &Path) -> serde_json::Value {
+    match Pages::for_game(game, data_dir) {
+        Some(p) => serde_json::json!({ "pages": p.list.iter().map(|i| serde_json::json!({ "id": i.id, "option": i.option })).collect::<Vec<_>>(), "options": p.options }),
+        None => serde_json::json!({ "pages": [], "options": [] }),
+    }
+}
