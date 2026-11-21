@@ -379,4 +379,8 @@ I18N.add("te", {
   "Screens": "స్క్రీన్‌లు",
   "Screen {n}": "స్క్రీన్ {n}",
   "Screen": "స్క్రీన్",
+  "Online": "ఆన్‌లైన్",
+  "Offline": "ఆఫ్‌లైన్",
+  "The TV app isn't open, or the TV can't reach this PC": "టీవీ యాప్ తెరవలేదు, లేదా టీవీ ఈ పీసీని చేరుకోలేకపోతోంది",
+  "TVs showing the translation now: {n} of {m}": "ఇప్పుడు అనువాదం చూపిస్తున్న టీవీలు: {m}లో {n}",
 });

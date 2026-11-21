@@ -379,4 +379,8 @@ I18N.add("ar", {
   "Screens": "الشاشات",
   "Screen {n}": "الشاشة {n}",
   "Screen": "الشاشة",
+  "Online": "متصل",
+  "Offline": "غير متصل",
+  "The TV app isn't open, or the TV can't reach this PC": "تطبيق التلفاز غير مفتوح، أو لا يستطيع التلفاز الوصول إلى هذا الكمبيوتر",
+  "TVs showing the translation now: {n} of {m}": "أجهزة التلفاز التي تعرض الترجمة الآن: {n} من {m}",
 });

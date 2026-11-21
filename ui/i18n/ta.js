@@ -379,4 +379,8 @@ I18N.add("ta", {
   "Screens": "திரைகள்",
   "Screen {n}": "திரை {n}",
   "Screen": "திரை",
+  "Online": "ஆன்லைன்",
+  "Offline": "ஆஃப்லைன்",
+  "The TV app isn't open, or the TV can't reach this PC": "டிவி செயலி திறக்கப்படவில்லை, அல்லது டிவி இந்த கணினியை அடைய முடியவில்லை",
+  "TVs showing the translation now: {n} of {m}": "இப்போது மொழிபெயர்ப்பைக் காட்டும் டிவிகள்: {m}-இல் {n}",
 });

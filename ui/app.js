@@ -412,7 +412,7 @@ $("lan-info").addEventListener("click", (e) => {
 });
 $("lan-on").addEventListener("change", (e) => { cfg.lan_page = e.target.checked; save(false); setTimeout(updateLan, 900); });
 $("lan-control").addEventListener("change", (e) => { cfg.lan_control = e.target.checked; save(false); });
-setInterval(() => { if (cfg && !$("tab-show").classList.contains("hidden")) { updateLan(); updateTvs(); } }, 3000);
+setInterval(() => { if (cfg && !$("tab-show").classList.contains("hidden")) updateLan(); if (cfg) updateTvs(); }, 3000);
 
 // TVs (the VI Translator app on the TV): find the ones waiting on the home network, connect one with the
 // code it shows, remove a connected one.
@@ -420,12 +420,23 @@ async function updateTvs() {
   const box = $("tv-connected");
   let tvs;
   try { tvs = await invoke("list_tvs"); } catch (e) { box.textContent = String(e); return; }
+  // online: the TV app is open and showing the translation now (its page asks about once a second)
+  const state = (tv) => tv.online
+    ? `<span class="tv-state on"><span class="dot"></span>${AS.esc(t("Online"))}</span>`
+    : `<span class="tv-state" title="${AS.esc(t("The TV app isn't open, or the TV can't reach this PC"))}"><span class="dot"></span>${AS.esc(t("Offline"))}</span>`;
   const html = tvs.length
     ? `<div class="hint">${AS.esc(t("Connected TVs"))}</div>` + tvs.map((tv) => `<div class="tv-row"><span class="tv-name">📺 ${AS.esc(tv.name)}</span>
-        <button class="btn danger" data-remove-tv="${AS.esc(tv.id)}">${AS.esc(t("Remove"))}</button></div>`).join("")
+        ${state(tv)}<button class="btn danger" data-remove-tv="${AS.esc(tv.id)}">${AS.esc(t("Remove"))}</button></div>`).join("")
     : "";
   if (box.innerHTML !== html) box.innerHTML = html;
+  // the header: how many of the connected TVs are online (hidden while none is connected)
+  const pill = $("tv-pill"), on = tvs.filter((tv) => tv.online).length;
+  pill.classList.toggle("hidden", !tvs.length);
+  pill.classList.toggle("ok", on > 0);
+  $("tv-pill-text").textContent = `📺 ${on}/${tvs.length}`;
+  pill.title = t("TVs showing the translation now: {n} of {m}", { n: on, m: tvs.length });
 }
+$("tv-pill").addEventListener("click", () => { setMode("setup"); openTab("show"); });
 // The TV loads its page from the home-network sharing: turned on if it's off, and waited for.
 async function sharingReady() {
   if (!cfg.lan_page) { cfg.lan_page = true; save(false); }

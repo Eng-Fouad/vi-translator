@@ -379,4 +379,8 @@ I18N.add("pl", {
   "Screens": "Ekrany",
   "Screen {n}": "Ekran {n}",
   "Screen": "Ekran",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "Aplikacja na telewizorze nie jest otwarta lub telewizor nie może połączyć się z tym komputerem",
+  "TVs showing the translation now: {n} of {m}": "Telewizory pokazujące teraz tłumaczenie: {n} z {m}",
 });

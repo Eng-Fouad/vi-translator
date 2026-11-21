@@ -379,4 +379,8 @@ I18N.add("th", {
   "Screens": "หน้าจอ",
   "Screen {n}": "หน้าจอ {n}",
   "Screen": "หน้าจอ",
+  "Online": "ออนไลน์",
+  "Offline": "ออฟไลน์",
+  "The TV app isn't open, or the TV can't reach this PC": "แอปบนทีวีไม่ได้เปิดอยู่ หรือทีวีเชื่อมต่อกับพีซีเครื่องนี้ไม่ได้",
+  "TVs showing the translation now: {n} of {m}": "ทีวีที่กำลังแสดงคำแปลอยู่: {n} จาก {m}",
 });

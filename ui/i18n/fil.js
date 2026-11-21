@@ -379,4 +379,8 @@ I18N.add("fil", {
   "Screens": "Mga screen",
   "Screen {n}": "Screen {n}",
   "Screen": "Screen",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "Hindi bukas ang app sa TV, o hindi maabot ng TV ang PC na ito",
+  "TVs showing the translation now: {n} of {m}": "Mga TV na nagpapakita ng salin ngayon: {n} sa {m}",
 });

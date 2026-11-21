@@ -379,4 +379,8 @@ I18N.add("bn", {
   "Screens": "স্ক্রিন",
   "Screen {n}": "স্ক্রিন {n}",
   "Screen": "স্ক্রিন",
+  "Online": "অনলাইন",
+  "Offline": "অফলাইন",
+  "The TV app isn't open, or the TV can't reach this PC": "টিভি অ্যাপটি খোলা নেই, অথবা টিভি এই পিসিতে পৌঁছাতে পারছে না",
+  "TVs showing the translation now: {n} of {m}": "এখন অনুবাদ দেখাচ্ছে এমন টিভি: {m}টির মধ্যে {n}টি",
 });

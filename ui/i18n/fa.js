@@ -379,4 +379,8 @@ I18N.add("fa", {
   "Screens": "صفحه‌نمایش‌ها",
   "Screen {n}": "صفحه‌نمایش {n}",
   "Screen": "صفحه‌نمایش",
+  "Online": "آنلاین",
+  "Offline": "آفلاین",
+  "The TV app isn't open, or the TV can't reach this PC": "برنامهٔ تلویزیون باز نیست، یا تلویزیون به این رایانه دسترسی ندارد",
+  "TVs showing the translation now: {n} of {m}": "تلویزیون‌هایی که اکنون ترجمه را نشان می‌دهند: {n} از {m}",
 });

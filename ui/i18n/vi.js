@@ -379,4 +379,8 @@ I18N.add("vi", {
   "Screens": "Màn hình",
   "Screen {n}": "Màn hình {n}",
   "Screen": "Màn hình",
+  "Online": "Trực tuyến",
+  "Offline": "Ngoại tuyến",
+  "The TV app isn't open, or the TV can't reach this PC": "Ứng dụng trên TV chưa mở, hoặc TV không kết nối được với máy tính này",
+  "TVs showing the translation now: {n} of {m}": "TV đang hiển thị bản dịch: {n} trên {m}",
 });

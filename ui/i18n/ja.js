@@ -379,4 +379,8 @@ I18N.add("ja", {
   "Screens": "画面",
   "Screen {n}": "画面 {n}",
   "Screen": "画面",
+  "Online": "オンライン",
+  "Offline": "オフライン",
+  "The TV app isn't open, or the TV can't reach this PC": "テレビのアプリが開いていないか、テレビがこのPCに接続できません",
+  "TVs showing the translation now: {n} of {m}": "今翻訳を表示しているテレビ: {m}台中{n}台",
 });

@@ -379,4 +379,8 @@ I18N.add("ms", {
   "Screens": "Skrin",
   "Screen {n}": "Skrin {n}",
   "Screen": "Skrin",
+  "Online": "Dalam talian",
+  "Offline": "Luar talian",
+  "The TV app isn't open, or the TV can't reach this PC": "Aplikasi TV tidak dibuka, atau TV tidak dapat mencapai PC ini",
+  "TVs showing the translation now: {n} of {m}": "TV yang memaparkan terjemahan sekarang: {n} daripada {m}",
 });

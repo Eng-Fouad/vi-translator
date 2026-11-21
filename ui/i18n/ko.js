@@ -379,4 +379,8 @@ I18N.add("ko", {
   "Screens": "화면",
   "Screen {n}": "화면 {n}",
   "Screen": "화면",
+  "Online": "온라인",
+  "Offline": "오프라인",
+  "The TV app isn't open, or the TV can't reach this PC": "TV 앱이 열려 있지 않거나 TV가 이 PC에 연결할 수 없습니다",
+  "TVs showing the translation now: {n} of {m}": "지금 번역을 표시 중인 TV: {m}대 중 {n}대",
 });

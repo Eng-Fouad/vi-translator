@@ -379,4 +379,8 @@ I18N.add("ur", {
   "Screens": "اسکرینز",
   "Screen {n}": "اسکرین {n}",
   "Screen": "اسکرین",
+  "Online": "آن لائن",
+  "Offline": "آف لائن",
+  "The TV app isn't open, or the TV can't reach this PC": "ٹی وی ایپ کھلی نہیں ہے، یا ٹی وی اس پی سی تک نہیں پہنچ پا رہا",
+  "TVs showing the translation now: {n} of {m}": "ابھی ترجمہ دکھانے والے ٹی وی: {m} میں سے {n}",
 });

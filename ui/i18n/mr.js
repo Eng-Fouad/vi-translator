@@ -379,4 +379,8 @@ I18N.add("mr", {
   "Screens": "स्क्रीन",
   "Screen {n}": "स्क्रीन {n}",
   "Screen": "स्क्रीन",
+  "Online": "ऑनलाइन",
+  "Offline": "ऑफलाइन",
+  "The TV app isn't open, or the TV can't reach this PC": "टीव्ही अ‍ॅप उघडलेले नाही, किंवा टीव्ही या पीसीपर्यंत पोहोचू शकत नाही",
+  "TVs showing the translation now: {n} of {m}": "आता भाषांतर दाखवणारे टीव्ही: {m} पैकी {n}",
 });
