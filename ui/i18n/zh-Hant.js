@@ -379,4 +379,8 @@ I18N.add("zh-Hant", {
   "Screens": "螢幕",
   "Screen {n}": "螢幕 {n}",
   "Screen": "螢幕",
+  "Online": "在線",
+  "Offline": "離線",
+  "The TV app isn't open, or the TV can't reach this PC": "電視上的應用程式未開啟，或電視無法連線到這台電腦",
+  "TVs showing the translation now: {n} of {m}": "正在顯示翻譯的電視：{n}/{m} 台",
 });

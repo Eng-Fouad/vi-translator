@@ -379,4 +379,8 @@ I18N.add("es-ES", {
   "Screens": "Pantallas",
   "Screen {n}": "Pantalla {n}",
   "Screen": "Pantalla",
+  "Online": "En línea",
+  "Offline": "Sin conexión",
+  "The TV app isn't open, or the TV can't reach this PC": "La app de la tele no está abierta, o la tele no llega a este PC",
+  "TVs showing the translation now: {n} of {m}": "Teles que muestran la traducción ahora: {n} de {m}",
 });

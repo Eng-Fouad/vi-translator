@@ -123,7 +123,7 @@ checks hourly; an unchanged download is a 304).
 | `homeAddress(): String?` | this phone's IP on the home network |
 | `findTvs(): List<FoundTv>` | TV apps waiting to be connected (`GET http://<ip>:8792/vit-tv` across the /24, ~2 s), and Samsung TVs that offered their code (`address = "offered:<id>"`); `connected` |
 | `pairTv(address, code, deviceName): String` | connect with the 6-digit code the TV shows (`POST /vit-tv/pair` `{code, pc, pc_name, token}`); `address` from `findTvs` or an IP alone. The TV's name, or `PairException`: `WrongCode`, `TooMany` (the TV shows a new code), `NoAnswer`, `NotSharing` (server not running / no network). Also the `"tv-paired"` event. |
-| `listTvs(): List<TvInfo>` | connected TVs (kept in `tvs.json` in `dataDir`) |
+| `listTvs(): List<TvInfo>` | connected TVs (kept in `tvs.json` in `dataDir`); `online`: its page asked for the overlays in the last few seconds |
 | `removeTv(id): Boolean` | disconnect: its key stops working, the TV shows a new code |
 
 The server answers connected TVs only (their key in `t=`): `/tv` (the page: `ui/tv.html`,

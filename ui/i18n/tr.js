@@ -379,4 +379,8 @@ I18N.add("tr", {
   "Screens": "Ekranlar",
   "Screen {n}": "Ekran {n}",
   "Screen": "Ekran",
+  "Online": "Çevrimiçi",
+  "Offline": "Çevrimdışı",
+  "The TV app isn't open, or the TV can't reach this PC": "TV uygulaması açık değil ya da TV bu bilgisayara ulaşamıyor",
+  "TVs showing the translation now: {n} of {m}": "Şu anda çeviriyi gösteren TV'ler: {m} TV'den {n}",
 });

@@ -379,4 +379,8 @@ I18N.add("ru", {
   "Screens": "Экраны",
   "Screen {n}": "Экран {n}",
   "Screen": "Экран",
+  "Online": "В сети",
+  "Offline": "Не в сети",
+  "The TV app isn't open, or the TV can't reach this PC": "Приложение на телевизоре не открыто, или телевизор не может связаться с этим ПК",
+  "TVs showing the translation now: {n} of {m}": "Телевизоры, показывающие перевод сейчас: {n} из {m}",
 });

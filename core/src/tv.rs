@@ -41,7 +41,13 @@ pub struct PairedTv {
 pub struct TvInfo {
     pub id: String,
     pub name: String,
+    /// showing the overlays now: its page asked for them in the last few seconds (it asks about
+    /// once a second while the TV app is open)
+    pub online: bool,
 }
+
+/// A TV that asked for the overlays this recently is online.
+const ONLINE_FOR: Duration = Duration::from_secs(6);
 
 /// A TV on the home network that runs the TV app.
 #[derive(Serialize, Clone, Debug)]
@@ -80,6 +86,8 @@ pub struct Tvs {
     wrong: Mutex<Vec<(String, u32)>>,
     /// a key for this device's own viewer of the TV page (`local_key`): never saved or listed
     local: Mutex<String>,
+    /// when each connected TV's page last asked for the overlays, by TV id (not saved)
+    seen: Mutex<Vec<(String, Instant)>>,
 }
 
 /// An offer this old is from a TV that stopped showing its code.
@@ -132,7 +140,17 @@ impl Tvs {
     }
 
     pub fn list(&self) -> Vec<TvInfo> {
-        self.list.lock().unwrap().iter().map(|t| TvInfo { id: t.id.clone(), name: t.name.clone() }).collect()
+        let seen = self.seen.lock().unwrap();
+        let online = |id: &str| seen.iter().any(|(s, at)| s == id && at.elapsed() < ONLINE_FOR);
+        self.list.lock().unwrap().iter().map(|t| TvInfo { id: t.id.clone(), name: t.name.clone(), online: online(&t.id) }).collect()
+    }
+
+    /// The connected TV with this key asked for its page or the overlays now (for `TvInfo::online`).
+    pub fn touch(&self, token: &str) {
+        let Some(id) = self.list.lock().unwrap().iter().find(|t| same(t.token.as_bytes(), token.as_bytes())).map(|t| t.id.clone()) else { return };
+        let mut seen = self.seen.lock().unwrap();
+        seen.retain(|(s, _)| *s != id);
+        seen.push((id, Instant::now()));
     }
 
     pub(crate) fn add(&self, tv: PairedTv) {

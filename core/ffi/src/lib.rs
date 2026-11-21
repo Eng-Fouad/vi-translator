@@ -170,6 +170,8 @@ pub struct FoundTv {
 pub struct TvInfo {
     pub id: String,
     pub name: String,
+    /// its page asked for the overlays in the last few seconds
+    pub online: bool,
 }
 
 #[derive(Debug, uniffi::Error)]
@@ -628,7 +630,7 @@ impl Engine {
 
     /// The connected TVs.
     pub fn list_tvs(&self) -> Vec<TvInfo> {
-        self.live.tvs.list().into_iter().map(|t| TvInfo { id: t.id, name: t.name }).collect()
+        self.live.tvs.list().into_iter().map(|t| TvInfo { id: t.id, name: t.name, online: t.online }).collect()
     }
 
     /// Disconnect a TV: its key stops working, and the TV shows a new code.

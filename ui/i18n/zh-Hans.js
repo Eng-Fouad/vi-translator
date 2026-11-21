@@ -379,4 +379,8 @@ I18N.add("zh-Hans", {
   "Screens": "屏幕",
   "Screen {n}": "屏幕 {n}",
   "Screen": "屏幕",
+  "Online": "在线",
+  "Offline": "离线",
+  "The TV app isn't open, or the TV can't reach this PC": "电视上的应用未打开，或电视无法连接到这台电脑",
+  "TVs showing the translation now: {n} of {m}": "正在显示翻译的电视：{n}/{m} 台",
 });

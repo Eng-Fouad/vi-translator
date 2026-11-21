@@ -379,4 +379,8 @@ I18N.add("cs", {
   "Screens": "Obrazovky",
   "Screen {n}": "Obrazovka {n}",
   "Screen": "Obrazovka",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "Aplikace na televizi není otevřená nebo se televize k tomuto počítači nedostane",
+  "TVs showing the translation now: {n} of {m}": "Televize, které teď zobrazují překlad: {n} z {m}",
 });

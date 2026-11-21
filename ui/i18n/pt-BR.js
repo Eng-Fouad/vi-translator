@@ -379,4 +379,8 @@ I18N.add("pt-BR", {
   "Screens": "Telas",
   "Screen {n}": "Tela {n}",
   "Screen": "Tela",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "O app da TV não está aberto, ou a TV não consegue alcançar este PC",
+  "TVs showing the translation now: {n} of {m}": "TVs mostrando a tradução agora: {n} de {m}",
 });

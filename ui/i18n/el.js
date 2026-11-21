@@ -379,4 +379,8 @@ I18N.add("el", {
   "Screens": "Οθόνες",
   "Screen {n}": "Οθόνη {n}",
   "Screen": "Οθόνη",
+  "Online": "Συνδεδεμένη",
+  "Offline": "Αποσυνδεδεμένη",
+  "The TV app isn't open, or the TV can't reach this PC": "Η εφαρμογή της τηλεόρασης δεν είναι ανοιχτή ή η τηλεόραση δεν φτάνει σε αυτόν τον υπολογιστή",
+  "TVs showing the translation now: {n} of {m}": "Τηλεοράσεις που δείχνουν τώρα τη μετάφραση: {n} από {m}",
 });

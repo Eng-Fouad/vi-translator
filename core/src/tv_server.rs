@@ -95,8 +95,14 @@ pub fn route(req: &Request, s: TcpStream, cfg: &Mutex<Config>, live: &Live, serv
     match path {
         // the TV app's page: the overlays over the whole picture, for a connected TV only (its key in t=)
         "/tv" | "/tv.json" | "/tv/forget" if !live.tvs.allowed(param(query, "t")) => respond(s, "403 Forbidden", "text/plain", b"not connected"),
-        "/tv" => serve(s, "tv.html"),
-        "/tv.json" => tv_state(cfg, live, s, param(query, "h")),
+        "/tv" => {
+            live.tvs.touch(param(query, "t"));
+            serve(s, "tv.html")
+        }
+        "/tv.json" => {
+            live.tvs.touch(param(query, "t"));
+            tv_state(cfg, live, s, param(query, "h"))
+        }
         // the TV disconnected itself: its key is forgotten
         "/tv/forget" => {
             live.tvs.remove_token(param(query, "t"));
@@ -268,8 +274,11 @@ mod tests {
         live.tvs.add(crate::tv::PairedTv { id: "tv1".into(), name: "Living room".into(), token: "key1".into() });
         let server = TvServer::start(0, cfg, live.clone(), None).unwrap();
         assert!(live.lan_running.load(Ordering::Relaxed));
+        // not online until its page asks
+        assert!(!live.tvs.list()[0].online);
         let (head, _) = get(server.port, "/tv?t=nope");
         assert!(head.starts_with("HTTP/1.1 403"), "{head}");
+        assert!(!live.tvs.list()[0].online);
         let (head, body) = get(server.port, "/tv?t=key1");
         assert!(head.starts_with("HTTP/1.1 200") && head.contains("text/html"), "{head}");
         assert_eq!(body, asset("tv.html").unwrap().1);
@@ -277,6 +286,7 @@ mod tests {
         assert!(head.contains("X-State: "), "{head}");
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(v.get("areas").is_some() && v.get("shown").is_some());
+        assert!(live.tvs.list()[0].online);
         // the same version again: nothing new within a second
         let version = head.lines().find_map(|l| l.strip_prefix("X-State: ")).unwrap().trim().to_string();
         let (head, _) = get(server.port, &format!("/tv.json?t=key1&h={version}"));

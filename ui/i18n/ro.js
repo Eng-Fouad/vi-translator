@@ -379,4 +379,8 @@ I18N.add("ro", {
   "Screens": "Ecrane",
   "Screen {n}": "Ecranul {n}",
   "Screen": "Ecran",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "Aplicația de pe televizor nu e deschisă sau televizorul nu ajunge la acest PC",
+  "TVs showing the translation now: {n} of {m}": "Televizoare care arată acum traducerea: {n} din {m}",
 });

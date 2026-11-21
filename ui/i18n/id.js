@@ -379,4 +379,8 @@ I18N.add("id", {
   "Screens": "Layar",
   "Screen {n}": "Layar {n}",
   "Screen": "Layar",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "Aplikasi TV tidak terbuka, atau TV tidak bisa menjangkau PC ini",
+  "TVs showing the translation now: {n} of {m}": "TV yang menampilkan terjemahan sekarang: {n} dari {m}",
 });

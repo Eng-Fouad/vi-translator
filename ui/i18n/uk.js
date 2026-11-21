@@ -379,4 +379,8 @@ I18N.add("uk", {
   "Screens": "Екрани",
   "Screen {n}": "Екран {n}",
   "Screen": "Екран",
+  "Online": "Онлайн",
+  "Offline": "Офлайн",
+  "The TV app isn't open, or the TV can't reach this PC": "Застосунок на телевізорі не відкрито, або телевізор не може зв'язатися з цим ПК",
+  "TVs showing the translation now: {n} of {m}": "Телевізори, що показують переклад зараз: {n} з {m}",
 });

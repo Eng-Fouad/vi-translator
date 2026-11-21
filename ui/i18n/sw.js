@@ -379,4 +379,8 @@ I18N.add("sw", {
   "Screens": "Skrini",
   "Screen {n}": "Skrini {n}",
   "Screen": "Skrini",
+  "Online": "Mtandaoni",
+  "Offline": "Nje ya mtandao",
+  "The TV app isn't open, or the TV can't reach this PC": "Programu ya TV haijafunguliwa, au TV haiwezi kufikia kompyuta hii",
+  "TVs showing the translation now: {n} of {m}": "TV zinazoonyesha tafsiri sasa: {n} kati ya {m}",
 });

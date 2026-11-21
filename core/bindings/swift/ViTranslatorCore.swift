@@ -2617,12 +2617,20 @@ public func FfiConverterTypeTranslatedLine_lower(_ value: TranslatedLine) -> Rus
 public struct TvInfo: Equatable, Hashable {
     public var id: String
     public var name: String
+    /**
+     * its page asked for the overlays in the last few seconds
+     */
+    public var online: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String) {
+    public init(id: String, name: String, 
+        /**
+         * its page asked for the overlays in the last few seconds
+         */online: Bool) {
         self.id = id
         self.name = name
+        self.online = online
     }
 
     
@@ -2642,13 +2650,15 @@ public struct FfiConverterTypeTvInfo: FfiConverterRustBuffer {
         return
             try TvInfo(
                 id: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf)
+                name: FfiConverterString.read(from: &buf), 
+                online: FfiConverterBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: TvInfo, into buf: inout [UInt8]) {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
+        FfiConverterBool.write(value.online, into: &buf)
     }
 }
 

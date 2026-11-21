@@ -379,4 +379,8 @@ I18N.add("nl", {
   "Screens": "Schermen",
   "Screen {n}": "Scherm {n}",
   "Screen": "Scherm",
+  "Online": "Online",
+  "Offline": "Offline",
+  "The TV app isn't open, or the TV can't reach this PC": "De tv-app is niet geopend, of de tv kan deze pc niet bereiken",
+  "TVs showing the translation now: {n} of {m}": "Tv's die nu de vertaling tonen: {n} van {m}",
 });

@@ -3838,6 +3838,11 @@ data class TvInfo (
     var `id`: kotlin.String
     , 
     var `name`: kotlin.String
+    , 
+    /**
+     * its page asked for the overlays in the last few seconds
+     */
+    var `online`: kotlin.Boolean
     
 ){
     
@@ -3856,17 +3861,20 @@ public object FfiConverterTypeTvInfo: FfiConverterRustBuffer<TvInfo> {
         return TvInfo(
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
     override fun allocationSize(value: TvInfo) = (
             FfiConverterString.allocationSize(value.`id`) +
-            FfiConverterString.allocationSize(value.`name`)
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterBoolean.allocationSize(value.`online`)
     )
 
     override fun write(value: TvInfo, buf: ByteBuffer) {
             FfiConverterString.write(value.`id`, buf)
             FfiConverterString.write(value.`name`, buf)
+            FfiConverterBoolean.write(value.`online`, buf)
     }
 }
 
