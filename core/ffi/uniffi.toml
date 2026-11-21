@@ -1,0 +1,8 @@
+[bindings.kotlin]
+package_name = "app.vitranslator.core"
+cdylib_name = "vi_translator_ffi"
+
+[bindings.swift]
+module_name = "ViTranslatorCore"
+ffi_module_name = "vi_translator_ffiFFI"
+ffi_module_filename = "vi_translator_ffiFFI"

@@ -78,7 +78,7 @@ use anyhow::{Context as _, Result, anyhow};
 use rquickjs::{Context, Function, Runtime};
 use serde::Deserialize;
 
-use crate::capture::FrameData;
+use crate::frame::FrameData;
 use crate::ocr::{self, Crop, Ocr};
 use crate::screens::ScreenLayout;
 
@@ -300,7 +300,7 @@ fn downloaded(data_dir: &Path, game: &str) -> Option<String> {
 /// its first line is `// pages-version: N` (so nothing else signed with the same key — the text an
 /// update's signature signs — can pass for one).
 pub fn signed(script: &str, sig: &str) -> bool {
-    version_of(script) > 0 && crate::updater::verify(script.as_bytes(), sig.trim(), crate::updater::PUBLIC_KEY).is_ok()
+    version_of(script) > 0 && crate::sign::verify(script.as_bytes(), sig.trim(), crate::sign::PUBLIC_KEY).is_ok()
 }
 
 impl Pages {
@@ -417,6 +417,10 @@ impl Pages {
     /// Call `page.<func>(frame, arg)`; its result as JSON (null when the page has no such function,
     /// or on any error — a failing script just finds nothing).
     fn call(&self, id: &str, func: &str, frame: &FrameData, ocr: Option<&Ocr>, arg: &serde_json::Value) -> serde_json::Value {
+        // (a picture taller than 1080p, a 1440p or 4K window or upscaler, is given to the script at 1080p:
+        // the scripts are tuned on 1080p pictures, and their results are fractions of the frame)
+        let scaled = script_frame(frame);
+        let frame: &FrameData = scaled.as_deref().unwrap_or(frame);
         CURRENT.with(|c| *c.borrow_mut() = Some((frame as *const _, ocr.map(|o| o as *const _))));
         self.arm();
         let out = guarded(|| {
@@ -752,6 +756,30 @@ struct PxOpts {
     gap: Option<u32>,
     #[serde(flatten)]
     rule: Rule,
+}
+
+/// The picture as the scripts see it: frames taller than `SCRIPT_H` scaled down to it (None: as it is).
+/// The last one is kept, so the pages that look at the same frame scale it once.
+const SCRIPT_H: u32 = 1080;
+
+fn script_frame(f: &FrameData) -> Option<std::sync::Arc<FrameData>> {
+    thread_local! {
+        static LAST: std::cell::RefCell<Option<((u64, u32, u32, usize), std::sync::Arc<FrameData>)>> = const { std::cell::RefCell::new(None) };
+    }
+    if f.h <= SCRIPT_H + SCRIPT_H / 9 || f.w == 0 || f.rgba.len() < (f.w * f.h * 4) as usize {
+        return None;
+    }
+    let key = (f.seq, f.w, f.h, f.rgba.as_ptr() as usize);
+    if let Some(hit) = LAST.with(|l| l.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, s)| s.clone())) {
+        return Some(hit);
+    }
+    let h = SCRIPT_H;
+    let w = ((f.w as u64 * h as u64) / f.h as u64).max(1) as u32;
+    let img = image::RgbaImage::from_raw(f.w, f.h, f.rgba[..(f.w * f.h * 4) as usize].to_vec())?;
+    let small = image::imageops::resize(&img, w, h, image::imageops::FilterType::Triangle);
+    let out = std::sync::Arc::new(FrameData { w, h, rgba: small.into_raw(), seq: f.seq });
+    LAST.with(|l| *l.borrow_mut() = Some((key, out.clone())));
+    Some(out)
 }
 
 fn px(f: &FrameData, x: u32, y: u32) -> (i32, i32, i32) {

@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
 
+use crate::Sink;
 use crate::config::Config;
 use crate::memory::{self, Memory};
 
@@ -26,11 +26,14 @@ struct State {
     versions: HashMap<String, String>,
 }
 
+#[derive(Clone)]
 pub struct Paths {
     /// settings folder (AppData): downloads and sync state
     pub data: PathBuf,
     /// translation-db folder: the lines log
     pub db: PathBuf,
+    /// the settings file (saved again when a layout update changes the built-in profiles)
+    pub config: PathBuf,
 }
 
 impl Paths {
@@ -63,9 +66,9 @@ fn game(c: &Config) -> Option<String> {
 }
 
 /// Use what was downloaded before (works offline), then keep it up to date.
-pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, paths: Paths) {
+pub fn run(sink: Arc<dyn Sink>, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, paths: Paths) {
 
-    let http = reqwest::blocking::Client::builder()
+    let http = crate::net::http_client()
         .user_agent(concat!("vi-translator/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(30))
         .build()
@@ -88,7 +91,7 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
                 // (the game or language as they are now: they may have changed again meanwhile)
                 let now = cfg.lock().unwrap().clone();
                 last = (now.game(), now.target_lang.clone());
-                load_cached(&app, &cfg, &memory, &paths, &last.0, &last.1);
+                load_cached(&*sink, &cfg, &memory, &paths, &last.0, &last.1);
                 next_download = Instant::now();
             }
         }
@@ -101,7 +104,7 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
         if let (Some(url), Some(g)) = (server(&c), game(&c)) {
             if Instant::now() >= next_download {
                 next_download = Instant::now() + DOWNLOAD_EVERY;
-                download(&http, &url, &app, &cfg, &memory, &paths, &g, &c.target_lang);
+                download(&http, &url, &*sink, &cfg, &memory, &paths, &g, &c.target_lang);
             }
         }
         std::thread::sleep(Duration::from_secs(30));
@@ -113,7 +116,7 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
 fn download(
     http: &reqwest::blocking::Client,
     url: &str,
-    app: &AppHandle,
+    sink: &dyn Sink,
     cfg: &Arc<Mutex<Config>>,
     memory: &Arc<Mutex<Memory>>,
     paths: &Paths,
@@ -135,7 +138,7 @@ fn download(
             if crate::config::write_atomic(&paths.layout("games"), &bytes).is_ok() {
                 st.versions.insert(k, tag.clone());
             }
-            apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
+            apply_games(sink, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
         }
     }
     // layout
@@ -148,9 +151,9 @@ fn download(
             }
             let id = cfg.lock().unwrap().install_id.clone();
             if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id) {
-                let _ = app.emit("pages", ());
+                sink.emit("pages", serde_json::Value::Null);
             }
-            apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
+            apply_layout(sink, cfg, &paths.config, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
     save_state(paths, &st);
@@ -295,15 +298,15 @@ fn kept_pack(paths: &Paths, st: &State, game: &str, lang: &str) -> Option<Vec<me
 
 /// The pack kept from the last download, outside the running app (`--test-image`).
 pub fn kept_pack_in(data: &std::path::Path, game: &str, lang: &str) -> Option<Vec<memory::Entry>> {
-    let paths = Paths { data: data.to_path_buf(), db: data.to_path_buf() };
+    let paths = Paths { data: data.to_path_buf(), db: data.to_path_buf(), config: data.join("config.json") };
     kept_pack(&paths, &load_state(&paths), game, lang)
 }
 
-fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Memory>>, paths: &Paths, game: &str, lang: &str) {
+fn load_cached(sink: &dyn Sink, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Memory>>, paths: &Paths, game: &str, lang: &str) {
     let st = load_state(paths);
     if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout("games")), st.versions.get("layout/games")) {
         if let Ok(list) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            apply_games(app, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
+            apply_games(sink, cfg, paths, &st, &list, tag.parse().unwrap_or(0), lang);
         }
     }
     if let Some(entries) = kept_pack(paths, &st, game, lang) {
@@ -318,29 +321,29 @@ fn load_cached(app: &AppHandle, cfg: &Arc<Mutex<Config>>, memory: &Arc<Mutex<Mem
             // (test versions turned on or off: the script that's for this install now)
             let id = cfg.lock().unwrap().install_id.clone();
             if crate::pagescript::save_from_layout(&paths.data, game, &layout, &id) {
-                let _ = app.emit("pages", ());
+                sink.emit("pages", serde_json::Value::Null);
             }
-            apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, game);
+            apply_layout(sink, cfg, &paths.config, &layout, tag.parse().unwrap_or(0), lang, game);
         }
     }
 }
 
 /// A new list of games from the server: the games it changed get their saved layout again.
-fn apply_games(app: &AppHandle, cfg: &Arc<Mutex<Config>>, paths: &Paths, st: &State, list: &serde_json::Value, version: u32, lang: &str) {
+fn apply_games(sink: &dyn Sink, cfg: &Arc<Mutex<Config>>, paths: &Paths, st: &State, list: &serde_json::Value, version: u32, lang: &str) {
     let changed = {
         let mut c = cfg.lock().unwrap();
         let changed = c.apply_games(list, version);
         if changed.is_empty() {
             return;
         }
-        let _ = c.save(&crate::config_path());
-        let _ = app.emit("config", &c.redacted());
+        let _ = c.save(&paths.config);
+        sink.emit("config", serde_json::to_value(c.redacted()).unwrap_or_default());
         changed
     };
     for g in changed {
         if let (Ok(bytes), Some(tag)) = (std::fs::read(paths.layout(&g)), st.versions.get(&format!("layout/{g}"))) {
             if let Ok(layout) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                apply_layout(app, cfg, &layout, tag.parse().unwrap_or(0), lang, &g);
+                apply_layout(sink, cfg, &paths.config, &layout, tag.parse().unwrap_or(0), lang, &g);
             }
         }
     }
@@ -426,7 +429,7 @@ fn merged<T: serde::Serialize + serde::de::DeserializeOwned>(base: &T, patch: &s
 /// ```
 /// Words always apply (they only add to or fix the built-in lists). Areas and fonts are applied
 /// once per new layout version: the player's own changes stay until the next new layout.
-fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::Value, version: u32, lang: &str, game: &str) {
+fn apply_layout(sink: &dyn Sink, cfg: &Arc<Mutex<Config>>, config_path: &PathBuf, layout: &serde_json::Value, version: u32, lang: &str, game: &str) {
     // (the built-in word lists are Arabic; a layout can carry words for any language)
     let words = |kind: &str| -> Vec<(String, String)> {
         layout["words"][lang][kind]
@@ -513,8 +516,8 @@ fn apply_layout(app: &AppHandle, cfg: &Arc<Mutex<Config>>, layout: &serde_json::
     p.sanitize();
     c.layout_versions.insert(game.to_string(), version);
     c.normalize(); // (if that built-in profile is in use, its new layout applies now)
-    let _ = c.save(&crate::config_path());
-    let _ = app.emit("config", &c.redacted());
+    let _ = c.save(config_path);
+    sink.emit("config", serde_json::to_value(c.redacted()).unwrap_or_default());
 }
 
 #[cfg(test)]
@@ -530,7 +533,7 @@ mod tests {
         let dev_key: [u8; 32] = core::array::from_fn(|i| i as u8);
         let dir = std::env::temp_dir().join(format!("vit-pack-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
-        let paths = Paths { data: dir.clone(), db: dir.clone() };
+        let paths = Paths { data: dir.clone(), db: dir.clone(), config: dir.join("config.json") };
         let http = reqwest::blocking::Client::new();
         let mut st = State::default();
         let game = std::env::var("VIT_TEST_GAME").unwrap_or_else(|_| "gta6".into());

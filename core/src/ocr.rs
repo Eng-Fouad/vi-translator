@@ -1,13 +1,21 @@
 //! English text recognition, plus detection of words drawn in a colour (game highlights) instead
-//! of white. The OCR engine itself is the platform's: Windows OCR (ocr_windows.rs), Apple Vision on
-//! macOS (ocr_vision.rs), Tesseract on Linux (ocr_tesseract.rs).
+//! of white. The OCR engine itself is the host's (`TextEngine`): on the desktop the platform's
+//! (Windows OCR, Apple Vision, Tesseract), on a phone ML Kit or Apple Vision. It only reads words in
+//! a prepared dark-on-light picture; everything around that (the passes, which reading is kept,
+//! speaker names, icons, colours) is here.
 
 use anyhow::Result;
 
-#[cfg_attr(windows, path = "ocr_windows.rs")]
-#[cfg_attr(target_os = "macos", path = "ocr_vision.rs")]
-#[cfg_attr(all(not(windows), not(target_os = "macos")), path = "ocr_tesseract.rs")]
-mod engine;
+/// The host's text recognizer: the words in a dark-on-light picture (BGRA, 4 bytes per pixel, rows
+/// `w * 4` bytes; grey, so the channel order doesn't matter), with their line numbers and boxes in
+/// that picture's pixels. Called several times per area and frame (see `Ocr::recognize_checked`).
+pub trait TextEngine {
+    fn read(&self, bgra: &[u8], w: u32, h: u32) -> Result<Vec<RawWord>>;
+    /// The largest picture side the engine accepts (bigger pictures are halved until they fit).
+    fn max_dim(&self) -> u32 {
+        2600
+    }
+}
 
 /// A word as the engine reports it, in the (prepared) image's pixels.
 pub struct RawWord {
@@ -61,26 +69,21 @@ pub struct Word {
 }
 
 pub struct Ocr {
-    engine: engine::Engine,
+    engine: Box<dyn TextEngine>,
 }
 
 impl Ocr {
-    /// (on Windows, on a thread that has WinRT initialised: see `init_thread`)
-    pub fn new() -> Result<Self> {
-        Ok(Self { engine: engine::Engine::new()? })
-    }
-
-    pub fn init_thread() {
-        engine::Engine::init_thread();
+    /// Reading with the host's recognizer.
+    pub fn with_engine(engine: Box<dyn TextEngine>) -> Self {
+        Self { engine }
     }
 
     /// Prepare for OCR: take each pixel's brightest channel (so coloured words are as bright as white
     /// ones), invert to dark-on-light, and upscale tiny text. Returns BGRA bytes, size, and the factor
     /// that maps OCR-image pixels back to crop pixels.
-    fn preprocess(crop: &Crop, mode: Prep) -> (Vec<u8>, u32, u32, f64) {
+    fn preprocess(crop: &Crop, mode: Prep, max_dim: u32) -> (Vec<u8>, u32, u32, f64) {
         let scale = if crop.h < 60 { 2 } else { 1 };
         let (w, h) = (crop.w * scale, crop.h * scale);
-        let max_dim = engine::Engine::max_dim();
         let inside = matches!(mode, Prep::Outlined).then(|| outlined_letters(crop));
         let mut out = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h {
@@ -193,7 +196,7 @@ impl Ocr {
     }
 
     pub fn recognize_with(&self, crop: &Crop, mode: Prep) -> Result<Vec<Word>> {
-        let (bgra, w, h, back) = Self::preprocess(crop, mode);
+        let (bgra, w, h, back) = Self::preprocess(crop, mode, self.engine.max_dim());
         Ok(self
             .engine
             .read(&bgra, w, h)?

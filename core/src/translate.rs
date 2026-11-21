@@ -12,9 +12,12 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, anyhow, bail};
+#[cfg(feature = "offline")]
 use ort::session::Session;
+#[cfg(feature = "offline")]
 use ort::value::Tensor;
 use serde_json::{Value, json};
+#[cfg(feature = "offline")]
 use tokenizers::Tokenizer;
 
 use crate::config::Config;
@@ -23,12 +26,14 @@ pub type Segments = Vec<(String, Option<String>)>;
 
 // ------------------------------------------------------------------------------------- local model
 
+#[cfg(feature = "offline")]
 const MODEL_FILES: [&str; 4] =
     ["onnx/encoder_model_quantized.onnx", "onnx/decoder_model_quantized.onnx", "tokenizer.json", "config.json"];
 
 /// Each offline model at a fixed version (its commit), and the SHA-256 of its two model files: a
 /// download is what was tested, or it isn't used. (The tokenizer and config are small text files,
 /// fixed by the commit.) From the Hugging Face API; every language with a `local` model has one.
+#[cfg(feature = "offline")]
 const PINNED: [(&str, &str, [&str; 2]); 8] = [
     ("Xenova/opus-mt-en-ar", "034a684356c19021a187cda4d7f823298b913921", ["53c354d87ced44b39085fe8a46a25f09ea4578d442dbce9663f3977228f8a04e", "94e6bdf90866151787d014b7b77be0adb0f036418ee04d235ec01238aa8426b9"]),
     ("Xenova/opus-mt-en-hi", "7aad72006a1588a9c3485ed6203aed99eebbc872", ["3045cd6eaf06db96cff853204d6f0ffeb0c5af238a4f5a87a19fcaa94f7493c4", "f563f658721046b17aa3f3ec33d12efdb1497c962876ff7d7a5ca513f6b49f4e"]),
@@ -40,6 +45,7 @@ const PINNED: [(&str, &str, [&str; 2]); 8] = [
     ("Xenova/opus-mt-en-cs", "ed163ca109a93297e2f055eb3397bd33230141ad", ["5ca546c92abb310fc14e5dcfc421252a83b1595ca91d117cac9afda7ab7d7c38", "d6b2a757e26d10cc8f1a290174ab6655c623eeb11bdf71bdf44429f30a1cc164"]),
 ];
 
+#[cfg(feature = "offline")]
 /// The SHA-256 of a file, in hex.
 fn file_sha256(path: &Path) -> Result<String> {
     use sha2::Digest as _;
@@ -48,6 +54,7 @@ fn file_sha256(path: &Path) -> Result<String> {
     Ok(format!("{:x}", h.finalize()))
 }
 
+#[cfg(feature = "offline")]
 /// Download one model file at the pinned commit into `path` (through `path.part`, which a cut-off
 /// download goes on from next time), checking its SHA-256 when it has one.
 fn download_model_file(http: &reqwest::blocking::Client, repo: &str, rev: &str, f: &str, path: &Path, sha: Option<&str>) -> Result<()> {
@@ -84,6 +91,7 @@ fn download_model_file(http: &reqwest::blocking::Client, repo: &str, rev: &str, 
     Ok(())
 }
 
+#[cfg(feature = "offline")]
 /// ONNX Runtime allows one environment per process; create it once and keep it for the app's lifetime.
 fn ort_env() -> Result<&'static ort::environment::Environment> {
     static ENV: std::sync::OnceLock<ort::environment::Environment> = std::sync::OnceLock::new();
@@ -94,6 +102,7 @@ fn ort_env() -> Result<&'static ort::environment::Environment> {
     Ok(ENV.get_or_init(|| env))
 }
 
+#[cfg(feature = "offline")]
 pub struct LocalMt {
     tok: Tokenizer,
     /// target-language token some models need first (">>ara<<", ">>vie<<")
@@ -105,6 +114,7 @@ pub struct LocalMt {
     dec: Session,
 }
 
+#[cfg(feature = "offline")]
 impl LocalMt {
     /// Loads the model for `lang`, downloading it first (~110 MB, once) if it is missing.
     pub fn load(dir: &Path, lang: &crate::langs::Lang, http: &reqwest::blocking::Client, status: &dyn Fn(String)) -> Result<Self> {
@@ -186,6 +196,22 @@ impl LocalMt {
         }
         let ids: Vec<u32> = out_ids[1..].iter().map(|&i| i as u32).collect();
         Ok(self.tok.decode(&ids, true).map_err(|e| anyhow!("{e}"))?.trim().to_string())
+    }
+}
+
+/// This build has no offline translator (the phone apps leave it out: the ONNX Runtime it needs is
+/// big). Choosing "local" says so.
+#[cfg(not(feature = "offline"))]
+pub struct LocalMt;
+
+#[cfg(not(feature = "offline"))]
+impl LocalMt {
+    pub fn load(_dir: &Path, _lang: &crate::langs::Lang, _http: &reqwest::blocking::Client, _status: &dyn Fn(String)) -> Result<Self> {
+        bail!("The free offline translator is not part of this app: choose another translation service.")
+    }
+
+    pub fn translate(&mut self, _text: &str) -> Result<String> {
+        bail!("no offline translator in this build")
     }
 }
 
@@ -274,7 +300,7 @@ pub struct Translator {
 
 impl Translator {
     pub fn new(model_dir: PathBuf) -> Self {
-        let http = reqwest::blocking::Client::builder()
+        let http = crate::net::http_client()
             .user_agent("vi-translator/0.1")
             .timeout(Duration::from_secs(20))
             .build()
@@ -1299,6 +1325,7 @@ mod term_tests {
     }
 
     #[test]
+    #[cfg(feature = "offline")]
     fn every_offline_model_has_a_fixed_version() {
         for l in crate::langs::LANGS.iter() {
             if let Some(repo) = l.local {

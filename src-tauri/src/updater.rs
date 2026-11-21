@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -19,8 +19,9 @@ use crate::config::Config;
 
 /// Where releases are published.
 const RELEASES: &str = "https://api.github.com/repos/vi-translator/vi-translator-desktop/releases/latest";
-/// Ed25519 public key that release files are signed with (base64 of the 32 raw bytes).
-pub(crate) const PUBLIC_KEY: &str = "kQ2qBATJSRXwW3PtomkxkIUplaHqPHwoq+z3zJjTpWk=";
+/// Ed25519 public key that release files are signed with, and the check (in the core: page
+/// scripts are signed with the same key).
+pub(crate) use vi_translator_core::sign::{PUBLIC_KEY, verify};
 const CHECK_EVERY: Duration = Duration::from_secs(60 * 60);
 
 /// The release file for this platform: vi-translator-<windows|linux|macos>-<x64|arm64>[.exe]
@@ -75,16 +76,6 @@ pub fn newer_release(json: &serde_json::Value, current: &str) -> Option<Update> 
 pub fn signed_text(asset: &str, version: &str, data: &[u8]) -> String {
     use sha2::Digest as _;
     format!("vi-translator-update-v1\n{asset}\n{version}\n{:x}\n", sha2::Sha256::digest(data))
-}
-
-/// Does `sig_b64` (base64 Ed25519 signature) sign `data` with `pub_b64`?
-pub fn verify(data: &[u8], sig_b64: &str, pub_b64: &str) -> Result<()> {
-    use base64::Engine;
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-    let b64 = base64::engine::general_purpose::STANDARD;
-    let key: [u8; 32] = b64.decode(pub_b64.trim())?.try_into().map_err(|_| anyhow!("bad public key"))?;
-    let sig: [u8; 64] = b64.decode(sig_b64.trim())?.try_into().map_err(|_| anyhow!("bad signature"))?;
-    VerifyingKey::from_bytes(&key)?.verify(data, &Signature::from_bytes(&sig)).map_err(|_| anyhow!("the signature does not match"))
 }
 
 fn http() -> reqwest::blocking::Client {

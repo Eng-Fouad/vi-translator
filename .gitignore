@@ -1,4 +1,5 @@
 # Rust / Tauri build output
+/target/
 /src-tauri/target/
 /src-tauri/gen/schemas/
 

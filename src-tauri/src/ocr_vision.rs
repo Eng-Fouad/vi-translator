@@ -16,7 +16,7 @@ use objc2_vision::{
     VNImageOption, VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel,
 };
 
-use crate::ocr::RawWord;
+use vi_translator_core::ocr::RawWord;
 
 pub struct Engine;
 

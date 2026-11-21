@@ -32,22 +32,14 @@ pub struct ScreenInfo {
 pub use platform::{client_rect, find_window, focused_client_rect, foreground_window, grab_once, list_screens, screen_rect, grab_screen_region, list_windows};
 
 /// One captured frame of the window's client area, RGBA.
-pub struct FrameData {
-    pub w: u32,
-    pub h: u32,
-    pub rgba: Vec<u8>,
-    pub seq: u64,
-}
-
-/// Menu text translations, for one target language (the translator's answers in another are dropped).
-#[derive(Default)]
-pub struct MenuCache {
-    pub lang: String,
-    pub map: std::collections::HashMap<String, String>,
-}
+pub use vi_translator_core::frame::FrameData;
 
 #[derive(Default)]
 pub struct Shared {
+    /// What the overlays show now, the game page on screen, the lines for the home-network page and
+    /// the connected TVs: the core's (vi_translator_core::live), shared with its reading. Its fields
+    /// read as Shared's own (`shared.screen`, `shared.tvs` …).
+    pub live: Arc<vi_translator_core::live::Live>,
     pub frame: Mutex<Option<Arc<FrameData>>>,
     /// HWND of the window being captured (0 = none).
     pub hwnd: AtomicIsize,
@@ -69,23 +61,6 @@ pub struct Shared {
     pub sound_status: Mutex<String>,
     pub seq: AtomicU64,
     pub status: Mutex<String>,
-    /// A game page (a menu, a "mission failed" page …) is on screen; the full-window overlay shows it.
-    pub screen_active: std::sync::atomic::AtomicBool,
-    /// The profile screen currently shown (layout JSON) and its translated reason line, for windows
-    /// that open after the screen appeared.
-    pub screen: Mutex<Option<serde_json::Value>>,
-    /// Where the game page on screen has text marked private (other players' names): x, y, w, h
-    /// fractions. Snapshots leave it out.
-    pub screen_private: Mutex<Vec<[f64; 4]>>,
-    pub screen_reason: Mutex<serde_json::Value>,
-    /// Area id -> {"en": ..., "ar": ...} currently shown by that area's overlay (for saved frames).
-    pub on_screen: Mutex<std::collections::HashMap<String, serde_json::Value>>,
-    /// Area id -> the full translation event now shown (segments, size, place), for the OBS page.
-    pub shown: Mutex<std::collections::HashMap<String, serde_json::Value>>,
-    /// Pause-menu text translated by the translator this session: English -> translation, in one language.
-    pub menu_cache: Mutex<MenuCache>,
-    /// …and the menu text it couldn't translate (asked again later).
-    pub menu_failed: Mutex<Vec<String>>,
     /// Live preview, separate from the full frames read for text: a frame (≤ PREVIEW_W wide) at
     /// the preview rate, made only while someone watches (see `watching`), and its JPEG.
     pub preview_raw: Mutex<Option<Arc<FrameData>>>,
@@ -99,22 +74,16 @@ pub struct Shared {
     pub preview_pulled_ms: AtomicU64,
     /// the app window is minimised or hidden: no preview frames
     pub preview_paused: std::sync::atomic::AtomicBool,
-    /// Recent translations for the home-network page (see lan.rs), newest last, and their ids.
-    pub live_log: Mutex<std::collections::VecDeque<serde_json::Value>>,
-    pub live_seq: AtomicU64,
-    /// the target language for that page: {"code": "ar", "rtl": true}
-    pub live_lang: Mutex<serde_json::Value>,
-    /// the home-network page is being served
-    pub lan_running: std::sync::atomic::AtomicBool,
-    /// why the phone page couldn't start listening (shown in the window)
-    pub lan_error: Mutex<Option<String>>,
-    /// TVs connected to show the overlays (the VI Translator app on the TV), with their keys
-    pub tvs: crate::tv::Tvs,
-    /// the header's "Live translations" switch is off: the home-network page gets no lines meanwhile
-    pub live_off: std::sync::atomic::AtomicBool,
     /// ms between full frames (for reading text) and between preview frames (0 = default)
     pub capture_ms: AtomicU64,
     pub preview_ms: AtomicU64,
+}
+
+impl std::ops::Deref for Shared {
+    type Target = vi_translator_core::live::Live;
+    fn deref(&self) -> &Self::Target {
+        &self.live
+    }
 }
 
 /// Preview frames are at most this wide: a 1080p game is shown at full size, a 4K one at half.
