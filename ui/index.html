@@ -156,6 +156,13 @@
             <button id="refresh-windows" class="btn icon" data-i18n-title title="Refresh the list"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4.4M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 4.4M20 19v-4h-4"/></svg></button>
           </div>
           <p class="muted small" data-i18n-html>Capture card already used by OBS? OBS keeps it to itself — pick the card's <b>OBS source</b> instead.</p>
+          <!-- a window that shows the game with other things around it: only its game part is read -->
+          <div id="source-part" class="part-row">
+            <div class="part-text"><b data-i18n>Part of the window</b> <span id="source-part-state" class="muted small"></span></div>
+            <button id="source-part-choose" class="btn" data-i18n>Choose the game's part</button>
+            <button id="source-part-clear" class="link" data-i18n>Whole window</button>
+          </div>
+          <p id="source-part-hint" class="muted small" data-i18n>For an app that shows the game with its own panels and buttons around it (a streaming or upscaling app): read only the game.</p>
           <div id="source-status" class="callout"></div>
 
           <h3>OBS</h3>
@@ -173,6 +180,24 @@
 
         <!-- where the translations are shown besides the PC: a TV, other devices, OBS -->
         <div class="tab hidden" id="tab-show">
+          <h3 data-i18n>Overlays on this PC</h3>
+          <p class="hint" data-i18n>The translations are drawn over the game's window. Pick another window when you read the picture from a capture card, OBS or another app's camera, but watch the game in this window.</p>
+          <div class="row">
+            <select id="overlay_window" class="grow"></select>
+            <button id="refresh-overlay-windows" class="btn icon" data-i18n-title title="Refresh the list"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4.4M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 4.4M20 19v-4h-4"/></svg></button>
+          </div>
+          <div id="overlay-part" class="part-row">
+            <div class="part-text"><b data-i18n>Part of the window</b> <span id="overlay-part-state" class="muted small"></span></div>
+            <button id="overlay-part-choose" class="btn" data-i18n>Choose the game's part</button>
+            <button id="overlay-part-clear" class="link" data-i18n>Whole window</button>
+          </div>
+          <div id="overlay-status" class="callout"></div>
+
+          <h3 data-i18n>Virtual camera</h3>
+          <p class="hint" data-i18n>Send the game with its translations as a webcam to other apps (Discord, Zoom, a streaming app): pick "OBS Virtual Camera" as the camera there. It uses the camera OBS Studio installs; OBS itself needn't be open, but its own Start Virtual Camera must be off.</p>
+          <label class="check"><input type="checkbox" id="virtual_camera" /> <span data-i18n>Send as a camera</span></label>
+          <div id="vcam-status" class="callout"></div>
+
           <h3 data-i18n>Show on a TV</h3>
           <p class="hint" data-i18n>The translations over the game on a Google TV, Android TV, LG or Samsung TV, with the VI Translator app. Open the app on the TV, then connect it here with the code it shows.</p>
           <button id="tv-find" class="btn wide" data-i18n>Connect a TV</button>

@@ -122,11 +122,12 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared>, state: 
 /// included (only while the game is the active window; otherwise the overlays are hidden) — and
 /// "<stem>.json" with the English and Arabic each area showed at that moment.
 fn save_with_translation(shared: &Shared, folder: &Path, stem: &str, n: u64) {
-    let hwnd = shared.hwnd.load(Ordering::Relaxed);
-    let active = hwnd != 0 && crate::capture::foreground_window() == hwnd;
     let mut overlay_file = None;
-    if active {
-        if let Some((x, y, w, h)) = crate::capture::client_rect(hwnd) {
+    // (the overlay window's game part, only while it's in front: otherwise the overlays are hidden)
+    let shown_at = crate::capture::overlay_rect(shared, true);
+    let active = shown_at.is_some();
+    {
+        if let Some((x, y, w, h)) = shown_at {
             if let Some(rgba) = crate::capture::grab_screen_region(x, y, w, h) {
                 let f = FrameData { w: w as u32, h: h as u32, rgba, seq: 0 };
                 let p = folder.join(format!("{stem}_overlay.png"));

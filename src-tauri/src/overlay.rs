@@ -126,9 +126,9 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
             last_geom.clear(); // re-send geometry now and then, in case an overlay page (re)loaded
         }
         let c = cfg.lock().unwrap().clone();
-        let target = shared.hwnd.load(Ordering::Relaxed);
-        // Only show the Arabic while the captured window is the one in front (not over other apps).
-        let client = if c.overlays_enabled { capture::focused_client_rect(target) } else { None };
+        // Only show the Arabic while the overlay window is the one in front (not over other apps), over
+        // the part of it showing the game.
+        let client = if c.overlays_enabled { capture::overlay_rect(&shared, true) } else { None };
         let visible = client.is_some();
 
         // Every overlay window we want: one per enabled area, plus the full-window "screen" overlay

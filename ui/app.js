@@ -504,10 +504,180 @@ $("refresh-windows").addEventListener("click", async () => {
 });
 $("window_title").addEventListener("change", (e) => {
   cfg.window_title = e.target.value;
+  cfg.source_crop = null; // (a part chosen in another window means nothing in this one)
   for (const k of Object.keys(lastSegs)) delete lastSegs[k];
   save();
   updateGlance();
+  renderParts();
 });
+
+// ------------------------------------------------------------------------------------- the game's part of a window
+
+const isWindowSource = (v) => !!v && !v.startsWith("device:") && !v.startsWith("obs:");
+const partText = (c) => (c ? t("{w}% × {h}% of the window", { w: Math.round(c[2] * 100), h: Math.round(c[3] * 100) }) : t("the whole window"));
+
+// The Source tab's and the Show on tab's "Part of the window" rows, as the settings say.
+function renderParts() {
+  const win = isWindowSource(cfg.window_title);
+  $("source-part").classList.toggle("off", !win);
+  $("source-part-hint").hidden = !win;
+  $("source-part-state").textContent = `· ${partText(cfg.source_crop)}`;
+  $("source-part-clear").hidden = !cfg.source_crop;
+  const own = !!cfg.overlay_window;
+  $("overlay-part").classList.toggle("off", !own);
+  $("overlay-part-state").textContent = `· ${partText(cfg.overlay_crop)}`;
+  $("overlay-part-clear").hidden = !cfg.overlay_crop;
+  const st = $("overlay-status");
+  if (!own && !win) st.textContent = t("The source isn't a window, so there's nothing on this PC to draw over. Pick the window you watch the game in.");
+  else st.textContent = "";
+}
+
+/**
+ * Choose the part of window `title` that shows the game, on a still of the whole window: drag a box,
+ * or let the app find what moves. Resolves the part (x, y, w, h fractions), null for the whole
+ * window, or undefined when cancelled.
+ */
+function choosePart(title, current) {
+  return new Promise((resolve) => {
+    const d = document.createElement("dialog");
+    d.className = "part";
+    d.innerHTML = `<h4></h4><div class="part-msg" data-msg></div>
+      <div class="part-pic"><img alt="" draggable="false" /><div class="shade"></div><div class="part-box" hidden><i data-c="nw"></i><i data-c="ne"></i><i data-c="sw"></i><i data-c="se"></i></div></div>
+      <div class="row"><button class="btn" data-find></button><button class="btn" data-whole></button><span class="grow"></span><button class="btn" data-no></button><button class="btn part-ok" data-ok></button></div>`;
+    d.querySelector("h4").textContent = t("The game's part of \"{title}\"", { title });
+    const msg = d.querySelector("[data-msg]");
+    msg.textContent = t("Drag a box around the game picture, or press Find to let the app look for what moves.");
+    d.querySelector("[data-find]").textContent = t("Find the game picture");
+    d.querySelector("[data-whole]").textContent = t("Whole window");
+    d.querySelector("[data-no]").textContent = t("Cancel");
+    d.querySelector("[data-ok]").textContent = t("Use this part");
+    const pic = d.querySelector(".part-pic"), img = pic.querySelector("img"), box = pic.querySelector(".part-box");
+    let part = current ? [...current] : null; // x, y, w, h fractions
+    const draw = () => {
+      box.hidden = !part;
+      if (!part) return;
+      Object.assign(box.style, { left: `${part[0] * 100}%`, top: `${part[1] * 100}%`, width: `${part[2] * 100}%`, height: `${part[3] * 100}%` });
+    };
+    const done = (v) => { d.close(); d.remove(); resolve(v); };
+    d.querySelector("[data-ok]").addEventListener("click", () => done(part));
+    d.querySelector("[data-no]").addEventListener("click", () => done(undefined));
+    d.querySelector("[data-whole]").addEventListener("click", () => done(null));
+    d.addEventListener("cancel", (e) => { e.preventDefault(); done(undefined); });
+    d.querySelector("[data-find]").addEventListener("click", async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      msg.textContent = t("Looking for the moving picture ... (keep the game playing)");
+      try {
+        const found = await invoke("find_picture", { title });
+        if (found) { part = found; draw(); msg.textContent = t("Found. Adjust the box if needed, then press Use this part."); }
+        else msg.textContent = t("Nothing moved enough to tell. Play the game for a moment (not paused) and try again, or drag a box yourself.");
+      } catch (err) { msg.textContent = String(err); }
+      b.disabled = false;
+    });
+    // dragging: a new box on the picture, the box itself to move it, a corner to resize it
+    const at = (ev) => {
+      const r = img.getBoundingClientRect();
+      return [Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height))];
+    };
+    let drag = null;
+    pic.addEventListener("pointerdown", (ev) => {
+      const [x, y] = at(ev);
+      const corner = ev.target.dataset?.c;
+      if (corner && part) drag = { kind: corner, start: [x, y], from: [...part] };
+      else if (ev.target === box && part) drag = { kind: "move", start: [x, y], from: [...part] };
+      else { drag = { kind: "new", start: [x, y] }; part = [x, y, 0, 0]; }
+      pic.setPointerCapture(ev.pointerId);
+      draw();
+    });
+    pic.addEventListener("pointermove", (ev) => {
+      if (!drag) return;
+      const [x, y] = at(ev);
+      const [sx, sy] = drag.start;
+      if (drag.kind === "new") part = [Math.min(x, sx), Math.min(y, sy), Math.abs(x - sx), Math.abs(y - sy)];
+      else if (drag.kind === "move") {
+        const [fx, fy, fw, fh] = drag.from;
+        part = [Math.min(1 - fw, Math.max(0, fx + x - sx)), Math.min(1 - fh, Math.max(0, fy + y - sy)), fw, fh];
+      } else {
+        let [x0, y0, x1, y1] = [drag.from[0], drag.from[1], drag.from[0] + drag.from[2], drag.from[1] + drag.from[3]];
+        if (drag.kind.includes("w")) x0 = x; else x1 = x;
+        if (drag.kind.includes("n")) y0 = y; else y1 = y;
+        part = [Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)];
+      }
+      draw();
+    });
+    pic.addEventListener("pointerup", () => {
+      drag = null;
+      if (part && (part[2] < 0.05 || part[3] < 0.05)) part = current ? [...current] : null; // a click, not a box
+      draw();
+    });
+    document.body.appendChild(d);
+    d.showModal();
+    msg.textContent = t("Getting a picture of the window ...");
+    invoke("window_still", { title })
+      .then((s) => {
+        img.src = s.img;
+        msg.textContent = t("Drag a box around the game picture, or press Find to let the app look for what moves.");
+        draw();
+      })
+      .catch((err) => { msg.textContent = String(err); });
+  });
+}
+
+$("source-part-choose").addEventListener("click", async () => {
+  const part = await choosePart(cfg.window_title, cfg.source_crop);
+  if (part === undefined) return;
+  cfg.source_crop = part;
+  save();
+  renderParts();
+});
+$("source-part-clear").addEventListener("click", () => { cfg.source_crop = null; save(); renderParts(); });
+
+// Show on: the window the overlays are drawn over ("" = the source window)
+async function loadOverlayWindows() {
+  const sel = $("overlay_window");
+  sel.innerHTML = "";
+  const iso = (s) => `⁨${s}⁩`;
+  const short = (s, n = 46) => (s.length > n ? `${s.slice(0, n - 16).trimEnd()}…${s.slice(-15).trimStart()}` : s);
+  sel.add(new Option(t("The source window"), ""));
+  let windows = [];
+  try { windows = await invoke("list_windows"); } catch {}
+  const titles = windows.map((w) => w.title);
+  for (const w of windows) {
+    const full = w.process ? `${w.title}  —  ${w.process}` : w.title;
+    sel.add(Object.assign(new Option(iso(w.process ? `${short(w.title)}  —  ${short(w.process, 24)}` : short(w.title)), w.title), { title: full }));
+  }
+  if (cfg.overlay_window && !titles.includes(cfg.overlay_window)) {
+    sel.add(new Option(t("{title}  (not available now)", { title: iso(short(cfg.overlay_window)) }), cfg.overlay_window), 1);
+  }
+  sel.value = cfg.overlay_window || "";
+  renderParts();
+}
+$("overlay_window").addEventListener("change", (e) => {
+  cfg.overlay_window = e.target.value;
+  cfg.overlay_crop = null;
+  save();
+  renderParts();
+});
+$("refresh-overlay-windows").addEventListener("click", loadOverlayWindows);
+$("overlay-part-choose").addEventListener("click", async () => {
+  if (!cfg.overlay_window) return;
+  const part = await choosePart(cfg.overlay_window, cfg.overlay_crop);
+  if (part === undefined) return;
+  cfg.overlay_crop = part;
+  save();
+  renderParts();
+});
+$("overlay-part-clear").addEventListener("click", () => { cfg.overlay_crop = null; save(); renderParts(); });
+
+// Show on: the virtual camera
+$("virtual_camera").addEventListener("change", (e) => { cfg.virtual_camera = e.target.checked; save(false); setTimeout(updateVcam, 600); });
+async function updateVcam() {
+  $("virtual_camera").checked = !!cfg.virtual_camera;
+  let st = "";
+  try { st = await invoke("vcam_status"); } catch {}
+  $("vcam-status").textContent = cfg.virtual_camera ? t(st || "Starting ...") : "";
+}
+setInterval(() => { if (cfg && document.body.dataset.tab === "show") updateVcam(); }, 1500);
 
 // ------------------------------------------------------------------------------------- translator
 
@@ -1835,5 +2005,7 @@ function lockControls() {
   try { mode = localStorage.getItem("mode") || "setup"; } catch {}
   setMode(mode === "play" ? "play" : "setup");
   await loadWindows();
+  loadOverlayWindows();
+  updateVcam();
   updateGlance();
 })();

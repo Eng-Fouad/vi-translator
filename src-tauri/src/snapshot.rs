@@ -456,7 +456,7 @@ fn jpeg_b64(frame: &FrameData, max_w: u32, quality: u8) -> Result<String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(&out))
 }
 
-fn jpeg_data_url(frame: &FrameData, max_w: u32, quality: u8) -> Result<String> {
+pub fn jpeg_data_url(frame: &FrameData, max_w: u32, quality: u8) -> Result<String> {
     Ok(format!("data:image/jpeg;base64,{}", jpeg_b64(frame, max_w, quality)?))
 }
 

@@ -232,6 +232,18 @@ impl Default for Style {
 pub struct Config {
     /// Exact title of the window to capture.
     pub window_title: String,
+    /// Only part of that window is the game picture (another program showing the game with its own
+    /// panels around it, like a streaming or upscaling app): that part, as x, y, width, height
+    /// fractions of the window. None: the whole window. (Window sources only.)
+    pub source_crop: Option<[f64; 4]>,
+    /// The window the Arabic is drawn over on this PC: "" = the source window. Another window when the
+    /// picture is read elsewhere (a capture card, OBS, another app's virtual camera) but the game is
+    /// watched in this one.
+    pub overlay_window: String,
+    /// The part of `overlay_window` that shows the game (x, y, width, height fractions); None: all of it.
+    pub overlay_crop: Option<[f64; 4]>,
+    /// Send the game with its translations as a webcam ("OBS Virtual Camera") for other apps.
+    pub virtual_camera: bool,
     /// local | deepl | azure | google | libre | claude | openai
     pub engine: String,
     /// Language to translate into (see `langs::LANGS`): "ar", "hi", "tr" …
@@ -562,10 +574,31 @@ impl Default for ProfileOpts {
     }
 }
 
+/// A part of a window (x, y, width, height fractions) as the app can use it: inside the window and at
+/// least 5% of it each way; None for something unusable, or for (about) the whole window.
+pub fn clean_crop(c: [f64; 4]) -> Option<[f64; 4]> {
+    if c.iter().any(|v| !v.is_finite()) {
+        return None;
+    }
+    let x = c[0].clamp(0.0, 0.95);
+    let y = c[1].clamp(0.0, 0.95);
+    let w = c[2].min(1.0 - x);
+    let h = c[3].min(1.0 - y);
+    if w < 0.05 || h < 0.05 {
+        return None;
+    }
+    let whole = x < 0.002 && y < 0.002 && w > 0.996 && h > 0.996;
+    (!whole).then_some([x, y, w, h])
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             window_title: "PS Remote Play".into(),
+            source_crop: None,
+            overlay_window: String::new(),
+            overlay_crop: None,
+            virtual_camera: false,
             engine: "local".into(),
             deepl_key: String::new(),
             azure_key: String::new(),
@@ -756,6 +789,8 @@ impl Config {
     ///    that profile's: a built-in one exactly as it is (it can't be changed), one of the
     ///    player's as they last saved it.
     pub fn normalize(&mut self) {
+        self.source_crop = self.source_crop.and_then(clean_crop);
+        self.overlay_crop = self.overlay_crop.and_then(clean_crop);
         for id in BUILTINS {
             if !self.builtins.iter().any(|p| p.id == id) {
                 self.builtins.push(builtin_profile(id).expect("built-in"));
@@ -986,6 +1021,15 @@ mod profile_tests {
         let gta6 = c.builtins.iter().find(|p| p.id == "gta6").unwrap();
         assert!(gta6.areas.iter().find(|a| a.id == "help").unwrap().needs_box);
         assert!(!gta6.areas.iter().find(|a| a.id == "subtitles").unwrap().needs_box);
+    }
+
+    #[test]
+    fn a_window_part_is_kept_usable() {
+        assert_eq!(clean_crop([0.1, 0.1, 0.5, 0.5]), Some([0.1, 0.1, 0.5, 0.5]));
+        assert_eq!(clean_crop([0.0, 0.0, 1.0, 1.0]), None, "the whole window is no part");
+        assert_eq!(clean_crop([0.5, 0.5, 0.9, 0.9]), Some([0.5, 0.5, 0.5, 0.5]), "kept inside the window");
+        assert_eq!(clean_crop([0.2, 0.2, 0.01, 0.5]), None, "too thin");
+        assert_eq!(clean_crop([f64::NAN, 0.0, 0.5, 0.5]), None);
     }
 
     #[test]

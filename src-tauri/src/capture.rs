@@ -13,6 +13,7 @@ use crate::config::Config;
 #[cfg_attr(windows, path = "capture_windows.rs")]
 #[cfg_attr(not(windows), path = "capture_xcap.rs")]
 mod platform;
+#[allow(unused_imports)] // (foreground_window: used inside the platforms only)
 pub use platform::{client_rect, find_window, focused_client_rect, foreground_window, grab_once, grab_screen_region, list_windows};
 
 /// One captured frame of the window's client area, RGBA.
@@ -35,6 +36,15 @@ pub struct Shared {
     pub frame: Mutex<Option<Arc<FrameData>>>,
     /// HWND of the window being captured (0 = none).
     pub hwnd: AtomicIsize,
+    /// The part of the captured window that is the game picture (x, y, w, h fractions); frames keep
+    /// only that part. None: the whole frame.
+    pub source_crop: Mutex<Option<[f64; 4]>>,
+    /// The window the Arabic is drawn over (the source window unless the player chose another; 0 =
+    /// none) and the part of it showing the game.
+    pub overlay_hwnd: AtomicIsize,
+    pub overlay_crop: Mutex<Option<[f64; 4]>>,
+    /// The virtual camera's state for the Show on tab ("" while it's off).
+    pub vcam_status: Mutex<String>,
     pub seq: AtomicU64,
     pub status: Mutex<String>,
     /// A game page (a menu, a "mission failed" page …) is on screen; the full-window overlay shows it.
@@ -165,17 +175,33 @@ impl Shared {
     pub fn preview_interval(&self) -> Duration {
         Duration::from_millis(self.preview_ms.load(Ordering::Relaxed).max(16))
     }
-    /// Store a full frame.
+    /// Store a full frame (only the game's part of it, when the window shows more than the game).
     pub fn put_full(&self, w: u32, h: u32, rgba: Vec<u8>) {
         // (every reader of a frame takes its size from w and h: an empty or short one is no frame)
         if w == 0 || h == 0 || rgba.len() < w as usize * h as usize * 4 {
             return;
         }
+        let crop = *self.source_crop.lock().unwrap();
+        let (w, h, rgba) = match crop {
+            Some(c) => match crop_rgba(&rgba, w, h, c) {
+                Some(f) => f,
+                None => return,
+            },
+            None => (w, h, rgba),
+        };
         let seq = self.seq.fetch_add(1, Ordering::Relaxed) + 1;
         *self.frame.lock().unwrap() = Some(Arc::new(FrameData { w, h, rgba, seq }));
     }
     /// Store a preview frame (small RGBA; the preview thread turns it into JPEG).
     pub fn put_preview(&self, f: FrameData) {
+        let crop = *self.source_crop.lock().unwrap();
+        let f = match crop {
+            Some(c) => match crop_rgba(&f.rgba, f.w, f.h, c) {
+                Some((w, h, rgba)) => FrameData { w, h, rgba, seq: f.seq },
+                None => return,
+            },
+            None => f,
+        };
         *self.preview_raw.lock().unwrap() = Some(Arc::new(f));
     }
     /// Store a raw YUY2 preview frame (a capture card's own picture).
@@ -192,6 +218,45 @@ impl Shared {
     pub fn set_status(&self, s: impl Into<String>) {
         *self.status.lock().unwrap() = s.into();
     }
+}
+
+/// A part (x, y, w, h fractions) of a rectangle of `w` × `h` pixels, in whole pixels: (x, y, w, h).
+pub fn crop_px(w: u32, h: u32, c: [f64; 4]) -> (u32, u32, u32, u32) {
+    let x0 = ((c[0] * w as f64).round() as u32).min(w.saturating_sub(1));
+    let y0 = ((c[1] * h as f64).round() as u32).min(h.saturating_sub(1));
+    let cw = ((c[2] * w as f64).round() as u32).clamp(1, w - x0);
+    let ch = ((c[3] * h as f64).round() as u32).clamp(1, h - y0);
+    (x0, y0, cw, ch)
+}
+
+/// The part `c` of an RGBA image (rows `w * 4` bytes): its size and pixels.
+pub fn crop_rgba(rgba: &[u8], w: u32, h: u32, c: [f64; 4]) -> Option<(u32, u32, Vec<u8>)> {
+    if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
+        return None;
+    }
+    let (x0, y0, cw, ch) = crop_px(w, h, c);
+    let mut out = Vec::with_capacity((cw * ch * 4) as usize);
+    for y in y0..y0 + ch {
+        let start = ((y * w + x0) * 4) as usize;
+        out.extend_from_slice(&rgba[start..start + (cw * 4) as usize]);
+    }
+    Some((cw, ch, out))
+}
+
+/// A part of a screen rectangle (x, y, w, h in pixels): the whole of it without a part.
+pub fn crop_screen_rect(r: (i32, i32, i32, i32), c: Option<[f64; 4]>) -> (i32, i32, i32, i32) {
+    let Some(c) = c else { return r };
+    let (x, y, w, h) = r;
+    let (cx, cy, cw, ch) = crop_px(w.max(1) as u32, h.max(1) as u32, c);
+    (x + cx as i32, y + cy as i32, cw as i32, ch as i32)
+}
+
+/// Where the Arabic goes on this PC: the game's part of the overlay window, in screen pixels; with
+/// `front_only`, only while that window is the one in front (not over other apps).
+pub fn overlay_rect(shared: &Shared, front_only: bool) -> Option<(i32, i32, i32, i32)> {
+    let hwnd = shared.overlay_hwnd.load(Ordering::Relaxed);
+    let r = if front_only { focused_client_rect(hwnd) } else { client_rect(hwnd) }?;
+    Some(crop_screen_rect(r, *shared.overlay_crop.lock().unwrap()))
 }
 
 /// Shrink a 4-byte-per-pixel image (rows `pitch` bytes apart) to ≤ PREVIEW_W wide, averaging 2×2
@@ -250,12 +315,23 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
     let mut device: Option<(String, crate::device::DeviceCapture)> = None;
     let mut obs: Option<(String, crate::obs::ObsCapture)> = None;
     loop {
-        let (want, obs_port, obs_password) = {
+        let (want, obs_port, obs_password, source_crop, overlay_window, overlay_crop) = {
             let c = cfg.lock().unwrap();
             shared.capture_ms.store(1000 / c.capture_fps.clamp(1, 30) as u64, Ordering::Relaxed);
             shared.preview_ms.store(1000 / c.preview_fps.clamp(1, 60) as u64, Ordering::Relaxed);
-            (c.window_title.clone(), c.obs_port, c.obs_password.clone())
+            (c.window_title.clone(), c.obs_port, c.obs_password.clone(), c.source_crop, c.overlay_window.clone(), c.overlay_crop)
         };
+        let is_window = !want.starts_with(crate::obs::PREFIX) && !want.starts_with(crate::device::PREFIX);
+        // (a part of the picture only for a window: a card's or OBS's picture is the game already)
+        *shared.source_crop.lock().unwrap() = if is_window { source_crop } else { None };
+        // The overlays' window: the one the player chose, else the source window (none for a card or OBS)
+        if overlay_window.is_empty() {
+            shared.overlay_hwnd.store(if is_window { shared.hwnd.load(Ordering::Relaxed) } else { 0 }, Ordering::Relaxed);
+            *shared.overlay_crop.lock().unwrap() = if is_window { source_crop } else { None };
+        } else {
+            shared.overlay_hwnd.store(find_window(&overlay_window).unwrap_or(0), Ordering::Relaxed);
+            *shared.overlay_crop.lock().unwrap() = overlay_crop;
+        }
         // An OBS source ("obs:<name>"): OBS hands us snapshots of it
         if let Some(name) = want.strip_prefix(crate::obs::PREFIX) {
             if let Some((_, c)) = active.take() {
@@ -314,6 +390,9 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
             match platform::start_window(&want, shared.clone()) {
                 Ok((c, hwnd)) => {
                     shared.hwnd.store(hwnd, Ordering::Relaxed);
+                    if overlay_window.is_empty() {
+                        shared.overlay_hwnd.store(hwnd, Ordering::Relaxed);
+                    }
                     shared.set_status(format!("Capturing \"{want}\""));
                     active = Some((want, c));
                 }
@@ -339,6 +418,32 @@ pub struct WindowInfo {
     pub process: String,
 }
 
+
+#[cfg(test)]
+mod crop_tests {
+    use super::*;
+
+    #[test]
+    fn a_part_of_the_picture() {
+        // a 4 x 2 picture whose pixels are numbered 0..8 (in the red byte)
+        let rgba: Vec<u8> = (0..8u8).flat_map(|i| [i, 0, 0, 255]).collect();
+        let (w, h, px) = crop_rgba(&rgba, 4, 2, [0.5, 0.5, 0.5, 0.5]).unwrap();
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(px.chunks(4).map(|p| p[0]).collect::<Vec<_>>(), vec![6, 7]);
+        // on screen: a window at (100, 50), 400 x 200, its right half
+        assert_eq!(crop_screen_rect((100, 50, 400, 200), Some([0.5, 0.0, 0.5, 1.0])), (300, 50, 200, 200));
+        assert_eq!(crop_screen_rect((100, 50, 400, 200), None), (100, 50, 400, 200));
+    }
+
+    #[test]
+    fn frames_keep_only_the_game_part() {
+        let s = Shared::default();
+        *s.source_crop.lock().unwrap() = Some([0.25, 0.0, 0.5, 1.0]);
+        s.put_full(4, 2, vec![9; 32]);
+        let f = s.latest().unwrap();
+        assert_eq!((f.w, f.h, f.rgba.len()), (2, 2, 16));
+    }
+}
 
 #[cfg(test)]
 mod yuv_tests {

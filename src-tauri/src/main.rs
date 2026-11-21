@@ -17,6 +17,7 @@ mod game_icons;
 mod ocr;
 mod overlay;
 mod phrasebook;
+mod picture_find;
 mod preview_shot;
 mod lan;
 mod langs;
@@ -28,6 +29,7 @@ mod sync;
 mod translate;
 mod tv;
 mod updater;
+mod vcam;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -517,6 +519,46 @@ async fn list_sources(webview: tauri::Webview, state: tauri::State<'_, AppState>
     .await
     .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "windows": windows, "devices": devices, "obs": obs }))
+}
+
+/// A still of a whole window (all of it, whatever part of it is the source), to choose the part
+/// showing the game: {"w", "h", "img": JPEG data URL}.
+#[tauri::command]
+async fn window_still(webview: tauri::Webview, title: String) -> Result<serde_json::Value, String> {
+    main_only(&webview)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let f = capture::grab_once(&title).map_err(|e| format!("{e:#}"))?;
+        let img = snapshot::jpeg_data_url(&f, 1600, 80).map_err(|e| format!("{e:#}"))?;
+        Ok(serde_json::json!({ "w": f.w, "h": f.h, "img": img }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The part of a window showing the game (x, y, w, h fractions): what moves in it over a second or
+/// so. None when too little moved (the game paused, a still menu).
+#[tauri::command]
+async fn find_picture(webview: tauri::Webview, title: String) -> Result<Option<[f64; 4]>, String> {
+    main_only(&webview)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut frames = Vec::new();
+        for i in 0..3 {
+            if i > 0 {
+                std::thread::sleep(Duration::from_millis(600));
+            }
+            frames.push(capture::grab_once(&title).map_err(|e| format!("{e:#}"))?);
+        }
+        let refs: Vec<&capture::FrameData> = frames.iter().map(|f| f.as_ref()).collect();
+        Ok(picture_find::moving_part(&refs).and_then(config::clean_crop))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// What the virtual camera is doing ("" while it's off).
+#[tauri::command]
+fn vcam_status(state: tauri::State<AppState>) -> String {
+    vcam::status(&state.shared)
 }
 
 /// The profile screen on show right now (layout + Arabic reason), for windows opened after it appeared.
@@ -2499,6 +2541,29 @@ fn main() {
         }
         return;
     }
+    // `--find-picture "Window title"`: the part of that window showing the game (what moves), as fractions.
+    if let Some(title) = args.iter().position(|a| a == "--find-picture").and_then(|i| args.get(i + 1)) {
+        let mut frames = Vec::new();
+        for i in 0..3 {
+            if i > 0 {
+                std::thread::sleep(Duration::from_millis(600));
+            }
+            match capture::grab_once(title) {
+                Ok(f) => frames.push(f),
+                Err(e) => {
+                    eprintln!("error: {e:#}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        let refs: Vec<&capture::FrameData> = frames.iter().map(|f| f.as_ref()).collect();
+        let (w, h) = (frames[0].w, frames[0].h);
+        match picture_find::moving_part(&refs).and_then(config::clean_crop) {
+            Some(c) => println!("{w}x{h}: x {:.4} y {:.4} w {:.4} h {:.4} = {:?} px", c[0], c[1], c[2], c[3], capture::crop_px(w, h, c)),
+            None => println!("{w}x{h}: nothing moved enough (or the whole window)"),
+        }
+        return;
+    }
     if let Some(i) = args.iter().position(|a| a == "--grab") {
         let (Some(title), Some(out)) = (args.get(i + 1), args.get(i + 2)) else {
             eprintln!("usage: --grab \"Window title\" out.png");
@@ -2706,7 +2771,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, window_still, find_picture, vcam_status, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));
@@ -2737,6 +2802,11 @@ fn main() {
             {
                 let (s, c) = (shared.clone(), cfg.clone());
                 std::thread::spawn(move || capture::run_manager(s, c));
+            }
+            {
+                // the game with its translations as a webcam (off unless turned on)
+                let (s, c) = (shared.clone(), cfg.clone());
+                std::thread::spawn(move || vcam::run(c, s));
             }
             {
                 let (h, c, s) = (handle.clone(), cfg.clone(), shared.clone());

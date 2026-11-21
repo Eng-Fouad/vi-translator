@@ -14,6 +14,10 @@
 - Translates **game screens** too (menus, mission results, captions), as support for each one arrives
   through automatic updates.
 - Works with a **game window**, a **capture card**, or an **OBS source**. It never touches the game.
+- Reads just the **game's part of another app's window** (a streaming or upscaling app with its own panels),
+  and draws the translations over **the window you watch**, even when the picture is read elsewhere.
+- Sends the game with its translations as a **webcam** to other apps (Discord, Zoom, a streaming app), through
+  the *OBS Virtual Camera* that OBS Studio installs (Windows).
 - Keeps highlighted words in their **colours** and button **icons** in place.
 - Shows the live translations on a **phone or tablet** on your home network (Show on tab, off by default).
 - **Updates itself**: when a new version is out it asks first, then checks its signature and restarts.
