@@ -189,6 +189,27 @@ impl LocalMt {
     }
 }
 
+/// True when a translation into a language not written in Latin letters (`native`: its own name)
+/// has two or more English words the English line didn't have: an answer in English, not a translation.
+/// Names and terms kept from the line (GTA+, Vice City) are in it, so they don't count.
+fn english_leak(line: &str, out: &str, native: &str) -> bool {
+    if native.chars().any(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
+    let words = |t: &str| -> Vec<String> {
+        t.split(|c: char| !c.is_ascii_alphabetic()).filter(|w| w.len() >= 2).map(|w| w.to_ascii_lowercase()).collect()
+    };
+    let have: std::collections::HashSet<String> = words(line).into_iter().collect();
+    words(out).iter().filter(|w| !have.contains(*w)).count() >= 2
+}
+
+/// True when a translation has far more letters than the line (3× and 12 more): made up, not translated.
+/// A translation runs about as long as its English, give or take; names kept as they are count alike.
+fn made_up(line: &str, out: &str) -> bool {
+    let letters = |t: &str| t.chars().filter(|c| c.is_alphanumeric()).count();
+    letters(out) > 3 * letters(line) + 12
+}
+
 // ------------------------------------------------------------------------------------- translator
 
 const DIALECTS: [(&str, &str); 4] = [
@@ -307,7 +328,20 @@ impl Translator {
                 }
             }
         }
-        Ok(polite(&cfg.target_lang, segs))
+        let segs = polite(&cfg.target_lang, segs);
+        // An answer in English instead (a model's note on a licence plate or a jumble of letters: "the
+        // line can't be translated") is never drawn over the game.
+        let lang = crate::langs::get(&cfg.target_lang);
+        let out: String = segs.iter().map(|s| s.0.as_str()).collect();
+        if english_leak(line, &out, lang.native) {
+            bail!("the translation came back in English, not shown: {out}");
+        }
+        // The offline model makes up a whole sentence for a few stray letters (a licence plate's edge
+        // read as "I.JGO" -> a heading about an anti-corruption expert group): far longer than the line.
+        if cfg.engine == "local" && made_up(line, &out) {
+            bail!("the translation is far longer than the line, not shown: {out}");
+        }
+        Ok(segs)
     }
 
     fn translate_inner(
@@ -1327,5 +1361,26 @@ mod openai_tests {
         assert_eq!(openai_price("gpt-6-luna"), (0.10, 0.50));
         assert_eq!(openai_price("something-else"), (0.0, 0.0));
         assert!(is_llm("openai") && is_llm("claude") && !is_llm("deepl"));
+    }
+
+    #[test]
+    fn an_answer_in_english_is_not_a_translation() {
+        assert!(super::english_leak("J26 4B7", "I cannot translate this line.", "العربية"));
+        assert!(super::english_leak("ASS MAN", "This is a licence plate.", "العربية"));
+        // the line's own names and terms are kept, and one stray word is no answer
+        assert!(!super::english_leak("Steal the Bravado Gauntlet", "اسرق Bravado Gauntlet", "العربية"));
+        assert!(!super::english_leak("J26 4B7", "طراز J26 4B7", "العربية"));
+        assert!(!super::english_leak("Go to TSS", "اذهب إلى TSS office", "العربية"));
+        // a language written in Latin letters: English words are its own
+        assert!(!super::english_leak("Go home", "Ga naar huis", "Nederlands"));
+    }
+
+    #[test]
+    fn a_whole_sentence_for_a_few_letters_is_made_up() {
+        assert!(super::made_up("I.JGO", "أولاً - فريق الخبراء المشترك بين الوكالات المعني بمكافحة الفساد"));
+        assert!(!super::made_up("Go", "اذهب"));
+        assert!(!super::made_up("J26 4B7", "طراز J26 4B7"));
+        assert!(!super::made_up("Hey! Eyes open!", "انتبهوا! افتحوا أعينكم!"));
+        assert!(!super::made_up("You got something you gotta say?", "عندك شيء تريد قوله؟"));
     }
 }
