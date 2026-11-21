@@ -29,6 +29,10 @@ jobs:
   ios:
     runs-on: macos-latest
     timeout-minutes: 60
+    env:
+      # the same iOS version for Rust and the C parts (aws-lc, QuickJS): without it Rust links for
+      # iOS 10 while the C code is built for the SDK's own version, and the link fails
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     steps:
       - uses: actions/checkout@v5
 
@@ -88,9 +92,15 @@ jobs:
           rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
           cargo install cargo-ndk --locked
 
+      # NDK 28.2, as tested: NDK 30's headers refuse the target name without an API level that
+      # the QuickJS bindings are generated with
+      - name: NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
       - name: Build the Android libraries
         run: |
-          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o out/jniLibs build -p vi-translator-ffi --release
 
       - name: Kotlin bindings

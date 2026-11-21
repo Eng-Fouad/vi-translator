@@ -163,7 +163,7 @@ runs the phone API's end-to-end test (a stand-in recognizer).
 ```sh
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo install cargo-ndk
-export ANDROID_NDK_HOME=<sdk>/ndk/28.2.13676358
+export ANDROID_NDK_HOME=<sdk>/ndk/28.2.13676358   # NDK 30 fails (the QuickJS bindings)
 cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o <app>/src/main/jniLibs build -p vi-translator-ffi --release
 ```
 
@@ -183,7 +183,8 @@ certificates against Mozilla's roots (bundled), not the system's store.
 
 ### iOS (XCFramework)
 
-On a Mac: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`, then as
+On a Mac: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`, set
+`IPHONEOS_DEPLOYMENT_TARGET=15.0` (so Rust and the C parts are built for the same iOS), then as
 `.github/workflows/core-mobile.yml` does (job `ios`): build both targets with the SDK as bindgen's
 sysroot, generate the Swift bindings, `xcodebuild -create-xcframework` with the header and
 `module.modulemap`. The workflow uploads `ViTranslatorCore.xcframework` + `ViTranslatorCore.swift`
