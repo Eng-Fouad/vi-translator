@@ -376,4 +376,7 @@ I18N.add("el", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Κάντε κλικ στο πλαίσιο και πατήστε τα πλήκτρα. Λειτουργεί και μέσα στο παιχνίδι: η μεταφρασμένη εικόνα εμφανίζεται αμέσως.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Πατήστε {keys} στο παιχνίδι για να μεταφράσετε την εικόνα· πατήστε ξανά (ή Esc) για επιστροφή.",
   "These keys can't be used: {e}": "Αυτά τα πλήκτρα δεν μπορούν να χρησιμοποιηθούν: {e}",
+  "Screens": "Οθόνες",
+  "Screen {n}": "Οθόνη {n}",
+  "Screen": "Οθόνη",
 });

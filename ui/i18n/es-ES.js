@@ -376,4 +376,7 @@ I18N.add("es-ES", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Haz clic en el cuadro y pulsa las teclas. También funciona dentro del juego: la imagen traducida aparece al instante.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Pulsa {keys} en el juego para traducir la imagen; vuelve a pulsarlo (o Esc) para volver.",
   "These keys can't be used: {e}": "Estas teclas no se pueden usar: {e}",
+  "Screens": "Pantallas",
+  "Screen {n}": "Pantalla {n}",
+  "Screen": "Pantalla",
 });

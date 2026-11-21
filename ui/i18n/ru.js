@@ -376,4 +376,7 @@ I18N.add("ru", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Щёлкните по полю, затем нажмите клавиши. Работает и в игре: переведённое изображение появляется сразу.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Нажмите {keys} в игре, чтобы перевести изображение; нажмите ещё раз (или Esc), чтобы вернуться.",
   "These keys can't be used: {e}": "Эти клавиши нельзя использовать: {e}",
+  "Screens": "Экраны",
+  "Screen {n}": "Экран {n}",
+  "Screen": "Экран",
 });

@@ -14,6 +14,7 @@ use windows_capture::settings::{
     ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings, MinimumUpdateIntervalSettings,
     SecondaryWindowSettings, Settings,
 };
+use windows_capture::monitor::Monitor;
 use windows_capture::window::Window;
 
 use super::{FrameData, Shared, WindowInfo, shrink};
@@ -54,7 +55,51 @@ pub fn start_window(title: &str, shared: Arc<Shared>) -> anyhow::Result<(WindowC
             Err(e) => last_err = format!("Capture failed: {e}"),
         }
     }
-    Err(anyhow::anyhow!(last_err))
+    Err(anyhow::anyhow!(why_not(win, title).unwrap_or(last_err)))
+}
+
+/// Why Windows won't capture this window, in words the player can act on (the capture library only
+/// says it "failed to convert" it).
+fn why_not(win: Window, title: &str) -> Option<String> {
+    if elevated(process_of(win.as_raw_hwnd() as isize)) && !elevated(unsafe { windows::Win32::System::Threading::GetCurrentProcessId() }) {
+        return Some(format!(
+            "Windows won't let VI Translator read \"{title}\": that app runs as administrator. Run VI Translator as administrator too (right-click it, Run as administrator), or start the other app normally."
+        ));
+    }
+    let item: Result<windows_capture::settings::GraphicsCaptureItemType, windows::core::Error> = win.try_into();
+    let e = item.err()?;
+    Some(format!("Windows can't capture \"{title}\" ({}). If it's minimised, restore it; if it runs as administrator, run VI Translator as administrator too.", e.message()))
+}
+
+fn process_of(hwnd: isize) -> u32 {
+    let mut pid = 0u32;
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(HWND(hwnd as *mut _), Some(&mut pid));
+    }
+    pid
+}
+
+/// The process runs as administrator (elevated); false when that can't be told.
+fn elevated(pid: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+    use windows::Win32::System::Threading::{OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION};
+    if pid == 0 {
+        return false;
+    }
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return false };
+        let mut token = windows::Win32::Foundation::HANDLE::default();
+        let mut out = TOKEN_ELEVATION::default();
+        let mut len = 0u32;
+        let ok = OpenProcessToken(process, TOKEN_QUERY, &mut token).is_ok()
+            && GetTokenInformation(token, TokenElevation, Some(&mut out as *mut _ as *mut _), std::mem::size_of::<TOKEN_ELEVATION>() as u32, &mut len).is_ok();
+        if !token.is_invalid() {
+            let _ = CloseHandle(token);
+        }
+        let _ = CloseHandle(process);
+        ok && out.TokenIsElevated != 0
+    }
 }
 
 struct Handler {
@@ -101,8 +146,80 @@ impl GraphicsCaptureApiHandler for Handler {
     }
 }
 
-/// Capture a single frame of a window (used by `--grab` for building and testing profiles).
+/// The screens (monitors): their id (Windows' device name, "\\.\DISPLAY1") and a name to show.
+pub fn list_screens() -> Vec<super::ScreenInfo> {
+    let mut out: Vec<super::ScreenInfo> = Monitor::enumerate()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|m| {
+            let id = m.device_name().ok()?;
+            let n = m.index().unwrap_or(0);
+            let (w, h) = (m.width().unwrap_or(0), m.height().unwrap_or(0));
+            let name = m.name().ok().filter(|s| !s.trim().is_empty());
+            Some(super::ScreenInfo { id, number: n, name: name.unwrap_or_default(), w, h })
+        })
+        .collect();
+    out.sort_by_key(|s| s.number);
+    out
+}
+
+fn monitor(id: &str) -> Option<Monitor> {
+    Monitor::enumerate().ok()?.into_iter().find(|m| m.device_name().is_ok_and(|d| d == id))
+}
+
+/// Where a screen is on the desktop, in pixels: (x, y, width, height).
+pub fn screen_rect(id: &str) -> Option<(i32, i32, i32, i32)> {
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITORINFO};
+    let m = monitor(id)?;
+    let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    unsafe { GetMonitorInfoW(HMONITOR(m.as_raw_hmonitor()), &mut info) }.as_bool().then(|| {
+        let r = info.rcMonitor;
+        (r.left, r.top, r.right - r.left, r.bottom - r.top)
+    })
+}
+
+/// Start capturing a whole screen.
+pub fn start_screen(id: &str, shared: Arc<Shared>) -> anyhow::Result<WindowCapture> {
+    let m = monitor(id).ok_or_else(|| anyhow::anyhow!("Screen \"{id}\" not found (unplugged?). Pick another source."))?;
+    let mut last_err = String::new();
+    for border in [DrawBorderSettings::WithoutBorder, DrawBorderSettings::Default] {
+        let settings = Settings::new(
+            m,
+            CursorCaptureSettings::WithoutCursor,
+            border,
+            SecondaryWindowSettings::Default,
+            MinimumUpdateIntervalSettings::Default,
+            DirtyRegionSettings::Default,
+            ColorFormat::Rgba8,
+            shared.clone(),
+        );
+        match Handler::start_free_threaded(settings) {
+            Ok(c) => return Ok(WindowCapture(c)),
+            Err(e) => last_err = format!("Capture failed: {e}"),
+        }
+    }
+    Err(anyhow::anyhow!(last_err))
+}
+
+/// Capture a single frame of a window, or of a screen ("screen:<id>"), for `--grab` and the
+/// picker of the game's part.
 pub fn grab_once(title: &str) -> anyhow::Result<Arc<FrameData>> {
+    if let Some(id) = title.strip_prefix(super::SCREEN_PREFIX) {
+        let shared = Arc::new(Shared::default());
+        let control = start_screen(id, shared.clone())?;
+        let start = Instant::now();
+        let frame = loop {
+            if let Some(f) = shared.latest() {
+                break Ok(f);
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                break Err(anyhow::anyhow!("no picture from the screen within 5 s"));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        control.stop();
+        return frame;
+    }
     let win = find(title).ok_or_else(|| anyhow::anyhow!("window \"{title}\" not found"))?;
     let shared = Arc::new(Shared::default());
     let settings = Settings::new(
@@ -242,10 +359,15 @@ pub fn find_window(title: &str) -> Option<isize> {
 /// saved as "PS Remote Play" is its window under any title (Windows set to another language
 /// translates it: "اللعب عن بُعد").
 fn find(title: &str) -> Option<Window> {
+    // a visible window with that title first: an app may also have hidden windows of the same name
+    // (which can't be captured), and FindWindow may return one of those
+    let all: Vec<Window> = Window::enumerate().unwrap_or_default().into_iter().filter(|w| w.is_valid()).collect();
+    if let Some(w) = all.iter().find(|w| w.title().is_ok_and(|t| t.trim() == title.trim())) {
+        return Some(*w);
+    }
     if let Ok(w) = Window::from_name(title) {
         return Some(w);
     }
-    let all: Vec<Window> = Window::enumerate().unwrap_or_default().into_iter().filter(|w| w.is_valid()).collect();
     if let Some(w) = all.iter().find(|w| w.title().is_ok_and(|t| !t.trim().is_empty() && t.contains(title))) {
         return Some(*w);
     }

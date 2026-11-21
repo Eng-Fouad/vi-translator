@@ -376,4 +376,7 @@ I18N.add("ja", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "ボックスをクリックしてからキーを押してください。ゲーム中でも使えます: 翻訳された画面がすぐに表示されます。",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "ゲーム中に {keys} を押すと画面を翻訳します。もう一度（または Esc を）押すと戻ります。",
   "These keys can't be used: {e}": "このキーは使えません: {e}",
+  "Screens": "画面",
+  "Screen {n}": "画面 {n}",
+  "Screen": "画面",
 });

@@ -376,4 +376,7 @@ I18N.add("ta", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "பெட்டியைக் கிளிக் செய்து, பிறகு விசைகளை அழுத்தவும். கேமிலும் வேலை செய்யும்: மொழிபெயர்த்த படம் உடனே தோன்றும்.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "படத்தை மொழிபெயர்க்க கேமில் {keys} ஐ அழுத்தவும்; திரும்பிச் செல்ல மீண்டும் அழுத்தவும் (அல்லது Esc).",
   "These keys can't be used: {e}": "இந்த விசைகளைப் பயன்படுத்த முடியாது: {e}",
+  "Screens": "திரைகள்",
+  "Screen {n}": "திரை {n}",
+  "Screen": "திரை",
 });

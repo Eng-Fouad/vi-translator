@@ -376,4 +376,7 @@ I18N.add("te", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "బాక్స్‌ను క్లిక్ చేసి, ఆపై కీలను నొక్కండి. గేమ్‌లో కూడా పనిచేస్తుంది: అనువదించిన చిత్రం వెంటనే కనిపిస్తుంది.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "చిత్రాన్ని అనువదించడానికి గేమ్‌లో {keys} నొక్కండి; తిరిగి వెళ్లడానికి మళ్లీ నొక్కండి (లేదా Esc).",
   "These keys can't be used: {e}": "ఈ కీలను ఉపయోగించలేరు: {e}",
+  "Screens": "స్క్రీన్‌లు",
+  "Screen {n}": "స్క్రీన్ {n}",
+  "Screen": "స్క్రీన్",
 });

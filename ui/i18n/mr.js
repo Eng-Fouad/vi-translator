@@ -376,4 +376,7 @@ I18N.add("mr", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "बॉक्सवर क्लिक करा, मग की दाबा. गेममध्येही चालते: अनुवादित चित्र लगेच दिसते.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "चित्राचा अनुवाद करण्यासाठी गेममध्ये {keys} दाबा; परत जाण्यासाठी पुन्हा दाबा (किंवा Esc).",
   "These keys can't be used: {e}": "या की वापरता येणार नाहीत: {e}",
+  "Screens": "स्क्रीन",
+  "Screen {n}": "स्क्रीन {n}",
+  "Screen": "स्क्रीन",
 });

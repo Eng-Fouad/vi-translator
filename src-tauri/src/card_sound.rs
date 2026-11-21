@@ -41,6 +41,7 @@ pub fn match_input<'a>(card: &str, picked: &str, inputs: &'a [String]) -> Option
 
 /// The ring between the card's sound and the speakers: samples in the speakers' layout (channels and
 /// rate), kept short so the sound stays with the picture.
+#[cfg_attr(target_os = "linux", allow(dead_code))] // (the speakers' side: not on Linux yet)
 struct Ring {
     buf: std::collections::VecDeque<f32>,
     /// at most this many samples are kept (older ones are dropped: the sound never lags behind)
@@ -49,6 +50,7 @@ struct Ring {
 
 /// Turn a block of input samples (`in_ch` channels at `in_rate`) into the output layout, resampled
 /// (linear) and with the channels matched: mono to every channel, more channels down to the first ones.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub fn convert(input: &[f32], in_ch: usize, in_rate: u32, out_ch: usize, out_rate: u32, phase: &mut f64, last: &mut Vec<f32>, out: &mut Vec<f32>) {
     let frames = if in_ch == 0 { 0 } else { input.len() / in_ch };
     if frames == 0 || out_ch == 0 || in_rate == 0 || out_rate == 0 {

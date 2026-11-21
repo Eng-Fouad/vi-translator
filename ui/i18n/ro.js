@@ -376,4 +376,7 @@ I18N.add("ro", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Faceți clic în casetă, apoi apăsați tastele. Funcționează și în joc: imaginea tradusă apare imediat.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Apăsați {keys} în joc pentru a traduce imaginea; apăsați din nou (sau Esc) pentru a reveni.",
   "These keys can't be used: {e}": "Aceste taste nu pot fi folosite: {e}",
+  "Screens": "Ecrane",
+  "Screen {n}": "Ecranul {n}",
+  "Screen": "Ecran",
 });

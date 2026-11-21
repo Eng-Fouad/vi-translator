@@ -376,4 +376,7 @@ I18N.add("zh-Hant", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "按一下此方塊，然後按下按鍵。在遊戲中也能用：翻譯後的畫面會立即出現。",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "在遊戲中按 {keys} 翻譯畫面；再按一次（或按 Esc）返回。",
   "These keys can't be used: {e}": "無法使用這些按鍵：{e}",
+  "Screens": "螢幕",
+  "Screen {n}": "螢幕 {n}",
+  "Screen": "螢幕",
 });

@@ -13,8 +13,23 @@ use crate::config::Config;
 #[cfg_attr(windows, path = "capture_windows.rs")]
 #[cfg_attr(not(windows), path = "capture_xcap.rs")]
 mod platform;
+/// Prefix that marks a whole screen (not a window) in the config's source and overlay fields.
+pub const SCREEN_PREFIX: &str = "screen:";
+
+/// A screen the app can read or draw over.
+#[derive(Serialize, Clone)]
+pub struct ScreenInfo {
+    /// the system's id for it (Windows: "\\.\DISPLAY1")
+    pub id: String,
+    /// its number (1, 2 …) and its own name ("DELL U2720Q"), if known
+    pub number: usize,
+    pub name: String,
+    pub w: u32,
+    pub h: u32,
+}
+
 #[allow(unused_imports)] // (foreground_window: used inside the platforms only)
-pub use platform::{client_rect, find_window, focused_client_rect, foreground_window, grab_once, grab_screen_region, list_windows};
+pub use platform::{client_rect, find_window, focused_client_rect, foreground_window, grab_once, list_screens, screen_rect, grab_screen_region, list_windows};
 
 /// One captured frame of the window's client area, RGBA.
 pub struct FrameData {
@@ -43,6 +58,11 @@ pub struct Shared {
     /// none) and the part of it showing the game.
     pub overlay_hwnd: AtomicIsize,
     pub overlay_crop: Mutex<Option<[f64; 4]>>,
+    /// …or a whole screen the Arabic is drawn over (its place on the desktop), instead of a window
+    pub overlay_screen: Mutex<Option<(i32, i32, i32, i32)>>,
+    /// The source is a whole screen: the overlays keep out of screen captures (else the app would
+    /// read its own Arabic back)
+    pub reading_screen: std::sync::atomic::AtomicBool,
     /// The virtual camera's state for the Show on tab ("" while it's off).
     pub vcam_status: Mutex<String>,
     /// The capture card's sound: what it's doing ("" while it's off or there's no card).
@@ -289,6 +309,10 @@ pub fn crop_screen_rect(r: (i32, i32, i32, i32), c: Option<[f64; 4]>) -> (i32, i
 /// Where the Arabic goes on this PC: the game's part of the overlay window, in screen pixels; with
 /// `front_only`, only while that window is the one in front (not over other apps).
 pub fn overlay_rect(shared: &Shared, front_only: bool) -> Option<(i32, i32, i32, i32)> {
+    // a whole screen: always there (it has no "in front")
+    if let Some(r) = *shared.overlay_screen.lock().unwrap() {
+        return Some(crop_screen_rect(r, *shared.overlay_crop.lock().unwrap()));
+    }
     let hwnd = shared.overlay_hwnd.load(Ordering::Relaxed);
     let r = if front_only { focused_client_rect(hwnd) } else { client_rect(hwnd) }?;
     Some(crop_screen_rect(r, *shared.overlay_crop.lock().unwrap()))
@@ -356,15 +380,24 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
             shared.preview_ms.store(1000 / c.preview_fps.clamp(1, 60) as u64, Ordering::Relaxed);
             (c.window_title.clone(), c.obs_port, c.obs_password.clone(), c.source_crop, c.overlay_window.clone(), c.overlay_crop)
         };
+        let screen = want.strip_prefix(SCREEN_PREFIX).map(str::to_string);
         let is_window = !want.starts_with(crate::obs::PREFIX) && !want.starts_with(crate::device::PREFIX);
-        // (a part of the picture only for a window: a card's or OBS's picture is the game already)
+        shared.reading_screen.store(screen.is_some(), Ordering::Relaxed);
+        // (a part of the picture only for a window or a screen: a card's or OBS's picture is the game already)
         *shared.source_crop.lock().unwrap() = if is_window { source_crop } else { None };
-        // The overlays' window: the one the player chose, else the source window (none for a card or OBS)
+        // The overlays' window or screen: the one the player chose, else the source's (none for a
+        // card or OBS)
         if overlay_window.is_empty() {
             shared.overlay_hwnd.store(if is_window { shared.hwnd.load(Ordering::Relaxed) } else { 0 }, Ordering::Relaxed);
+            *shared.overlay_screen.lock().unwrap() = screen.as_deref().and_then(screen_rect);
             *shared.overlay_crop.lock().unwrap() = if is_window { source_crop } else { None };
+        } else if let Some(id) = overlay_window.strip_prefix(SCREEN_PREFIX) {
+            shared.overlay_hwnd.store(0, Ordering::Relaxed);
+            *shared.overlay_screen.lock().unwrap() = screen_rect(id);
+            *shared.overlay_crop.lock().unwrap() = overlay_crop;
         } else {
             shared.overlay_hwnd.store(find_window(&overlay_window).unwrap_or(0), Ordering::Relaxed);
+            *shared.overlay_screen.lock().unwrap() = None;
             *shared.overlay_crop.lock().unwrap() = overlay_crop;
         }
         // An OBS source ("obs:<name>"): OBS hands us snapshots of it
@@ -413,6 +446,27 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
         if let Some((_, d)) = device.take() {
             d.stop();
             *shared.frame.lock().unwrap() = None;
+        }
+        // A whole screen ("screen:<id>")
+        if let Some(id) = &screen {
+            let finished = active.as_ref().map(|(_, c)| c.is_finished()).unwrap_or(true);
+            let changed = active.as_ref().map(|(t, _)| *t != want).unwrap_or(true);
+            if changed || finished {
+                if let Some((_, c)) = active.take() {
+                    let _ = c.stop();
+                }
+                shared.hwnd.store(0, Ordering::Relaxed);
+                *shared.frame.lock().unwrap() = None;
+                match platform::start_screen(id, shared.clone()) {
+                    Ok(c) => {
+                        shared.set_status(format!("Capturing screen \"{id}\""));
+                        active = Some((want, c));
+                    }
+                    Err(e) => shared.set_status(e.to_string()),
+                }
+            }
+            std::thread::sleep(Duration::from_secs(1));
+            continue;
         }
         let finished = active.as_ref().map(|(_, c)| c.is_finished()).unwrap_or(true);
         let changed = active.as_ref().map(|(t, _)| *t != want).unwrap_or(true);

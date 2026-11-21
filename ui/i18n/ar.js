@@ -376,4 +376,7 @@ I18N.add("ar", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "انقر على المربع، ثم اضغط على المفاتيح. يعمل داخل اللعبة أيضًا: تظهر الصورة المترجمة فورًا.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "اضغط {keys} في اللعبة لترجمة الصورة، واضغطه مرة أخرى (أو Esc) للعودة.",
   "These keys can't be used: {e}": "لا يمكن استخدام هذه المفاتيح: {e}",
+  "Screens": "الشاشات",
+  "Screen {n}": "الشاشة {n}",
+  "Screen": "الشاشة",
 });

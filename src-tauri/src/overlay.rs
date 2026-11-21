@@ -119,6 +119,7 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
     let mut last_rect: HashMap<String, (i32, i32, i32, i32)> = HashMap::new();
     let mut last_geom: HashMap<String, Geom> = HashMap::new();
     let mut tick = 0u32;
+    let mut hidden_from_capture = false;
     loop {
         std::thread::sleep(Duration::from_millis(150));
         tick = tick.wrapping_add(1);
@@ -129,6 +130,17 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
         // Only show the Arabic while the overlay window is the one in front (not over other apps), over
         // the part of it showing the game.
         let client = if c.overlays_enabled { capture::overlay_rect(&shared, true) } else { None };
+        // (a screen as the source: the overlays don't show up in screen captures, so the app never
+        // reads its own Arabic back)
+        let hide_from_capture = shared.reading_screen.load(Ordering::Relaxed);
+        if hide_from_capture != hidden_from_capture {
+            hidden_from_capture = hide_from_capture;
+            for (label, win) in app.webview_windows() {
+                if label.starts_with("ov-") {
+                    let _ = win.set_content_protected(hide_from_capture);
+                }
+            }
+        }
         let visible = client.is_some();
 
         // Every overlay window we want: one per enabled area, plus the full-window "screen" overlay
@@ -178,6 +190,9 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
                         last_geom.insert(label.clone(), geom);
                     }
                     if !is_shown {
+                        if hidden_from_capture {
+                            let _ = win.set_content_protected(true); // (a window made since the source changed)
+                        }
                         win_ops::show(&win);
                         shown.insert(label.clone(), true);
                     }

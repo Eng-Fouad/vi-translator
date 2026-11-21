@@ -376,4 +376,7 @@ I18N.add("ms", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Klik kotak itu, kemudian tekan kekunci. Berfungsi dalam permainan juga: gambar terjemahan muncul serta-merta.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Tekan {keys} dalam permainan untuk menterjemah gambar; tekan sekali lagi (atau Esc) untuk kembali.",
   "These keys can't be used: {e}": "Kekunci ini tidak boleh digunakan: {e}",
+  "Screens": "Skrin",
+  "Screen {n}": "Skrin {n}",
+  "Screen": "Skrin",
 });

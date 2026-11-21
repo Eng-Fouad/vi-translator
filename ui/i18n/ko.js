@@ -376,4 +376,7 @@ I18N.add("ko", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "상자를 클릭한 다음 키를 누르세요. 게임 중에도 작동합니다. 번역된 화면이 바로 나타납니다.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "게임에서 {keys}를 누르면 화면을 번역합니다. 다시 누르면(또는 Esc) 돌아갑니다.",
   "These keys can't be used: {e}": "이 키는 사용할 수 없습니다: {e}",
+  "Screens": "화면",
+  "Screen {n}": "화면 {n}",
+  "Screen": "화면",
 });

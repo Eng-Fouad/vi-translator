@@ -292,7 +292,8 @@ async function loadWindows() {
   const sel = $("window_title");
   sel.innerHTML = "";
   sel.add(new Option(t("Looking for sources ..."), cfg.window_title));
-  const { windows, devices, obs } = await invoke("list_sources");
+  const { windows, devices, obs, screens = [] } = await invoke("list_sources");
+  knownScreens = screens;
   sel.innerHTML = "";
   const group = (label) => {
     const g = document.createElement("optgroup");
@@ -328,6 +329,10 @@ async function loadWindows() {
   const og = group(obs.ok ? t("OBS sources") : t("OBS sources (not connected)"));
   if (obs.ok) for (const s of obs.sources) add(og, `📺 ${iso(`${short(s.name, 36)}  —  ${s.kind}`)}`, `obs:${s.name}`, `${s.name}  —  ${s.kind}`);
   else og.appendChild(Object.assign(opt(short(String(obs.error), 56), "", obs.error), { disabled: true }));
+  if (screens.length) {
+    const sg = group(t("Screens"));
+    for (const s of screens) add(sg, `🖥 ${iso(screenLabel(s))}`, `screen:${s.id}`, screenLabel(s));
+  }
   const wg = group(t("Windows"));
   for (const w of windows) {
     const full = w.process ? `${w.title}  —  ${w.process}` : w.title;
@@ -517,6 +522,15 @@ $("window_title").addEventListener("change", (e) => {
 // ------------------------------------------------------------------------------------- the game's part of a window
 
 const isWindowSource = (v) => !!v && !v.startsWith("device:") && !v.startsWith("obs:");
+// "Screen 1 — DELL U2720Q (2560 × 1440)"
+const screenLabel = (s) => `${t("Screen {n}", { n: s.number })}${s.name ? ` — ${s.name}` : ""} (${s.w} × ${s.h})`;
+// a source or overlay value as people read it (a screen's id means nothing to them)
+const sourceName = (v, screens) => {
+  if (!v?.startsWith("screen:")) return v;
+  const s = screens.find((x) => `screen:${x.id}` === v);
+  return s ? screenLabel(s) : t("Screen");
+};
+let knownScreens = [];
 const partText = (c) => (c ? t("{w}% × {h}% of the window", { w: Math.round(c[2] * 100), h: Math.round(c[3] * 100) }) : t("the whole window"));
 
 // The Source tab's and the Show on tab's "Part of the window" rows, as the settings say.
@@ -547,7 +561,7 @@ function choosePart(title, current) {
     d.innerHTML = `<h4></h4><div class="part-msg" data-msg></div>
       <div class="part-pic"><img alt="" draggable="false" /><div class="shade"></div><div class="part-box" hidden><i data-c="nw"></i><i data-c="ne"></i><i data-c="sw"></i><i data-c="se"></i></div></div>
       <div class="row"><button class="btn" data-find></button><button class="btn" data-whole></button><span class="grow"></span><button class="btn" data-no></button><button class="btn part-ok" data-ok></button></div>`;
-    d.querySelector("h4").textContent = t("The game's part of \"{title}\"", { title });
+    d.querySelector("h4").textContent = t("The game's part of \"{title}\"", { title: sourceName(title, knownScreens) });
     const msg = d.querySelector("[data-msg]");
     msg.textContent = t("Drag a box around the game picture, or press Find to let the app look for what moves.");
     d.querySelector("[data-find]").textContent = t("Find the game picture");
@@ -644,7 +658,14 @@ async function loadOverlayWindows() {
   sel.add(new Option(t("The source window"), ""));
   let windows = [];
   try { windows = await invoke("list_windows"); } catch {}
-  const titles = windows.map((w) => w.title);
+  try { knownScreens = await invoke("list_screens"); } catch {}
+  const titles = windows.map((w) => w.title).concat(knownScreens.map((s) => `screen:${s.id}`));
+  if (knownScreens.length) {
+    const g = document.createElement("optgroup");
+    g.label = t("Screens");
+    for (const s of knownScreens) g.appendChild(new Option(`🖥 ${iso(screenLabel(s))}`, `screen:${s.id}`));
+    sel.appendChild(g);
+  }
   for (const w of windows) {
     const full = w.process ? `${w.title}  —  ${w.process}` : w.title;
     sel.add(Object.assign(new Option(iso(w.process ? `${short(w.title)}  —  ${short(w.process, 24)}` : short(w.title)), w.title), { title: full }));

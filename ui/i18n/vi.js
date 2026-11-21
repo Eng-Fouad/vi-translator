@@ -376,4 +376,7 @@ I18N.add("vi", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Nhấp vào ô, rồi nhấn các phím. Dùng được cả trong game: hình đã dịch hiện ra ngay.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Nhấn {keys} trong game để dịch hình; nhấn lại (hoặc Esc) để quay lại.",
   "These keys can't be used: {e}": "Không thể dùng các phím này: {e}",
+  "Screens": "Màn hình",
+  "Screen {n}": "Màn hình {n}",
+  "Screen": "Màn hình",
 });

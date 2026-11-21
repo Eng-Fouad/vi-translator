@@ -376,4 +376,7 @@ I18N.add("sw", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Bofya kisanduku, kisha bonyeza vitufe. Inafanya kazi ndani ya mchezo pia: picha iliyotafsiriwa inaonekana mara moja.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Bonyeza {keys} kwenye mchezo ili kutafsiri picha; bonyeza tena (au Esc) ili kurudi.",
   "These keys can't be used: {e}": "Vitufe hivi haviwezi kutumika: {e}",
+  "Screens": "Skrini",
+  "Screen {n}": "Skrini {n}",
+  "Screen": "Skrini",
 });

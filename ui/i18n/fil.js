@@ -376,4 +376,7 @@ I18N.add("fil", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "I-click ang kahon, saka pindutin ang mga key. Gumagana rin sa loob ng laro: lalabas agad ang isinaling larawan.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Pindutin ang {keys} sa laro para isalin ang larawan; pindutin ulit (o Esc) para bumalik.",
   "These keys can't be used: {e}": "Hindi magagamit ang mga key na ito: {e}",
+  "Screens": "Mga screen",
+  "Screen {n}": "Screen {n}",
+  "Screen": "Screen",
 });

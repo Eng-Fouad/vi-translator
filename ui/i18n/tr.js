@@ -376,4 +376,7 @@ I18N.add("tr", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Kutuya tıkla, ardından tuşlara bas. Oyunda da çalışır: çevrilmiş görüntü hemen gelir.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Görüntüyü çevirmek için oyunda {keys} tuşuna bas; geri dönmek için tekrar bas (veya Esc).",
   "These keys can't be used: {e}": "Bu tuşlar kullanılamaz: {e}",
+  "Screens": "Ekranlar",
+  "Screen {n}": "Ekran {n}",
+  "Screen": "Ekran",
 });

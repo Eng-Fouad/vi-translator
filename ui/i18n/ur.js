@@ -376,4 +376,7 @@ I18N.add("ur", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "باکس پر کلک کریں، پھر کیز دبائیں۔ گیم کے اندر بھی کام کرتا ہے: ترجمہ شدہ تصویر فوراً سامنے آ جاتی ہے۔",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "تصویر کا ترجمہ کرنے کے لیے گیم میں {keys} دبائیں؛ واپس جانے کے لیے دوبارہ دبائیں (یا Esc)۔",
   "These keys can't be used: {e}": "یہ کیز استعمال نہیں کی جا سکتیں: {e}",
+  "Screens": "اسکرینز",
+  "Screen {n}": "اسکرین {n}",
+  "Screen": "اسکرین",
 });

@@ -376,4 +376,7 @@ I18N.add("fa", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "روی کادر کلیک کنید، سپس کلیدها را فشار دهید. داخل بازی هم کار می‌کند: تصویر ترجمه‌شده بلافاصله نمایش داده می‌شود.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "برای ترجمهٔ تصویر، در بازی {keys} را فشار دهید؛ برای بازگشت، دوباره آن را (یا Esc را) فشار دهید.",
   "These keys can't be used: {e}": "از این کلیدها نمی‌توان استفاده کرد: {e}",
+  "Screens": "صفحه‌نمایش‌ها",
+  "Screen {n}": "صفحه‌نمایش {n}",
+  "Screen": "صفحه‌نمایش",
 });

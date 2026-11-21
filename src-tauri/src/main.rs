@@ -499,6 +499,13 @@ fn list_windows(webview: tauri::Webview) -> Result<Vec<capture::WindowInfo>, Str
     Ok(capture::list_windows(APP_TITLE))
 }
 
+/// The screens (for a whole screen as the source, or to draw the Arabic over).
+#[tauri::command]
+fn list_screens(webview: tauri::Webview) -> Result<Vec<capture::ScreenInfo>, String> {
+    main_only(&webview)?;
+    Ok(capture::list_screens())
+}
+
 /// Everything that can be a source: windows, capture devices, and OBS's sources (if OBS answers).
 #[tauri::command]
 async fn list_sources(webview: tauri::Webview, state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
@@ -520,7 +527,7 @@ async fn list_sources(webview: tauri::Webview, state: tauri::State<'_, AppState>
     })
     .await
     .map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({ "windows": windows, "devices": devices, "obs": obs }))
+    Ok(serde_json::json!({ "windows": windows, "devices": devices, "obs": obs, "screens": capture::list_screens() }))
 }
 
 /// A still of a whole window (all of it, whatever part of it is the source), to choose the part
@@ -2748,7 +2755,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(hotkey::plugin())
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, window_still, find_picture, vcam_status, sound_inputs, sound_status, set_snap_hotkey, back_to_game, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, window_still, find_picture, vcam_status, sound_inputs, sound_status, set_snap_hotkey, back_to_game, get_config, save_config, page_options, list_windows, list_screens, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));

@@ -24,6 +24,17 @@ use xcap::Window;
 
 use super::{FrameData, Shared, WindowInfo, shrink};
 
+/// Screens as a source: Windows only for now.
+pub fn list_screens() -> Vec<super::ScreenInfo> {
+    Vec::new()
+}
+pub fn screen_rect(_id: &str) -> Option<(i32, i32, i32, i32)> {
+    None
+}
+pub fn start_screen(_id: &str, _shared: std::sync::Arc<super::Shared>) -> anyhow::Result<WindowCapture> {
+    Err(anyhow::anyhow!("A whole screen as the source is only on Windows for now."))
+}
+
 #[cfg(target_os = "macos")]
 pub use mac::{client_rect, find_window, focused_client_rect, foreground_window, grab_once, list_windows, start_window};
 

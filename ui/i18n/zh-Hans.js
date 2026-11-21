@@ -376,4 +376,7 @@ I18N.add("zh-Hans", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "点击此框，然后按下按键。在游戏中也能用：翻译后的画面会立即出现。",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "在游戏中按 {keys} 翻译画面；再按一次（或按 Esc）返回。",
   "These keys can't be used: {e}": "无法使用这些按键：{e}",
+  "Screens": "屏幕",
+  "Screen {n}": "屏幕 {n}",
+  "Screen": "屏幕",
 });

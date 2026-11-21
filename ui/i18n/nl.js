@@ -376,4 +376,7 @@ I18N.add("nl", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Klik in het vak en druk dan op de toetsen. Werkt ook in het spel: het vertaalde beeld verschijnt meteen.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Druk in het spel op {keys} om het beeld te vertalen; druk nogmaals (of op Esc) om terug te gaan.",
   "These keys can't be used: {e}": "Deze toetsen kunnen niet worden gebruikt: {e}",
+  "Screens": "Schermen",
+  "Screen {n}": "Scherm {n}",
+  "Screen": "Scherm",
 });

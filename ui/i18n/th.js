@@ -376,4 +376,7 @@ I18N.add("th", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "คลิกที่ช่อง แล้วกดแป้น ใช้ได้ในเกมด้วย: ภาพที่แปลแล้วจะขึ้นมาทันที",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "กด {keys} ในเกมเพื่อแปลภาพ กดอีกครั้ง (หรือ Esc) เพื่อกลับ",
   "These keys can't be used: {e}": "ใช้แป้นเหล่านี้ไม่ได้: {e}",
+  "Screens": "หน้าจอ",
+  "Screen {n}": "หน้าจอ {n}",
+  "Screen": "หน้าจอ",
 });

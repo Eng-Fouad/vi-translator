@@ -376,4 +376,7 @@ I18N.add("cs", {
   "Click the box, then press the keys. Works in the game too: the translated picture comes up at once.": "Klikněte do pole a stiskněte klávesy. Funguje i ve hře: přeložený obraz se zobrazí hned.",
   "Press {keys} in the game to translate the picture; press it again (or Esc) to go back.": "Stisknutím {keys} ve hře obraz přeložíte; dalším stisknutím (nebo Esc) se vrátíte.",
   "These keys can't be used: {e}": "Tyto klávesy nelze použít: {e}",
+  "Screens": "Obrazovky",
+  "Screen {n}": "Obrazovka {n}",
+  "Screen": "Obrazovka",
 });
