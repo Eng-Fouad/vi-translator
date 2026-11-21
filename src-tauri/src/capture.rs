@@ -55,6 +55,9 @@ pub struct Shared {
     /// The source is a whole screen: the overlays keep out of screen captures (else the app would
     /// read its own Arabic back)
     pub reading_screen: std::sync::atomic::AtomicBool,
+    /// The source is read from the screen's pixels (the compatibility capture, where Windows Graphics
+    /// Capture can't start): the overlays keep out of screen captures too, for the same reason.
+    pub compat_capture: std::sync::atomic::AtomicBool,
     /// The virtual camera's state for the Show on tab ("" while it's off).
     pub vcam_status: Mutex<String>,
     /// The capture card's sound: what it's doing ("" while it's off or there's no card).
@@ -428,7 +431,11 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
                 *shared.frame.lock().unwrap() = None;
                 match platform::start_screen(id, shared.clone()) {
                     Ok(c) => {
-                        shared.set_status(format!("Capturing screen \"{id}\""));
+                        shared.set_status(if c.is_compat() {
+                            format!("Capturing screen \"{id}\" (compatibility mode)")
+                        } else {
+                            format!("Capturing screen \"{id}\"")
+                        });
                         active = Some((want, c));
                     }
                     Err(e) => shared.set_status(e.to_string()),
@@ -451,7 +458,11 @@ pub fn run_manager(shared: Arc<Shared>, cfg: Arc<Mutex<Config>>) {
                     if overlay_window.is_empty() {
                         shared.overlay_hwnd.store(hwnd, Ordering::Relaxed);
                     }
-                    shared.set_status(format!("Capturing \"{want}\""));
+                    shared.set_status(if c.is_compat() {
+                        format!("Capturing \"{want}\" (compatibility mode: only while it's the window in front, and what covers it is read too)")
+                    } else {
+                        format!("Capturing \"{want}\"")
+                    });
                     active = Some((want, c));
                 }
                 Err(e) => shared.set_status(e.to_string()),

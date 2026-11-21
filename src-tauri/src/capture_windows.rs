@@ -30,7 +30,7 @@ pub struct WindowCapture(CaptureMethod);
 
 enum CaptureMethod {
     Native(CaptureControl<Handler, BoxError>),
-    Gdi { stop: Arc<AtomicBool>, thread: Option<JoinHandle<()>> },
+    Gdi { stop: Arc<AtomicBool>, thread: Option<JoinHandle<()>>, shared: Arc<Shared> },
 }
 
 impl WindowCapture {
@@ -40,60 +40,85 @@ impl WindowCapture {
             CaptureMethod::Gdi { thread, .. } => thread.as_ref().is_none_or(JoinHandle::is_finished),
         }
     }
+    /// Read from the screen's pixels (the compatibility capture), not by Windows Graphics Capture.
+    pub fn is_compat(&self) -> bool {
+        matches!(self.0, CaptureMethod::Gdi { .. })
+    }
     pub fn stop(self) {
         match self.0 {
-            CaptureMethod::Native(c) => { let _ = c.stop(); }
-            CaptureMethod::Gdi { stop, thread } => {
+            CaptureMethod::Native(c) => {
+                let _ = c.stop();
+            }
+            CaptureMethod::Gdi { stop, thread, shared } => {
                 stop.store(true, Ordering::Relaxed);
-                if let Some(thread) = thread { let _ = thread.join(); }
+                if let Some(thread) = thread {
+                    let _ = thread.join();
+                }
+                shared.compat_capture.store(false, Ordering::Relaxed);
             }
         }
     }
 }
 
-/// Compatibility capture for systems with a disabled/missing Windows.Graphics.Capture
-/// runtime. Reuse the existing GDI screenshot implementation instead of requiring
-/// Windows Graphics Capture for both window and display sources.
-/// The first frame is captured synchronously, so failure is reported immediately.
+/// Compatibility capture for systems where Windows Graphics Capture can't start (a stripped-down
+/// Windows without its runtime): the target's place on screen, copied with GDI.
+///
+/// What is copied is what the screen shows there, so while it runs:
+/// - the app's own overlays keep out of screen captures (`Shared::compat_capture`, see overlay.rs),
+///   or the app would read its own Arabic back;
+/// - `rect` gives a place only while the target can be read (a window: only while it's the one in
+///   front), so other apps' windows are never read. Meanwhile it waits; it ends when `alive` says the
+///   target is gone (a window closed), and the capture manager starts again.
 fn start_gdi(
     shared: Arc<Shared>,
-    mut rect: impl FnMut() -> Option<(i32, i32, i32, i32)> + Send + 'static,
+    alive: impl Fn() -> bool + Send + 'static,
+    rect: impl Fn() -> Option<(i32, i32, i32, i32)> + Send + 'static,
 ) -> anyhow::Result<WindowCapture> {
-    let (x, y, w, h) = rect().ok_or_else(|| anyhow::anyhow!("GDI fallback: target is not visible"))?;
-    let first = grab_screen_region(x, y, w, h)
-        .ok_or_else(|| anyhow::anyhow!("GDI fallback: could not read pixels from the visible desktop"))?;
-    let (w, h) = (w as u32, h as u32);
-    shared.put_preview(shrink(&first, w, h, w as usize * 4, false));
-    shared.put_full(w, h, first);
-
+    if !alive() {
+        anyhow::bail!("GDI fallback: the target is gone");
+    }
+    // the first picture at once when it can be read now, so a GDI failure shows right away
+    if let Some((x, y, w, h)) = rect() {
+        let first = grab_screen_region(x, y, w, h).ok_or_else(|| anyhow::anyhow!("GDI fallback: could not read pixels from the screen"))?;
+        let (w, h) = (w as u32, h as u32);
+        shared.put_preview(shrink(&first, w, h, w as usize * 4, false));
+        shared.put_full(w, h, first);
+    }
+    shared.compat_capture.store(true, Ordering::Relaxed);
     let stop = Arc::new(AtomicBool::new(false));
     let stopped = stop.clone();
-    let thread = std::thread::Builder::new()
-        .name("vi-translator-gdi-capture".to_string())
-        .spawn(move || {
-            let mut last_full = Instant::now();
-            let mut last_preview = Instant::now();
-            while !stopped.load(Ordering::Relaxed) {
-                // GDI copies the desktop through the CPU; limit polling to ~30 fps.
-                std::thread::sleep(Duration::from_millis(33));
-                let full = shared.full_due(last_full);
-                let preview = shared.preview_due(last_preview);
-                if !full && !preview { continue; }
-                let Some((x, y, w, h)) = rect() else { break; };
-                if let Some(rgba) = grab_screen_region(x, y, w, h) {
-                    let (w, h) = (w as u32, h as u32);
-                    if preview {
-                        shared.put_preview(shrink(&rgba, w, h, w as usize * 4, false));
-                        last_preview = Instant::now();
-                    }
-                    if full {
-                        shared.put_full(w, h, rgba);
-                        last_full = Instant::now();
-                    }
+    let s = shared.clone();
+    let thread = std::thread::Builder::new().name("vi-translator-gdi-capture".to_string()).spawn(move || {
+        let mut last_full = Instant::now();
+        let mut last_preview = Instant::now();
+        while !stopped.load(Ordering::Relaxed) {
+            // GDI copies the screen through the CPU: at most ~30 frames a second
+            std::thread::sleep(Duration::from_millis(33));
+            if !alive() {
+                break;
+            }
+            let full = s.full_due(last_full);
+            let preview = s.preview_due(last_preview);
+            if !full && !preview {
+                continue;
+            }
+            // (not readable now: minimised, or another window in front; waits)
+            let Some((x, y, w, h)) = rect() else { continue };
+            if let Some(rgba) = grab_screen_region(x, y, w, h) {
+                let (w, h) = (w as u32, h as u32);
+                if preview {
+                    s.put_preview(shrink(&rgba, w, h, w as usize * 4, false));
+                    last_preview = Instant::now();
+                }
+                if full {
+                    s.put_full(w, h, rgba);
+                    last_full = Instant::now();
                 }
             }
-        })?;
-    Ok(WindowCapture(CaptureMethod::Gdi { stop, thread: Some(thread) }))
+        }
+        s.compat_capture.store(false, Ordering::Relaxed);
+    })?;
+    Ok(WindowCapture(CaptureMethod::Gdi { stop, thread: Some(thread), shared }))
 }
 
 /// Start capturing the window titled `title`; returns the capture and the window's handle.
@@ -121,7 +146,9 @@ pub fn start_window(title: &str, shared: Arc<Shared>) -> anyhow::Result<(WindowC
     // The native path failed for this window. Keep a working desktop-pixel
     // fallback rather than displaying ItemConvertFailed forever.
     eprintln!("VI Translator: native window capture failed for {title:?}: {last_err}; trying GDI");
-    match start_gdi(shared, move || client_rect(hwnd)) {
+    let alive = move || unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(HWND(hwnd as *mut _))).as_bool() };
+    // (only while it's the window in front: what covers it is never read)
+    match start_gdi(shared, alive, move || focused_client_rect(hwnd)) {
         Ok(c) => Ok((c, hwnd)),
         Err(e) => Err(anyhow::anyhow!(
             "{}; GDI compatibility capture also failed: {e:#}",
@@ -274,7 +301,8 @@ pub fn start_screen(id: &str, shared: Arc<Shared>) -> anyhow::Result<WindowCaptu
     // conversion can fail for *every* display. BitBlt needs no WinRT runtime.
     eprintln!("VI Translator: native screen capture failed for {id:?}: {last_err}; trying GDI");
     let id_owned = id.to_string();
-    start_gdi(shared, move || screen_rect(&id_owned)).map_err(|e| {
+    let id_alive = id_owned.clone();
+    start_gdi(shared, move || screen_rect(&id_alive).is_some(), move || screen_rect(&id_owned)).map_err(|e| {
         anyhow::anyhow!("{last_err}; GDI compatibility capture also failed: {e:#}")
     })
 }

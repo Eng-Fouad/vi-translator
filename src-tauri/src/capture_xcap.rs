@@ -48,6 +48,10 @@ impl WindowCapture {
     pub fn is_finished(&self) -> bool {
         self.thread.as_ref().is_none_or(|t| t.is_finished())
     }
+    /// (the compatibility capture is Windows only)
+    pub fn is_compat(&self) -> bool {
+        false
+    }
     pub fn stop(mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(t) = self.thread.take() {
