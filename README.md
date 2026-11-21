@@ -73,11 +73,13 @@ by the address the app shows (the PC's IP address), not a name.
 - **macOS:** Rust and the Xcode command-line tools.
 
 ```sh
-cd src-tauri
 cargo run                  # run (debug)
 cargo build --release      # target/release/vi-translator(.exe)
-cargo test
+cargo test                 # the app and its core
 ```
+
+The reading and translating live in [`core/`](core/README.md) (`vi-translator-core`), shared with
+the phone apps through its UniFFI layer (`core/ffi`); `src-tauri` is the desktop app around it.
 
 Releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed (the version must be newer than
 the latest release). Each executable is signed for the auto-update with the `UPDATE_SIGNING_KEY_PEM`

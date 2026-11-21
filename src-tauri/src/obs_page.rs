@@ -5,9 +5,9 @@
 //! card in an OBS scene it lands on the game picture. It polls /state ~10 times a second.
 //! Listens on 127.0.0.1 only: nothing outside this PC can reach it.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -16,123 +16,16 @@ use tauri::AppHandle;
 use crate::capture::Shared;
 use crate::config::Config;
 
-pub(crate) fn respond(mut s: TcpStream, status: &str, mime: &str, body: &[u8]) {
-    // (no CORS header: the pages are same-origin, and other websites must not read these answers)
-    let head = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    let _ = s.write_all(head.as_bytes());
-    let _ = s.write_all(body);
-}
-
-/// A request's target and the headers that matter here.
-pub(crate) struct Request {
-    pub method: String,
-    pub path: String,
-    pub query: String,
-    pub host: String,
-    pub origin: String,
-    /// sent with the X-VIT header (only the VI Translator apps send it: a web page can't, without asking)
-    pub vit: bool,
-    /// the body, up to 4 KB (empty when longer)
-    pub body: Vec<u8>,
-}
-
-/// Read a request's first line, headers and a small body: at most 8 KB, 3 s per read (a client
-/// that sends more, or nothing, is dropped).
-pub(crate) fn read_request(s: &TcpStream) -> Option<Request> {
-    let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
-    let mut r = BufReader::new(s).take(8192);
-    let mut line = String::new();
-    if r.read_line(&mut line).ok()? == 0 {
-        return None;
-    }
-    // "GET /path?query HTTP/1.1"
-    let method = line.split_whitespace().next().unwrap_or("").to_string();
-    let target = line.split_whitespace().nth(1).unwrap_or("/").to_string();
-    let (path, query) = target.split_once('?').map(|(p, q)| (p.to_string(), q.to_string())).unwrap_or((target, String::new()));
-    let (mut host, mut origin, mut vit, mut length) = (String::new(), String::new(), false, 0usize);
-    loop {
-        let mut h = String::new();
-        if r.read_line(&mut h).ok()? == 0 || h.trim().is_empty() {
-            break;
-        }
-        if let Some((name, value)) = h.split_once(':') {
-            match name.trim().to_ascii_lowercase().as_str() {
-                "host" => host = value.trim().to_string(),
-                "origin" => origin = value.trim().to_string(),
-                "x-vit" => vit = true,
-                "content-length" => length = value.trim().parse().unwrap_or(usize::MAX),
-                _ => {}
-            }
-        }
-    }
-    let mut body = Vec::new();
-    if (1..=4096).contains(&length) {
-        body.resize(length, 0);
-        if r.read_exact(&mut body).is_err() {
-            body.clear();
-        }
-    }
-    Some(Request { method, path, query, host, origin, vit, body })
-}
-
-/// Connections being served at once, at most (each has its own thread).
-const MAX_CONNECTIONS: usize = 64;
-
-/// Counts a connection while it's served (see `MAX_CONNECTIONS`).
-pub(crate) struct Slot(&'static AtomicUsize);
-
-impl Slot {
-    pub(crate) fn take(count: &'static AtomicUsize) -> Option<Slot> {
-        if count.fetch_add(1, Ordering::AcqRel) >= MAX_CONNECTIONS {
-            count.fetch_sub(1, Ordering::AcqRel);
-            return None;
-        }
-        Some(Slot(count))
-    }
-}
-
-impl Drop for Slot {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::AcqRel);
-    }
-}
+// (the HTTP pieces are the core's, shared with its TV page server)
+pub(crate) use vi_translator_core::net::{Slot, build_id, read_request, respond};
+#[cfg(test)]
+use vi_translator_core::net::{MAX_CONNECTIONS, Request};
+// (what the overlays show: also the core's, for the TV page)
+pub(crate) use vi_translator_core::live::overlay_state;
 
 /// The app's own window, as the origin of its requests (Windows; macOS and Linux).
 fn app_origin(origin: &str) -> bool {
     matches!(origin, "http://tauri.localhost" | "https://tauri.localhost" | "tauri://localhost")
-}
-
-/// Changes every time the app starts: the page reloads itself when it sees a new one, so an OBS
-/// Browser Source always runs the current drawing code (it otherwise keeps the code it first loaded).
-pub(crate) fn build_id() -> u64 {
-    static ID: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    *ID.get_or_init(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0))
-}
-
-/// What a page needs to draw the overlays over the whole game picture (this OBS page, and the TV
-/// page on the home network, lan.rs): where the areas are, their style, and what each shows now.
-/// Never settings beyond that (keys, passwords) or the picture; private screen text is never in
-/// `screen` (it's taken out before a page is shown).
-pub(crate) fn overlay_state(cfg: &Mutex<Config>, shared: &Shared) -> serde_json::Value {
-    let (areas, style, profile_opts, overlays, lang) = {
-        let c = cfg.lock().unwrap();
-        (c.areas.clone(), c.style.clone(), c.profile_opts.clone(), c.overlays_enabled, c.target_lang.clone())
-    };
-    serde_json::json!({
-        "build": build_id(),
-        "areas": areas,
-        "style": style,
-        "profile_opts": profile_opts,
-        // the header's Overlays switch: off = draw nothing
-        "overlays": overlays,
-        "lang": lang,
-        "shown": shared.shown.lock().unwrap().clone(),
-        "screen": shared.screen.lock().unwrap().clone(),
-        "reason": shared.screen_reason.lock().unwrap().clone(),
-    })
 }
 
 fn state_json(cfg: &Mutex<Config>, shared: &Shared) -> Vec<u8> {

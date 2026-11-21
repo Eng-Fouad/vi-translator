@@ -25,6 +25,7 @@ use serde::Serialize;
 use crate::capture::FrameData;
 use crate::config::Config;
 use crate::ocr::{self, Crop, Ocr, Word};
+use crate::ocr_engine::PlatformOcr;
 use crate::translate::{Segments, Translator};
 
 /// One snapshot at a time (the app's button, the home-network page's).

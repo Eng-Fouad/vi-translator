@@ -7,7 +7,7 @@ use windows::Media::Ocr::OcrEngine;
 use windows::Storage::Streams::DataWriter;
 use windows::core::HSTRING;
 
-use crate::ocr::RawWord;
+use vi_translator_core::ocr::RawWord;
 
 pub struct Engine {
     engine: OcrEngine,

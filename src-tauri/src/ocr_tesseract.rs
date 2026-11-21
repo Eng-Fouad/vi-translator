@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use anyhow::{Context as _, Result, anyhow};
 use tesseract::Tesseract;
 
-use crate::ocr::RawWord;
+use vi_translator_core::ocr::RawWord;
 
 pub struct Engine {
     /// one Tesseract instance, kept between reads (loading the English model takes a while); its
