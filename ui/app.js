@@ -109,7 +109,9 @@ function updateGlance() {
 function fitFrame() {
   if (!frameSize.w) return;
   const vp = $("viewport").getBoundingClientRect();
-  const s = Math.min((vp.width - 16) / frameSize.w, (vp.height - 16) / frameSize.h);
+  // a small margin in the window; none in full screen, where the picture fills the screen
+  const m = isFullscreen() ? 0 : 16;
+  const s = Math.min((vp.width - m) / frameSize.w, (vp.height - m) / frameSize.h);
   shown = { w: Math.floor(frameSize.w * s), h: Math.floor(frameSize.h * s) };
   for (const el of [$("frame"), $("frame-gl")]) {
     el.style.width = `${shown.w}px`;
@@ -509,6 +511,7 @@ $("window_title").addEventListener("change", (e) => {
   save();
   updateGlance();
   renderParts();
+  renderCardSound(true);
 });
 
 // ------------------------------------------------------------------------------------- the game's part of a window
@@ -668,6 +671,40 @@ $("overlay-part-choose").addEventListener("click", async () => {
   renderParts();
 });
 $("overlay-part-clear").addEventListener("click", () => { cfg.overlay_crop = null; save(); renderParts(); });
+
+// Source: a capture card's sound on this PC's speakers
+async function renderCardSound(refresh = false) {
+  const card = (cfg.window_title || "").startsWith("device:");
+  $("card-sound").hidden = !card;
+  if (!card) return;
+  $("card_sound").checked = cfg.card_sound !== false;
+  $("card-sound-opts").hidden = cfg.card_sound === false;
+  $("card_sound_volume").value = cfg.card_sound_volume ?? 100;
+  const sel = $("card_sound_input");
+  if (refresh || !sel.options.length) {
+    let r = { inputs: [], status: "" };
+    try { r = await invoke("sound_inputs"); } catch {}
+    sel.innerHTML = "";
+    sel.add(new Option(t("Automatic (the card's own)"), ""));
+    for (const n of r.inputs) sel.add(new Option(n, n));
+    if (cfg.card_sound_input && !r.inputs.includes(cfg.card_sound_input)) sel.add(new Option(t("{title}  (not available now)", { title: cfg.card_sound_input }), cfg.card_sound_input));
+  }
+  sel.value = cfg.card_sound_input || "";
+  let st = "";
+  try { st = await invoke("sound_status"); } catch {}
+  const [what, detail = ""] = st.split(/\|(.*)/s);
+  const text = {
+    playing: () => t("Playing the sound of \"{name}\".", { name: detail }),
+    none: () => t("No sound input found for this capture card: pick it in the list."),
+    missing: () => t("The sound input \"{name}\" isn't connected.", { name: detail }),
+    error: () => t("The card's sound couldn't play: {e}", { e: detail }),
+  }[what];
+  $("card-sound-status").textContent = cfg.card_sound === false ? "" : text ? text() : t("Starting ...");
+}
+$("card_sound").addEventListener("change", (e) => { cfg.card_sound = e.target.checked; save(false); renderCardSound(); });
+$("card_sound_input").addEventListener("change", (e) => { cfg.card_sound_input = e.target.value; save(false); setTimeout(renderCardSound, 800); });
+$("card_sound_volume").addEventListener("input", (e) => { cfg.card_sound_volume = +e.target.value; save(false); });
+setInterval(() => { if (cfg && document.body.dataset.tab === "source") renderCardSound(); }, 1500);
 
 // Show on: the virtual camera
 $("virtual_camera").addEventListener("change", (e) => { cfg.virtual_camera = e.target.checked; save(false); setTimeout(updateVcam, 600); });
@@ -1124,10 +1161,7 @@ function renderMemory() {
   $("memory-form").innerHTML = `
     <div class="callout" id="mem-stats" style="margin:0"></div>
     <div class="row"><button class="btn danger" id="mem-clear">${t("Clear memory")}</button></div>
-    <label class="check" style="color:var(--text);font-weight:600;margin-top:10px"><input type="checkbox" id="share-on" ${cfg.share_lines !== false ? "checked" : ""}/> ${t("Help improve translations")}</label>
-    <div class="hint">${t("Shares the English lines you see in the game (subtitles, instructions and captions) with the VI Translator server occasionally, so they can be translated better for everyone. Anonymous: a random id, no account, no screenshots.")}</div>
 `;
-  $("share-on").addEventListener("change", (e) => { cfg.share_lines = e.target.checked; save(false); });
   $("mem-clear").addEventListener("click", async () => {
     if (!(await ask(t("Forget all remembered translations?"), t("Clear memory")))) return;
     await invoke("memory_clear");
@@ -1231,8 +1265,14 @@ async function gotSnapshot(snap, open) {
   }
 }
 
+let snapView = null; // the picture on show (to close it with the shortcut)
+let snapFromHotkey = false; // opened by the keyboard shortcut: closing it goes back to the game
 function openSnap(snap) {
-  Snap.show(snap, {
+  snapView = Snap.show(snap, {
+    onClose: () => {
+      snapView = null;
+      if (snapFromHotkey) { snapFromHotkey = false; invoke("back_to_game").catch(() => {}); }
+    },
     labels: snapLabels(),
     style: cfg.snap_style,
     info: $("snap-status").textContent,
@@ -1305,6 +1345,9 @@ function renderSnapForm() {
     <label class="check"><input type="checkbox" id="snap-save" ${cfg.snap_save !== false ? "checked" : ""}/> ${t("Keep every snapshot in Pictures\\VI Translator\\snapshots")}</label>
     <label class="check"><input type="checkbox" id="snap-lan" ${cfg.snap_lan !== false ? "checked" : ""}/> ${t("Allow snapshots from the home-network page")}</label>
     <div class="muted small" style="margin:-6px 0 0">${AS.esc(t("Phones and tablets showing the live translations get a snapshot button too."))}</div>
+    <div class="field"><label for="snap-hotkey">${t("Keyboard shortcut")}</label>
+      <div class="row"><input type="text" id="snap-hotkey" class="grow" readonly dir="ltr" /><button class="link" id="snap-hotkey-clear">${t("Remove")}</button></div>
+      <div class="muted small" id="snap-hotkey-msg" style="margin:4px 0 0">${AS.esc(t("Click the box, then press the keys. Works in the game too: the translated picture comes up at once."))}</div></div>
     <button class="btn" id="snap-folder">${t("Open snapshots folder")}</button>
     <div class="muted small">${AS.esc(t("Text a game page marks as private (other players' names) is never read or sent: it's covered in the picture."))}</div>`;
   $("snap-service").addEventListener("change", (e) => { cfg.snap_service = e.target.value; save(false); renderSnapForm(); });
@@ -1316,6 +1359,64 @@ function renderSnapForm() {
   $("snap-save").addEventListener("change", (e) => { cfg.snap_save = e.target.checked; save(false); });
   $("snap-lan").addEventListener("change", (e) => { cfg.snap_lan = e.target.checked; save(false); });
   $("snap-folder").addEventListener("click", openSnapsFolder);
+  const hk = $("snap-hotkey");
+  renderHotkey();
+  hk.addEventListener("focus", () => { hk.value = t("Press the keys ..."); });
+  hk.addEventListener("blur", renderHotkey);
+  hk.addEventListener("keydown", (e) => {
+    e.preventDefault();
+    if (e.key === "Escape") { hk.blur(); return; }
+    if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.altKey && !e.shiftKey) { hk.blur(); setHotkey(""); return; }
+    const keys = hotkeyOf(e);
+    if (!keys) return;
+    hk.blur();
+    setHotkey(keys);
+  });
+  $("snap-hotkey-clear").addEventListener("click", () => setHotkey(""));
+}
+
+// The keyboard shortcut (pressed in the game): the app came to the front; translate the picture and
+// show it. Pressed again while it's up: close it (and go back to the game).
+listen("snap-hotkey", async (e) => {
+  if (e.payload && snapView) { (await snapView).close(); return; }
+  if (snapBusy) return;
+  snapFromHotkey = true;
+  await takeSnapshot();
+  if (!snapView) snapFromHotkey = false; // (nothing to show: an error, already in the tab)
+});
+
+// The shortcut's keys as the shortcut library names them ("Control+Shift+KeyS"), from a key press;
+// null for a press of modifiers alone.
+function hotkeyOf(e) {
+  if (["Control", "Shift", "Alt", "Meta", "OS"].includes(e.key)) return null;
+  const mods = [];
+  if (e.ctrlKey) mods.push("Control");
+  if (e.altKey) mods.push("Alt");
+  if (e.shiftKey) mods.push("Shift");
+  if (e.metaKey) mods.push("Super");
+  return [...mods, e.code].join("+");
+}
+// …and as people read it ("Ctrl + Shift + S")
+function hotkeyText(keys) {
+  if (!keys) return t("None");
+  return keys.split("+").map((k) => ({ Control: "Ctrl", Super: "Win" })[k] || k.replace(/^Key|^Digit/, "")).join(" + ");
+}
+function renderHotkey() {
+  const input = $("snap-hotkey");
+  if (!input) return;
+  input.value = hotkeyText(cfg.snap_hotkey);
+  $("snap-hotkey-clear").hidden = !cfg.snap_hotkey;
+}
+async function setHotkey(keys) {
+  const msg = $("snap-hotkey-msg");
+  try {
+    await invoke("set_snap_hotkey", { keys });
+    cfg.snap_hotkey = keys;
+    msg.textContent = keys ? t("Press {keys} in the game to translate the picture; press it again (or Esc) to go back.", { keys: hotkeyText(keys) }) : "";
+  } catch (err) {
+    msg.textContent = t("These keys can't be used: {e}", { e: err });
+  }
+  renderHotkey();
 }
 
 $("snap-take").addEventListener("click", takeSnapshot);
@@ -2007,5 +2108,6 @@ function lockControls() {
   await loadWindows();
   loadOverlayWindows();
   updateVcam();
+  renderCardSound(true);
   updateGlance();
 })();

@@ -244,6 +244,13 @@ pub struct Config {
     pub overlay_crop: Option<[f64; 4]>,
     /// Send the game with its translations as a webcam ("OBS Virtual Camera") for other apps.
     pub virtual_camera: bool,
+    /// With a capture card as the source: play its sound on this PC's speakers (the app reads only
+    /// the picture), from this sound input ("" = the one named after the card), at this volume (0–100).
+    pub card_sound: bool,
+    pub card_sound_input: String,
+    pub card_sound_volume: u32,
+    /// The snapshot's keyboard shortcut, pressed anywhere ("Control+Shift+KeyS", "F8"; "" = none).
+    pub snap_hotkey: String,
     /// local | deepl | azure | google | libre | claude | openai
     pub engine: String,
     /// Language to translate into (see `langs::LANGS`): "ar", "hi", "tr" …
@@ -286,9 +293,6 @@ pub struct Config {
     pub fps_corner: String,
     /// App window theme: light | dark
     pub theme: String,
-    /// Help improve translations: share the English lines seen (subtitles, instructions, captions)
-    /// with the project server, anonymously, in batches. On by default; off in the Translator tab.
-    pub share_lines: bool,
     /// Random id of this install (no account), made on first start.
     pub install_id: String,
     /// Project server; empty = the built-in one.
@@ -599,6 +603,10 @@ impl Default for Config {
             overlay_window: String::new(),
             overlay_crop: None,
             virtual_camera: false,
+            card_sound: true,
+            card_sound_input: String::new(),
+            card_sound_volume: 100,
+            snap_hotkey: String::new(),
             engine: "local".into(),
             deepl_key: String::new(),
             azure_key: String::new(),
@@ -625,7 +633,6 @@ impl Default for Config {
             update_check: true,
             lan_page: false,
             lan_port: 8791,
-            share_lines: true,
             install_id: String::new(),
             server_url: String::new(),
             layout_version: 0,
@@ -637,7 +644,7 @@ impl Default for Config {
             obs_password: String::new(),
             obs_page_port: 8790,
             capture_fps: 12,
-            preview_fps: 30,
+            preview_fps: 60,
             snap_service: String::new(),
             snap_azure_endpoint: String::new(),
             snap_azure_key: String::new(),
@@ -671,8 +678,10 @@ impl Default for Config {
 /// the old default: 1 = text is read from 12 frames a second (was 8); 2 = GTA VI's top-left
 /// instructions are read only inside the game's own box (settings saved before `needs_box` existed had
 /// it off: menu text and credits there were translated); 3 = that area reaches lower (h 0.20 → 0.30):
-/// a four-line box's last line was cut off, so the translation stopped short and covered it.
-pub const DEFAULTS_VERSION: u32 = 3;
+/// a four-line box's last line was cut off, so the translation stopped short and covered it;
+/// 4 = the live preview at 60 frames a second (was 30: a capture card sends 60, and the preview looked
+/// choppy next to the card's own app).
+pub const DEFAULTS_VERSION: u32 = 4;
 
 /// The height of GTA VI's top-left instructions area (and the one before `DEFAULTS_VERSION` 3).
 const HELP_H: f64 = 0.30;
@@ -711,6 +720,10 @@ impl Config {
                     moved = true;
                 }
             }
+        }
+        if self.defaults_version < 4 && self.preview_fps == 30 {
+            self.preview_fps = 60;
+            moved = true;
         }
         let bumped = self.defaults_version < DEFAULTS_VERSION;
         self.defaults_version = self.defaults_version.max(DEFAULTS_VERSION);

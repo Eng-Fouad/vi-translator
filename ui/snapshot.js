@@ -133,7 +133,7 @@ window.Snap = (() => {
    * Full-screen viewer. labels: { translated, original, save, close, folder }; actions: { save(canvas, snap),
    * folder() } (each button shows only with its action). style: "blur" | "solid".
    */
-  async function show(snap, { labels = {}, actions = {}, style = "blur", info = "" } = {}) {
+  async function show(snap, { labels = {}, actions = {}, style = "blur", info = "", onClose = null } = {}) {
     document.getElementById("snap-view")?.remove();
     const L = { translated: "Translated", original: "Original", save: "Save", close: "Close", folder: "Open folder", ...labels };
     const view = document.createElement("div");
@@ -167,8 +167,10 @@ window.Snap = (() => {
       await draw(canvas, snap, { translated, style });
     };
     const close = () => {
+      if (!view.isConnected) return;
       view.remove();
       document.removeEventListener("keydown", key);
+      if (onClose) onClose();
     };
     const key = (e) => {
       if (e.key === "Escape") close();

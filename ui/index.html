@@ -163,6 +163,15 @@
             <button id="source-part-clear" class="link" data-i18n>Whole window</button>
           </div>
           <p id="source-part-hint" class="muted small" data-i18n>For an app that shows the game with its own panels and buttons around it (a streaming or upscaling app): read only the game.</p>
+          <!-- a capture card: its sound on this PC's speakers (the app reads only its picture) -->
+          <div id="card-sound" hidden>
+            <label class="check"><input type="checkbox" id="card_sound" /> <span data-i18n>Play the card's sound on this PC</span></label>
+            <div class="row" id="card-sound-opts">
+              <select id="card_sound_input" class="grow"></select>
+              <input type="range" id="card_sound_volume" min="0" max="100" step="5" data-i18n-title title="Volume" style="width:110px" />
+            </div>
+            <div id="card-sound-status" class="muted small"></div>
+          </div>
           <div id="source-status" class="callout"></div>
 
           <h3>OBS</h3>

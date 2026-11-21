@@ -16,6 +16,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 sha2 = "0.10"
 tauri = { version = "2", features = ["custom-protocol"] }
+# the snapshot's keyboard shortcut, pressed in the game
+tauri-plugin-global-shortcut = "2.4.1"
 tokenizers = { version = "0.23.2", default-features = false, features = ["fancy-regex"] }
 ed25519-dalek = "2"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
@@ -30,6 +32,10 @@ windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Medi
 windows-capture = "2.0.1"
 # the page as WebView2 draws it (Debugging: save the preview); the version Tauri uses
 webview2-com = "0.39.1"
+
+# Windows and macOS: the capture card's sound on the speakers (Linux would need ALSA's headers)
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+cpal = "0.18.2"
 
 # Linux and macOS: window capture, capture cards, fonts, folders, local time
 [target.'cfg(not(windows))'.dependencies]

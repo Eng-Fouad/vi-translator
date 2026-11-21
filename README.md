@@ -19,6 +19,8 @@
 - Sends the game with its translations as a **webcam** to other apps (Discord, Zoom, a streaming app), through
   the *OBS Virtual Camera* that OBS Studio installs (Windows).
 - Keeps highlighted words in their **colours** and button **icons** in place.
+- With a capture card, plays the **card's sound** on the PC, and shows its picture full screen at the card's frame rate.
+- **Snapshot** translates the whole picture at once, from a button or your own **keyboard shortcut** pressed in the game.
 - Shows the live translations on a **phone or tablet** on your home network (Show on tab, off by default).
 - **Updates itself**: when a new version is out it asks first, then checks its signature and restarts.
 
@@ -55,16 +57,13 @@ It's portable, so there's nothing to install:
 
 ## Privacy
 
-*Help improve translations* (Translator tab) is **on by default**. Every few minutes it sends the
-English lines you saw (subtitles, instructions, captions) to the project server, so they can be
-translated better for everyone. It's anonymous: a random install ID, no account, no screenshots,
-and never menus (that's where player names appear). Each batch says which game the lines are from
-and whether one of that game's own screens was seen while playing. Lines seen while the picture
-looks like a different game the app knows are not sent. Turn it off and nothing more is sent.
+The app sends nothing about you or what you play. It only downloads: translations from the project
+server, and new versions from GitHub (checked every hour). The text it reads stays on your PC,
+except what goes to the translation service you pick in the Translator tab (the free offline one
+sends nothing at all), and a snapshot's picture when you choose a service that reads pictures.
 
-The app also checks GitHub every hour for a new version. The
-phone page is only served on your home network, and only while you have it turned on; open it by
-the address the app shows (the PC's IP address), not a name.
+The phone page is only served on your home network, and only while you have it turned on; open it
+by the address the app shows (the PC's IP address), not a name.
 
 ## Build
 

@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod capture;
+mod card_sound;
 mod config;
 mod debug_frames;
 // capture cards: Media Foundation on Windows, nokhwa (V4L2 / AVFoundation) elsewhere
@@ -14,6 +15,7 @@ mod secure;
 #[cfg_attr(not(windows), path = "fonts_fontdb.rs")]
 mod fonts;
 mod game_icons;
+mod hotkey;
 mod ocr;
 mod overlay;
 mod phrasebook;
@@ -555,6 +557,41 @@ async fn find_picture(webview: tauri::Webview, title: String) -> Result<Option<[
     .map_err(|e| e.to_string())?
 }
 
+/// The sound inputs (for the capture card's sound) and what that sound is doing now.
+#[tauri::command]
+async fn sound_inputs(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let status = state.shared.sound_status.lock().unwrap().clone();
+    let inputs = tauri::async_runtime::spawn_blocking(card_sound::list_inputs).await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "inputs": inputs, "status": status }))
+}
+
+#[tauri::command]
+fn sound_status(state: tauri::State<AppState>) -> String {
+    state.shared.sound_status.lock().unwrap().clone()
+}
+
+/// The snapshot's keyboard shortcut: in use now and kept in the settings, or why these keys can't be.
+#[tauri::command]
+fn set_snap_hotkey(app: AppHandle, webview: tauri::Webview, state: tauri::State<AppState>, keys: String) -> Result<(), String> {
+    main_only(&webview)?;
+    let keys = keys.trim().to_string();
+    if let Err(e) = hotkey::set(&app, &keys) {
+        // (the one in use before stays)
+        let old = state.cfg.lock().unwrap().snap_hotkey.clone();
+        let _ = hotkey::set(&app, &old);
+        return Err(e);
+    }
+    let mut c = state.cfg.lock().unwrap();
+    c.snap_hotkey = keys;
+    c.save(&config_path()).map_err(|e| e.to_string())
+}
+
+/// The snapshot (opened by its shortcut) was closed: back to the game's window.
+#[tauri::command]
+fn back_to_game() {
+    hotkey::back();
+}
+
 /// What the virtual camera is doing ("" while it's off).
 #[tauri::command]
 fn vcam_status(state: tauri::State<AppState>) -> String {
@@ -781,8 +818,7 @@ struct AreaState {
     last_seen: Option<Instant>,
     /// translation-job seq of the English line now on screen (0 = none)
     current_seq: u64,
-    /// that line as sent to translation (icons as ⟦n⟧) and when it appeared — for the lines log
-    current_en: String,
+    /// when that line appeared
     current_start: Option<Instant>,
     /// The line on screen was sent without the game's coloured words: read on its first frame, while
     /// GTA VI's instructions still fade in with a white glow. Its colours are looked for again until then.
@@ -1089,8 +1125,6 @@ fn ocr_loop(
     let mut last_lang = String::new();
     // a profile page still has pieces waiting for the translator (other languages than Arabic)
     let mut screen_missing = false;
-    // the Mission Failed reason now on screen and since when — for the lines log (translation DB)
-    let mut reason_on: Option<(String, Instant)> = None;
     // the game's pages script (pagescript.rs), loaded again when the game or the script changes
     let mut pages: Option<pagescript::Pages> = None;
     let mut pages_for: (String, u64) = (String::new(), u64::MAX);
@@ -1105,14 +1139,6 @@ fn ocr_loop(
     let mut menu_retry_at = Instant::now();
     // the page on screen last time round (to tell its script when it goes)
     let mut ended_check: Option<String> = None;
-    // Another game on screen (while sharing lines): the other games' scripts, and when they last
-    // looked at the picture.
-    let mut other_pages: HashMap<String, (u64, Option<pagescript::Pages>)> = HashMap::new();
-    let mut recognized_at = Instant::now();
-    // For sharing lines: the game one of whose pages was on screen this session (that game is
-    // really being played), and until when another game the app knows was seen on screen.
-    let mut confirmed_game = String::new();
-    let mut other_game_until: Option<Instant> = None;
     loop {
         let c = cfg.lock().unwrap().clone();
         let t0 = Instant::now();
@@ -1158,16 +1184,10 @@ fn ocr_loop(
                 if screen.is_some() {
                     hide_screen(&app, &shared, &latest, &mut screen);
                 }
-                if let Some((r, s0)) = reason_on.take() {
-                    memory.lock().unwrap().log_line(SCREEN_REASON, &r, unix_ms(s0), unix_ms(since));
-                }
                 for (id, st) in states.iter_mut() {
                     if st.current_seq != 0 {
                         let at = st.last_seen.unwrap_or(since);
                         let _ = present.send(PMsg::Ended { area: id.clone(), seq: st.current_seq, at });
-                        if let Some(s0) = st.current_start {
-                            memory.lock().unwrap().log_line(id, &st.current_en, unix_ms(s0), unix_ms(at));
-                        }
                     }
                     *st = AreaState::default();
                 }
@@ -1350,32 +1370,6 @@ fn ocr_loop(
             } else if screen.is_some() {
                 hide_screen(&app, &shared, &latest, &mut screen);
             }
-            // Another game on screen? While sharing lines, every few seconds while no page is up, the
-            // other games' scripts look at the picture: another game on screen holds its lines back.
-            if c.share_lines && screen.is_none() && found.is_none() && recognized_at.elapsed() >= Duration::from_secs(4) {
-                recognized_at = Instant::now();
-                let generation = pagescript::GENERATION.load(std::sync::atomic::Ordering::Relaxed);
-                let here = c.game();
-                let mut seen: Option<String> = None;
-                for g in c.builtins.iter().map(|p| p.id.clone()).filter(|g| *g != here) {
-                    let entry = other_pages.entry(g.clone()).or_insert((u64::MAX, None));
-                    if entry.0 != generation {
-                        *entry = (generation, pagescript::Pages::for_game(&g, &data_dir()));
-                    }
-                    if entry.1.as_ref().is_some_and(|p| p.recognize(&frame, &ocr)) {
-                        seen = Some(g);
-                        break;
-                    }
-                }
-                if seen.is_some() {
-                    other_game_until = Some(Instant::now() + Duration::from_secs(90));
-                }
-            }
-            // What lines logged now are, for sharing (see memory::set_share).
-            if screen.is_some() || found.is_some() {
-                confirmed_game = c.game();
-            }
-            memory::set_share(&c.game(), confirmed_game == c.game(), other_game_until.is_some_and(|t| Instant::now() < t), c.share_lines);
             // A script's page went: tell it (`ended`), so it can forget what it kept about it.
             {
                 let now_id = screen.as_ref().map(|s| s.id.clone()).or_else(|| found.as_ref().map(|l| l.id.clone()));
@@ -1537,9 +1531,6 @@ fn ocr_loop(
                     for (id, st) in states.iter_mut() {
                         if st.current_seq != 0 {
                             let _ = present.send(PMsg::Ended { area: id.clone(), seq: st.current_seq, at: now });
-                            if let Some(s0) = st.current_start {
-                                memory.lock().unwrap().log_line(id, &st.current_en, unix_ms(s0), unix_ms(now));
-                            }
                         }
                         st.current_start = None;
                         st.current.clear();
@@ -1565,14 +1556,6 @@ fn ocr_loop(
                     shared.screen_active.store(true, std::sync::atomic::Ordering::Relaxed);
                     screen = Some(layout);
                 }
-            }
-            // Log each page's reason line with its time on screen, like subtitle lines.
-            let reason_now = screen.as_ref().map(|s| s.reason_en.clone()).filter(|r| !r.is_empty());
-            if reason_on.as_ref().map(|(r, _)| r) != reason_now.as_ref() {
-                if let Some((r, since)) = reason_on.take() {
-                    memory.lock().unwrap().log_line(SCREEN_REASON, &r, unix_ms(since), unix_ms(Instant::now()));
-                }
-                reason_on = reason_now.map(|r| (r, Instant::now()));
             }
             if screen.is_some() {
                 // The pause menu is checked on every new frame (its checks are tiny), so its Arabic
@@ -1699,9 +1682,6 @@ fn ocr_loop(
                         let en_start = if recolor { st.current_start.unwrap_or(now) } else { st.candidate_since.unwrap_or(now) };
                         if st.current_seq != 0 {
                             let _ = present.send(PMsg::Ended { area: area.id.clone(), seq: st.current_seq, at: if recolor { now } else { en_start } });
-                            if let (Some(s0), false) = (st.current_start, recolor) {
-                                memory.lock().unwrap().log_line(&area.id, &st.current_en, unix_ms(s0), unix_ms(en_start));
-                            }
                         }
                         st.current_seq = seq_counter;
                         // typical English word height (median) -> the Arabic is sized to match
@@ -1710,12 +1690,6 @@ fn ocr_loop(
                         let measured = hs.get(hs.len() / 2).map(|&h| h as f64 / frame.h as f64).unwrap_or(0.0);
                         // same size for every line of this area
                         let line_h = sizes.lock().unwrap().size(&area.id, measured);
-                        // (logged without a speaker name in front: the sentence is what gets translated)
-                        st.current_en = {
-                            let clean = speaker::take_cues(&en).map(|(_, t)| t).unwrap_or_else(|| en.clone());
-                            let line = speaker::split(&clean, &phrases).map(|(_, _, rest)| rest).unwrap_or(&clean);
-                            speaker::language_tag(line).map(|(_, s)| s).unwrap_or(line).to_string()
-                        };
                         st.current_start = Some(en_start);
                         let _ = jobs.send(Job { area: area.id.clone(), seq: seq_counter, en, phrases, icons, line_h, en_start, text_box, game_box, parts });
                     }
@@ -1726,9 +1700,6 @@ fn ocr_loop(
                     // presenter keeps the Arabic up for as long as the English was on screen.
                     if let Some(last) = st.last_seen {
                         let _ = present.send(PMsg::Ended { area: area.id.clone(), seq: st.current_seq, at: last });
-                        if let Some(s0) = st.current_start {
-                            memory.lock().unwrap().log_line(&area.id, &st.current_en, unix_ms(s0), unix_ms(last));
-                        }
                     }
                     st.current_start = None;
                     st.current.clear();
@@ -2541,6 +2512,11 @@ fn main() {
         }
         return;
     }
+    #[cfg(not(target_os = "linux"))]
+    if let Some(i) = args.iter().position(|a| a == "--test-sound") {
+        card_sound::test(args.get(i + 1).map(String::as_str));
+        return;
+    }
     // `--find-picture "Window title"`: the part of that window showing the game (what moves), as fractions.
     if let Some(title) = args.iter().position(|a| a == "--find-picture").and_then(|i| args.get(i + 1)) {
         let mut frames = Vec::new();
@@ -2770,11 +2746,19 @@ fn main() {
     let update: Arc<Mutex<Option<updater::Update>>> = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
+        .plugin(hotkey::plugin())
         .manage(AppState { cfg: cfg.clone(), shared: shared.clone(), saver: saver.clone(), memory: memory.clone(), update: update.clone() })
-        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, window_still, find_picture, vcam_status, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
+        .invoke_handler(tauri::generate_handler![app_version, dev_build, update_status, install_update, lan_info, open_lan_page, find_tvs, connect_tv, list_tvs, remove_tv, list_langs, list_sources, window_still, find_picture, vcam_status, sound_inputs, sound_status, set_snap_hotkey, back_to_game, get_config, save_config, page_options, list_windows, list_fonts, get_screen, frame_saver_status, open_frames_folder, save_preview, open_previews_folder, take_snapshot, save_snapshot_render, open_snapshots_folder, perf_status, memory_status, memory_clear])
         .setup(move |app| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_title(&format!("VI Translator {}", env!("CARGO_PKG_VERSION")));
+            }
+            {
+                // the snapshot's keyboard shortcut, if one is set
+                let keys = cfg.lock().unwrap().snap_hotkey.clone();
+                if let Err(e) = hotkey::set(app.handle(), &keys) {
+                    eprintln!("[hotkey] \"{keys}\": {e}");
+                }
             }
             let handle = app.handle().clone();
             let latest = Arc::new(Mutex::new(HashMap::new()));
@@ -2802,6 +2786,11 @@ fn main() {
             {
                 let (s, c) = (shared.clone(), cfg.clone());
                 std::thread::spawn(move || capture::run_manager(s, c));
+            }
+            {
+                // the capture card's sound on the speakers (with a card as the source)
+                let (s, c) = (shared.clone(), cfg.clone());
+                std::thread::spawn(move || card_sound::run(c, s));
             }
             {
                 // the game with its translations as a webcam (off unless turned on)

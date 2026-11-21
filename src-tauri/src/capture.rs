@@ -45,6 +45,8 @@ pub struct Shared {
     pub overlay_crop: Mutex<Option<[f64; 4]>>,
     /// The virtual camera's state for the Show on tab ("" while it's off).
     pub vcam_status: Mutex<String>,
+    /// The capture card's sound: what it's doing ("" while it's off or there's no card).
+    pub sound_status: Mutex<String>,
     pub seq: AtomicU64,
     pub status: Mutex<String>,
     /// A game page (a menu, a "mission failed" page …) is on screen; the full-window overlay shows it.
@@ -134,6 +136,39 @@ pub fn yuy2_to_rgba(src: &[u8], w: u32, h: u32, c: YuvColor) -> Vec<u8> {
             out[o + 1] = clamp(y - dg);
             out[o + 2] = clamp(y + db);
             out[o + 3] = 255;
+        }
+    }
+    out
+}
+
+/// BGRX (rows `w * 4` bytes) → YUY2 in BT.709 video range, the colour `yuy2_to_rgba` and the preview's
+/// shader turn back into the same picture (each pair of pixels shares the average of their colour).
+#[cfg_attr(not(windows), allow(dead_code))] // (the Windows capture card reader's)
+pub fn bgrx_to_yuy2(src: &[u8], w: u32, h: u32) -> Vec<u8> {
+    // Y = 16 + 219·(Kr R + Kg G + Kb B)/255, U and V: 128 + 224·(B−Y', R−Y')/(2·(1−K))/255, ×1024
+    let (kr, kb) = (0.2126f64, 0.0722f64);
+    let kg = 1.0 - kr - kb;
+    let fy = |k: f64| (k * 219.0 / 255.0 * 1024.0).round() as i32;
+    let (yr, yg, yb) = (fy(kr), fy(kg), fy(kb));
+    let fc = |k: f64| (k * 224.0 / 255.0 * 1024.0).round() as i32;
+    let (ur, ug, ub) = (fc(-kr / (2.0 * (1.0 - kb))), fc(-kg / (2.0 * (1.0 - kb))), fc(0.5));
+    let (vr, vg, vb) = (fc(0.5), fc(-kg / (2.0 * (1.0 - kr))), fc(-kb / (2.0 * (1.0 - kr))));
+    let (w, h) = (w as usize & !1, h as usize);
+    let mut out = vec![0u8; w * h * 2];
+    for y in 0..h {
+        let row = &src[y * (w * 4)..];
+        let o = &mut out[y * w * 2..(y + 1) * w * 2];
+        for x in (0..w).step_by(2) {
+            let (b0, g0, r0) = (row[x * 4] as i32, row[x * 4 + 1] as i32, row[x * 4 + 2] as i32);
+            let (b1, g1, r1) = (row[x * 4 + 4] as i32, row[x * 4 + 5] as i32, row[x * 4 + 6] as i32);
+            let luma = |r: i32, g: i32, b: i32| ((16 << 10) + yr * r + yg * g + yb * b + 512) >> 10;
+            let (r, g, b) = ((r0 + r1) / 2, (g0 + g1) / 2, (b0 + b1) / 2);
+            let u = ((128 << 10) + ur * r + ug * g + ub * b + 512) >> 10;
+            let v = ((128 << 10) + vr * r + vg * g + vb * b + 512) >> 10;
+            o[x * 2] = luma(r0, g0, b0).clamp(0, 255) as u8;
+            o[x * 2 + 1] = u.clamp(0, 255) as u8;
+            o[x * 2 + 2] = luma(r1, g1, b1).clamp(0, 255) as u8;
+            o[x * 2 + 3] = v.clamp(0, 255) as u8;
         }
     }
     out
@@ -448,6 +483,26 @@ mod crop_tests {
 #[cfg(test)]
 mod yuv_tests {
     use super::*;
+
+    #[test]
+    fn rgb_goes_to_yuy2_and_back() {
+        // pairs of equal pixels (YUY2 shares colour between the two): white, black, red, a grey-blue
+        let px: [[u8; 3]; 4] = [[255, 255, 255], [0, 0, 0], [255, 0, 0], [60, 90, 140]];
+        let mut bgrx = Vec::new();
+        for [r, g, b] in px {
+            for _ in 0..2 {
+                bgrx.extend_from_slice(&[b, g, r, 0]);
+            }
+        }
+        let yuy2 = bgrx_to_yuy2(&bgrx, 8, 1);
+        let back = yuy2_to_rgba(&yuy2, 8, 1, YuvColor { bt709: true, full_range: false });
+        for (i, [r, g, b]) in px.iter().enumerate() {
+            let o = i * 8;
+            for (got, want) in [(back[o], *r), (back[o + 1], *g), (back[o + 2], *b)] {
+                assert!((got as i32 - want as i32).abs() <= 3, "pixel {i}: {:?} vs {:?}", &back[o..o + 3], px[i]);
+            }
+        }
+    }
 
     #[test]
     fn yuy2_limited_bt709_colours() {

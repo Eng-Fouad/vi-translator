@@ -336,7 +336,21 @@ pub fn start(name: String, shared: Arc<Shared>) -> DeviceCapture {
                 }
                 Out::Rgb32 => {
                     let Ok(mut px) = copy_rows(&sample, w, h, 4) else { continue };
-                    if preview {
+                    if preview && w % 2 == 0 {
+                        // (a card that sends MJPEG, decoded by Windows) as YUY2 for the window's GPU, full
+                        // size: no JPEG on the way. An exact copy of the last frame isn't sent again.
+                        let yuy2 = crate::capture::bgrx_to_yuy2(&px, w, h);
+                        let copy = shared.preview_yuv.lock().unwrap().as_ref().is_some_and(|(_, f)| f.w == w && f.h == h && f.data == yuy2);
+                        if copy {
+                            if debug {
+                                st.copy();
+                            }
+                        } else {
+                            last_preview = Instant::now();
+                            let color = crate::capture::YuvColor { bt709: true, full_range: false };
+                            shared.put_preview_yuv(crate::capture::YuvFrame { w, h, color, data: yuy2 });
+                        }
+                    } else if preview {
                         last_preview = Instant::now();
                         shared.put_preview(crate::capture::shrink(&px, w, h, (w * 4) as usize, true));
                     }

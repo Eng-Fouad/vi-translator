@@ -1,13 +1,10 @@
-//! Background sync with the VI Translator server:
-//! - shares the English lines the player saw (setting "Help improve translations", on by
-//!   default): in batches about every 10 minutes, never one line at a time;
-//! - downloads translations and layout updates (read areas, fonts, menu words) in the background.
+//! Background sync with the VI Translator server: downloads translations and layout updates (read
+//! areas, fonts, menu words) in the background. Nothing is sent: the app only downloads.
 //!
-//! Nothing runs while no server is set. Only subtitles, instructions and screen captions are
-//! shared (never menus, where player names appear), with a random install id, no account.
+//! Nothing runs while no server is set.
 
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -20,28 +17,11 @@ use crate::memory::{self, Memory};
 
 /// The project server (a different one can be set in the settings file: `server_url`).
 pub const DEFAULT_SERVER: &str = "https://vitranslator.app";
-const UPLOAD_EVERY: Duration = Duration::from_secs(10 * 60);
 // (an unchanged download is a short "304 Not Modified": checking often costs next to nothing)
 const DOWNLOAD_EVERY: Duration = Duration::from_secs(60 * 60);
-const MAX_LINES_PER_UPLOAD: usize = 500;
-/// (counted as the server counts: UTF-16 code units)
-const MAX_LINE_CHARS: usize = 400;
-/// Uploads per pass, at most (passes are 10 minutes apart; the server takes 30 an hour per install).
-const MAX_REQUESTS_PER_PASS: usize = 4;
-/// How long a line counts as on screen, at most (the server drops longer ones as stuck reads).
-const MAX_SHOWN_MS: u64 = 10 * 60_000;
-/// Once everything in the lines log has been shared and it is this big, it starts again (the old
-/// one is kept as lines-log.old.dat until the next time).
-const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
-
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 struct State {
-    /// how far into the old, plain-text lines-log.jsonl has been shared (bytes); once it has all
-    /// been handled the file is removed
-    log_offset: u64,
-    /// how far into the encrypted lines log (memory::LOG_FILE) has been shared (bytes)
-    dat_offset: u64,
     /// ETag of each download
     versions: HashMap<String, String>,
 }
@@ -90,8 +70,13 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
         .timeout(Duration::from_secs(30))
         .build()
         .expect("http client");
+    // The app no longer shares the lines it reads: the log those were kept in (lines seen in
+    // games) goes from this PC.
+    for old in ["lines-log.dat", "lines-log.old.dat", "lines-log.jsonl"] {
+        let _ = std::fs::remove_file(paths.db.join(old));
+    }
     let mut first = true;
-    let (mut next_upload, mut next_download) = (Instant::now(), Instant::now());
+    let mut next_download = Instant::now();
     let mut last = (String::new(), String::new()); // game, language
     loop {
         let c = cfg.lock().unwrap().clone();
@@ -111,13 +96,9 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
             first = false;
             std::thread::sleep(Duration::from_secs(20)); // let the app start first
         }
-        // (the settings as they are after the waits: sharing turned off meanwhile is respected)
+        // (the settings as they are after the waits)
         let c = cfg.lock().unwrap().clone();
         if let (Some(url), Some(g)) = (server(&c), game(&c)) {
-            if Instant::now() >= next_upload {
-                next_upload = Instant::now() + UPLOAD_EVERY;
-                share_lines(&http, &url, &c, &paths);
-            }
             if Instant::now() >= next_download {
                 next_download = Instant::now() + DOWNLOAD_EVERY;
                 download(&http, &url, &app, &cfg, &memory, &paths, &g, &c.target_lang);
@@ -125,177 +106,6 @@ pub fn run(app: AppHandle, cfg: Arc<Mutex<Config>>, memory: Arc<Mutex<Memory>>, 
         }
         std::thread::sleep(Duration::from_secs(30));
     }
-}
-
-// ------------------------------------------------------------------------------------- sharing
-
-#[derive(Deserialize)]
-struct LogRow {
-    area: String,
-    en: String,
-    start: u64,
-    end: u64,
-    /// the game it was seen in (older rows: none, the game in use now)
-    #[serde(default)]
-    game: String,
-    #[serde(default)]
-    confirmed: bool,
-    /// another game was on screen: never shared
-    #[serde(default)]
-    held: bool,
-    /// "Help improve translations" was on when it was seen (rows from before this was written: on)
-    #[serde(default = "yes")]
-    share: bool,
-}
-
-fn yes() -> bool {
-    true
-}
-
-#[derive(Serialize)]
-struct UploadLine<'a> {
-    en: &'a str,
-    area: &'a str,
-    start: u64,
-    end: u64,
-}
-
-/// Send the lines logged since the last upload. With sharing off, nothing is sent and the
-/// lines seen meanwhile are skipped for good (turning it on later doesn't send old lines).
-/// A log from before encryption (lines-log.jsonl) is finished first, then removed.
-fn share_lines(http: &reqwest::blocking::Client, url: &str, c: &Config, paths: &Paths) {
-    let mut st = load_state(paths);
-    // The plain log from before lines said which game they're from: none of it can be shared now
-    // (it was GTA V's), so it goes.
-    let legacy = paths.db.join("lines-log.jsonl");
-    if legacy.exists() && std::fs::remove_file(&legacy).is_ok() {
-        st.log_offset = 0;
-    }
-    let log = paths.db.join(memory::LOG_FILE);
-    let mut budget = MAX_REQUESTS_PER_PASS;
-    let done = share_file(http, url, c, &log, &mut st.dat_offset, true, &mut budget);
-    // all of it shared, and big: start a new one (the last one is kept aside until next time)
-    if done && std::fs::metadata(&log).is_ok_and(|m| m.len() >= LOG_ROTATE_BYTES && m.len() == st.dat_offset)
-        && std::fs::rename(&log, paths.db.join("lines-log.old.dat")).is_ok()
-    {
-        st.dat_offset = 0;
-    }
-    save_state(paths, &st);
-}
-
-/// Can this logged line be shared? Only lines seen while sharing was on, not held back (another game
-/// on screen), with the game they were seen in, from the game's own read areas (the built-in
-/// profile's: subtitles and instructions — never an area the player added, which could be over a
-/// chat or a list of players) or a game page's reason line, and real text the server takes.
-fn shareable(c: &Config, r: &LogRow) -> bool {
-    let game_area = || c.builtins.iter().find(|p| p.id == r.game).is_some_and(|p| p.areas.iter().any(|a| a.id == r.area));
-    r.share
-        && !r.held
-        && !r.game.is_empty()
-        && crate::config::valid_area_id(&r.area)
-        && (r.area == crate::SCREEN_REASON || game_area())
-        && r.en.encode_utf16().count() <= MAX_LINE_CHARS
-        && looks_like_text(&r.en)
-}
-
-/// Share the whole lines of `path` after `offset`, in order, a batch at a time (each batch: lines
-/// of one game, confirmed or not, up to 500). The offset moves on after each batch the server took
-/// or refused for good, so a pass that stops (offline, busy, rate limited) goes on from there next
-/// time and sends nothing twice; at most `budget` batches a pass. `sealed`: each line is an encrypted
-/// record. True when everything up to the end has been handled.
-fn share_file(http: &reqwest::blocking::Client, url: &str, c: &Config, path: &std::path::Path, offset: &mut u64, sealed: bool, budget: &mut usize) -> bool {
-    let Ok(mut f) = std::fs::File::open(path) else { return true };
-    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
-    if *offset > len {
-        *offset = 0; // the log was cleared
-    }
-    if !c.share_lines {
-        *offset = len;
-        return true;
-    }
-    // (bytes: one damaged character can't stop the rest)
-    let mut buf = Vec::new();
-    if f.seek(SeekFrom::Start(*offset)).is_err() || f.read_to_end(&mut buf).is_err() {
-        return false;
-    }
-    // whole lines only (one may still be being written)
-    let complete = buf.iter().rposition(|b| *b == b'\n').map(|i| i + 1).unwrap_or(0);
-    let start = *offset;
-    let mut pos = start;
-    let mut batches: Vec<((String, bool), Vec<LogRow>, u64)> = Vec::new();
-    for raw in buf[..complete].split_inclusive(|b| *b == b'\n') {
-        pos += raw.len() as u64;
-        let line = String::from_utf8_lossy(raw);
-        let line = line.trim_end_matches(['\n', '\r']);
-        let row = (if sealed { memory::open_log_line(line) } else { Some(line.to_string()) })
-            .and_then(|l| serde_json::from_str::<LogRow>(&l).ok())
-            .filter(|r| shareable(c, r));
-        match row {
-            Some(r) => {
-                let k = (r.game.clone(), r.confirmed);
-                match batches.last_mut() {
-                    Some((bk, list, end)) if *bk == k && list.len() < MAX_LINES_PER_UPLOAD => {
-                        list.push(r);
-                        *end = pos;
-                    }
-                    _ => {
-                        if batches.len() == *budget {
-                            // (enough for this pass: this line, not sent, is where the next one starts)
-                            pos -= raw.len() as u64;
-                            break;
-                        }
-                        batches.push((k, vec![r], pos));
-                    }
-                }
-            }
-            // a line that isn't shared is passed over with the batch before it (or at once)
-            None => match batches.last_mut() {
-                Some((_, _, end)) => *end = pos,
-                None => *offset = pos,
-            },
-        }
-    }
-    let all_read = pos == start + complete as u64;
-    for ((game, confirmed), list, end) in batches {
-        *budget = budget.saturating_sub(1);
-        let lines: Vec<UploadLine> = list
-            .iter()
-            .map(|r| UploadLine { en: &r.en, area: &r.area, start: r.start, end: r.end.max(r.start).min(r.start + MAX_SHOWN_MS) })
-            .collect();
-        let body = serde_json::json!({ "game": game, "confirmed": confirmed, "clientVersion": env!("CARGO_PKG_VERSION"), "lines": lines });
-        let sent = http.post(format!("{url}/v1/lines")).header("X-Install-Id", &c.install_id).json(&body).send();
-        match sent {
-            Ok(r) if r.status().is_success() => *offset = end,
-            // the server refused these lines (malformed): don't send them again
-            Ok(r) if r.status().as_u16() == 400 || r.status().as_u16() == 413 => *offset = end,
-            // offline, busy or rate-limited: on from here next time
-            _ => return false,
-        }
-    }
-    if all_read {
-        *offset = start + complete as u64;
-    }
-    all_read && *offset >= len
-}
-
-/// Real words, not an OCR misread of icons ("bjlwg", "ulnJiJl hjluJ9"): a sentence ("Hi.",
-/// "Go to the guard.") or words that include a common English one ("C'mon mister").
-fn looks_like_text(en: &str) -> bool {
-    const COMMON: [&str; 60] = [
-        "the", "a", "an", "to", "you", "i", "it", "is", "we", "me", "my", "your", "and", "of", "in", "on", "for",
-        "this", "that", "what", "go", "get", "no", "yes", "not", "don't", "i'm", "it's", "c'mon", "come", "let's",
-        "here", "there", "he", "she", "they", "with", "at", "up", "be", "are", "was", "just", "now", "all", "can",
-        "do", "out", "him", "her", "us", "so", "but", "if", "how", "where", "who", "why", "man", "hey",
-    ];
-    let key = memory::key_of(en);
-    let words: Vec<&str> = key
-        .split(' ')
-        // letters only (an icon {1} or a misread "hjluj9" is not a word)
-        .filter(|w| w.chars().any(|c| c.is_alphabetic()) && w.chars().all(|c| c.is_alphabetic() || c == '\''))
-        .filter(|w| w.chars().any(|c| "aeiouy".contains(c)) || w.len() == 1)
-        .collect();
-    let sentence = en.trim_end().ends_with(['.', '!', '?']) && words.iter().any(|w| w.len() >= 2);
-    sentence || words.iter().any(|w| COMMON.contains(w))
 }
 
 // ------------------------------------------------------------------------------------- downloads
@@ -741,115 +551,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A server on this PC answering with these statuses in turn (then 200), and what it was sent.
-    fn fake_server(statuses: Vec<u16>) -> (String, std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>) {
-        use std::io::{BufRead, BufReader, Read, Write};
-        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}", l.local_addr().unwrap());
-        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let seen = got.clone();
-        std::thread::spawn(move || {
-            let mut statuses = statuses.into_iter();
-            for s in l.incoming().flatten() {
-                let mut r = BufReader::new(s.try_clone().unwrap());
-                let mut len = 0usize;
-                loop {
-                    let mut h = String::new();
-                    if r.read_line(&mut h).unwrap_or(0) == 0 || h.trim().is_empty() {
-                        break;
-                    }
-                    if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
-                        len = v.trim().parse().unwrap_or(0);
-                    }
-                }
-                let mut body = vec![0; len];
-                let _ = r.read_exact(&mut body);
-                let status = statuses.next().unwrap_or(200);
-                if status == 200 {
-                    seen.lock().unwrap().push(serde_json::from_slice(&body).unwrap_or_default());
-                }
-                let mut s = s;
-                let _ = s.write_all(format!("HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes());
-            }
-        });
-        (url, got)
-    }
-
-    #[test]
-    fn uploads_go_in_order_and_go_on_where_they_stopped() {
-        let dir = std::env::temp_dir().join(format!("vit-share-test-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let log = dir.join("log.jsonl");
-        let row = |en: &str, area: &str, game: &str, share: bool, held: bool| {
-            serde_json::json!({ "area": area, "en": en, "start": 1_000, "end": 9_999_999, "game": game, "confirmed": false, "held": held, "share": share }).to_string() + "\n"
-        };
-        let mut text = String::new();
-        for i in 0..1200 {
-            text += &row(&format!("Get in the car number {i}."), "subtitles", "gta6", true, false);
-        }
-        text += &row("Seen while sharing was off.", "subtitles", "gta6", false, false);
-        text += &row("Another game on screen.", "subtitles", "gta6", true, true);
-        text += &row("A player's own area over the chat.", "area_17", "gta6", true, false);
-        text += &row("No game: an old row.", "subtitles", "", true, false);
-        text += &row("The mission failed reason.", crate::SCREEN_REASON, "gta6", true, false);
-        std::fs::write(&log, &text).unwrap();
-        let c = Config { install_id: "11111111-2222-4333-8444-555555555555".into(), share_lines: true, ..Config::default() };
-        let mut c = c;
-        c.normalize();
-        let http = reqwest::blocking::Client::new();
-        // the second batch is rate-limited: the first is kept, the pass stops there
-        let (url, got) = fake_server(vec![200, 429]);
-        let mut offset = 0;
-        let mut budget = 4;
-        assert!(!share_file(&http, &url, &c, &log, &mut offset, false, &mut budget));
-        assert_eq!(got.lock().unwrap().len(), 1);
-        let first_end = offset;
-        assert!(first_end > 0 && first_end < text.len() as u64);
-        // next pass: from there, nothing sent twice; at most `budget` batches
-        let (url, got) = fake_server(vec![]);
-        let mut budget = 4;
-        assert!(share_file(&http, &url, &c, &log, &mut offset, false, &mut budget), "all handled");
-        assert_eq!(offset, text.len() as u64);
-        let sent = got.lock().unwrap();
-        let lines: Vec<String> = sent.iter().flat_map(|b| b["lines"].as_array().unwrap().iter().map(|l| l["en"].as_str().unwrap().to_string()).collect::<Vec<_>>()).collect();
-        assert_eq!(lines.len(), 1200 - 500 + 1, "the rest of the lines, and the page reason");
-        assert!(lines.contains(&"The mission failed reason.".to_string()));
-        for never in ["Seen while sharing was off.", "Another game on screen.", "A player's own area over the chat.", "No game: an old row."] {
-            assert!(!lines.contains(&never.to_string()), "{never}");
-        }
-        assert!(sent.iter().all(|b| b["lines"].as_array().unwrap().iter().all(|l| l["end"].as_u64().unwrap() - l["start"].as_u64().unwrap() <= MAX_SHOWN_MS)));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn the_line_a_pass_stops_at_is_sent_by_the_next() {
-        let dir = std::env::temp_dir().join(format!("vit-share-budget-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let log = dir.join("log.jsonl");
-        // exactly four batches' worth, and one line more, the last in the log
-        let text: String = (0..2001)
-            .map(|i| serde_json::json!({ "area": "subtitles", "en": format!("Get in the car number {i}."), "start": 1_000, "end": 2_000, "game": "gta6", "confirmed": false, "held": false, "share": true }).to_string() + "\n")
-            .collect();
-        std::fs::write(&log, &text).unwrap();
-        let mut c = Config { install_id: "11111111-2222-4333-8444-555555555555".into(), share_lines: true, ..Config::default() };
-        c.normalize();
-        let http = reqwest::blocking::Client::new();
-        let (url, got) = fake_server(vec![]);
-        let mut offset = 0;
-        let mut budget = 4;
-        assert!(!share_file(&http, &url, &c, &log, &mut offset, false, &mut budget), "not all sent this pass");
-        assert_eq!(got.lock().unwrap().len(), 4);
-        assert!(offset < text.len() as u64, "the last line is still to send");
-        let (url, got) = fake_server(vec![]);
-        let mut budget = 4;
-        assert!(share_file(&http, &url, &c, &log, &mut offset, false, &mut budget));
-        let sent = got.lock().unwrap();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0]["lines"][0]["en"], "Get in the car number 2000.");
-        assert_eq!(offset, text.len() as u64);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
     #[test]
     fn changes_are_merged_and_the_pack_kept_sealed() {
         let k = [5u8; 32];
@@ -898,16 +599,6 @@ mod tests {
         assert!(v["style"].is_null());
         let back: crate::config::Area = serde_json::from_value(serde_json::json!({ "id": "old" })).unwrap();
         assert!(back.style.is_none());
-    }
-
-    #[test]
-    fn junk_is_not_shared() {
-        for junk in ["bjlwg", "hjluJ9", "ulnJiJl hjluJ9", "kiflwg", "", "...", "J"] {
-            assert!(!looks_like_text(junk), "{junk:?}");
-        }
-        for text in ["Go to the guard.", "Hi.", "Run!", "Press ⟦1⟧ to bring up the phone.", "C'mon mister"] {
-            assert!(looks_like_text(text), "{text:?}");
-        }
     }
 
     /// A pack made like the server makes it (PackCrypto.seal) opens; a wrong version doesn't.
