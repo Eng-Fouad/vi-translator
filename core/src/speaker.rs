@@ -49,10 +49,28 @@ pub fn plain_name(en: &str) -> Option<(String, &str)> {
     Some((bare_name(&tagged), rest))
 }
 
-/// One of the game's people (as KNOWN lists them).
+/// One of the game's people (as KNOWN lists them, or the list of the game's speakers).
 pub fn is_known(name: &str) -> bool {
     let low = name.to_lowercase();
-    KNOWN.iter().any(|(en, _)| *en == low)
+    KNOWN.iter().any(|(en, _)| *en == low) || listed_ar(&low).is_some()
+}
+
+/// The game's speakers as an Arabic subtitle names them, reviewed: speaker_names_ar.tsv (English,
+/// a tab, the Arabic; the names in the game's text, with the roles translated: "The Man" is
+/// "الرجل"). Ahead of the downloaded translations, whose line of the same text is often a line of
+/// dialogue ("Mother..."), not the name.
+static NAMES_AR: std::sync::LazyLock<std::collections::HashMap<String, &'static str>> = std::sync::LazyLock::new(|| {
+    include_str!("speaker_names_ar.tsv")
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .map(|(en, ar)| (en.trim().to_lowercase(), ar.trim()))
+        .filter(|(en, ar)| !en.is_empty() && !ar.is_empty())
+        .collect()
+});
+
+/// A speaker of the game in Arabic, from the list (`low`: the name in lower case).
+fn listed_ar(low: &str) -> Option<&'static str> {
+    NAMES_AR.get(low).copied()
 }
 
 /// The colour a name the colour check missed is drawn in: the subtitles' own near-white.
@@ -202,8 +220,16 @@ pub fn is_role(name: &str) -> bool {
 /// A role (or a title and a name) in Arabic: "Cop" -> "الشرطي", "Officer Smith" -> "الضابط سميث".
 fn role_ar(name: &str) -> Option<String> {
     let low = name.to_lowercase();
+    // "The Man": the role ("ذ مان" was "The" and "Man" spelt out)
+    let low = low.strip_prefix("the ").unwrap_or(&low).to_string();
     if let Some((_, ar)) = ROLES.iter().find(|(en, _)| *en == low) {
         return Some(ar.to_string());
+    }
+    // "Guard 2": the role, then its number
+    if let Some((role, n)) = low.rsplit_once(' ').filter(|(_, n)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+        if let Some(ar) = role_ar(role) {
+            return Some(format!("{ar} {n}"));
+        }
     }
     let (first, rest) = low.split_once(' ')?;
     let (_, title) = ROLES.iter().find(|(en, _)| *en == first)?;
@@ -222,6 +248,9 @@ pub fn name_in(lang: &str, name: &str, reviewed: Option<String>) -> String {
         return ar.to_string();
     }
     if lang == "ar" {
+        if let Some(ar) = listed_ar(&low) {
+            return ar.to_string();
+        }
         if let Some(r) = role_ar(name) {
             return r;
         }
@@ -233,8 +262,10 @@ pub fn name_in(lang: &str, name: &str, reviewed: Option<String>) -> String {
     if let Some(r) = reviewed.filter(|r| !r.is_empty() && r.split_whitespace().count() <= words + 1 && !r.contains(|c: char| matches!(c, '.' | '!' | '?' | '؟' | '،'))) {
         return r;
     }
-    // each word on its own ("Officer Smith"); a word that is one of the known names is written as they are
+    // each word on its own ("Officer Smith"); a word that is one of the known names is written as they are,
+    // and an English "the" is left out (never "ذ")
     low.split(' ')
+        .filter(|word| !word.is_empty() && *word != "the")
         .map(|word| {
             KNOWN
                 .iter()
@@ -714,6 +745,20 @@ mod tests {
         assert_eq!(name_in("ar", "Cop", None), "الشرطي");
         assert_eq!(name_in("ar", "Prison Guard", None), "حارس السجن");
         assert_eq!(name_in("ar", "Officer Smith", None), "الضابط سميث");
+        // "The Man" was spelt out as "ذ مان"
+        assert_eq!(name_in("ar", "The Man", None), "الرجل");
+        assert_eq!(name_in("ar", "The Guard", None), "الحارس");
+        assert_eq!(name_in("ar", "Guard 2", None), "الحارس 2");
+        assert!(!name_in("ar", "The Zorrusso", None).contains('ذ'));
+        // a name the list has wins over a downloaded line of the same text (a line of dialogue)
+        assert_eq!(name_in("ar", "Mother", Some("يا ابن...".into())), "الأم");
+        assert_eq!(name_in("ar", "Local", Some("محلي!".into())), "أحد السكان");
+        // OCR misreadings of the main people
+        assert_eq!(name_in("ar", "Luqia", None), "لوسيا");
+        assert_eq!(name_in("ar", "Jasen", None), "جيسون");
+        // a white "Tip:" is never taken for a speaker
+        assert!(!is_known("Tip"));
+        assert!(is_known("Stranger"));
         assert!(is_role("Cop") && is_role("Officer Smith") && !is_role("Dobbs"));
     }
 
@@ -722,7 +767,8 @@ mod tests {
         assert_eq!(name_in("ar", "Dobbs", None), "دوبس");
         assert_eq!(name_in("ar", "Lucia", None), "لوسيا");
         assert_eq!(name_in("ar", "Jason", None), "جيسون");
-        assert_eq!(name_in("ar", "Dobbs", Some("دابس".into())), "دابس");
+        // (a name the list doesn't have: the downloaded translation of it)
+        assert_eq!(name_in("ar", "Zorvath", Some("زورفاث".into())), "زورفاث");
         assert_eq!(name_in("hi", "Dobbs", None), "Dobbs");
         assert_eq!(transliterate("dennis"), "دينيس");
         assert_eq!(transliterate("bobby"), "بوبي");
