@@ -1,7 +1,8 @@
 //! Window capture on Windows: Windows Graphics Capture captures only the chosen window, even while
 //! other windows cover it, so nothing else on screen is ever read.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{HWND, POINT, RECT};
@@ -21,16 +22,103 @@ use super::{FrameData, Shared, WindowInfo, shrink};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// A running window capture.
-pub struct WindowCapture(CaptureControl<Handler, BoxError>);
+/// A running capture. Prefer Windows Graphics Capture; use the visible-desktop GDI
+/// capture loop on systems where Windows cannot create a GraphicsCaptureItem.
+/// GDI is only a compatibility fallback: covered/minimised windows and some
+/// exclusive-fullscreen/protected surfaces may not be readable with it.
+pub struct WindowCapture(CaptureMethod);
+
+enum CaptureMethod {
+    Native(CaptureControl<Handler, BoxError>),
+    Gdi { stop: Arc<AtomicBool>, thread: Option<JoinHandle<()>>, shared: Arc<Shared> },
+}
 
 impl WindowCapture {
     pub fn is_finished(&self) -> bool {
-        self.0.is_finished()
+        match &self.0 {
+            CaptureMethod::Native(c) => c.is_finished(),
+            CaptureMethod::Gdi { thread, .. } => thread.as_ref().is_none_or(JoinHandle::is_finished),
+        }
+    }
+    /// Read from the screen's pixels (the compatibility capture), not by Windows Graphics Capture.
+    pub fn is_compat(&self) -> bool {
+        matches!(self.0, CaptureMethod::Gdi { .. })
     }
     pub fn stop(self) {
-        let _ = self.0.stop();
+        match self.0 {
+            CaptureMethod::Native(c) => {
+                let _ = c.stop();
+            }
+            CaptureMethod::Gdi { stop, thread, shared } => {
+                stop.store(true, Ordering::Relaxed);
+                if let Some(thread) = thread {
+                    let _ = thread.join();
+                }
+                shared.compat_capture.store(false, Ordering::Relaxed);
+            }
+        }
     }
+}
+
+/// Compatibility capture for systems where Windows Graphics Capture can't start (a stripped-down
+/// Windows without its runtime): the target's place on screen, copied with GDI.
+///
+/// What is copied is what the screen shows there, so while it runs:
+/// - the app's own overlays keep out of screen captures (`Shared::compat_capture`, see overlay.rs),
+///   or the app would read its own Arabic back;
+/// - `rect` gives a place only while the target can be read (a window: only while it's the one in
+///   front), so other apps' windows are never read. Meanwhile it waits; it ends when `alive` says the
+///   target is gone (a window closed), and the capture manager starts again.
+fn start_gdi(
+    shared: Arc<Shared>,
+    alive: impl Fn() -> bool + Send + 'static,
+    rect: impl Fn() -> Option<(i32, i32, i32, i32)> + Send + 'static,
+) -> anyhow::Result<WindowCapture> {
+    if !alive() {
+        anyhow::bail!("GDI fallback: the target is gone");
+    }
+    // the first picture at once when it can be read now, so a GDI failure shows right away
+    if let Some((x, y, w, h)) = rect() {
+        let first = grab_screen_region(x, y, w, h).ok_or_else(|| anyhow::anyhow!("GDI fallback: could not read pixels from the screen"))?;
+        let (w, h) = (w as u32, h as u32);
+        shared.put_preview(shrink(&first, w, h, w as usize * 4, false));
+        shared.put_full(w, h, first);
+    }
+    shared.compat_capture.store(true, Ordering::Relaxed);
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopped = stop.clone();
+    let s = shared.clone();
+    let thread = std::thread::Builder::new().name("vi-translator-gdi-capture".to_string()).spawn(move || {
+        let mut last_full = Instant::now();
+        let mut last_preview = Instant::now();
+        while !stopped.load(Ordering::Relaxed) {
+            // GDI copies the screen through the CPU: at most ~30 frames a second
+            std::thread::sleep(Duration::from_millis(33));
+            if !alive() {
+                break;
+            }
+            let full = s.full_due(last_full);
+            let preview = s.preview_due(last_preview);
+            if !full && !preview {
+                continue;
+            }
+            // (not readable now: minimised, or another window in front; waits)
+            let Some((x, y, w, h)) = rect() else { continue };
+            if let Some(rgba) = grab_screen_region(x, y, w, h) {
+                let (w, h) = (w as u32, h as u32);
+                if preview {
+                    s.put_preview(shrink(&rgba, w, h, w as usize * 4, false));
+                    last_preview = Instant::now();
+                }
+                if full {
+                    s.put_full(w, h, rgba);
+                    last_full = Instant::now();
+                }
+            }
+        }
+        s.compat_capture.store(false, Ordering::Relaxed);
+    })?;
+    Ok(WindowCapture(CaptureMethod::Gdi { stop, thread: Some(thread), shared }))
 }
 
 /// Start capturing the window titled `title`; returns the capture and the window's handle.
@@ -51,11 +139,22 @@ pub fn start_window(title: &str, shared: Arc<Shared>) -> anyhow::Result<(WindowC
             shared.clone(),
         );
         match Handler::start_free_threaded(settings) {
-            Ok(c) => return Ok((WindowCapture(c), hwnd)),
+            Ok(c) => return Ok((WindowCapture(CaptureMethod::Native(c)), hwnd)),
             Err(e) => last_err = format!("Capture failed: {e}"),
         }
     }
-    Err(anyhow::anyhow!(why_not(win, title).unwrap_or(last_err)))
+    // The native path failed for this window. Keep a working desktop-pixel
+    // fallback rather than displaying ItemConvertFailed forever.
+    eprintln!("VI Translator: native window capture failed for {title:?}: {last_err}; trying GDI");
+    let alive = move || unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(HWND(hwnd as *mut _))).as_bool() };
+    // (only while it's the window in front: what covers it is never read)
+    match start_gdi(shared, alive, move || focused_client_rect(hwnd)) {
+        Ok(c) => Ok((c, hwnd)),
+        Err(e) => Err(anyhow::anyhow!(
+            "{}; GDI compatibility capture also failed: {e:#}",
+            why_not(win, title).unwrap_or(last_err)
+        )),
+    }
 }
 
 /// Why Windows won't capture this window, in words the player can act on (the capture library only
@@ -194,11 +293,18 @@ pub fn start_screen(id: &str, shared: Arc<Shared>) -> anyhow::Result<WindowCaptu
             shared.clone(),
         );
         match Handler::start_free_threaded(settings) {
-            Ok(c) => return Ok(WindowCapture(c)),
+            Ok(c) => return Ok(WindowCapture(CaptureMethod::Native(c))),
             Err(e) => last_err = format!("Capture failed: {e}"),
         }
     }
-    Err(anyhow::anyhow!(last_err))
+    // On stripped-down Windows installations, WinRT's GraphicsCaptureItem
+    // conversion can fail for *every* display. BitBlt needs no WinRT runtime.
+    eprintln!("VI Translator: native screen capture failed for {id:?}: {last_err}; trying GDI");
+    let id_owned = id.to_string();
+    let id_alive = id_owned.clone();
+    start_gdi(shared, move || screen_rect(&id_alive).is_some(), move || screen_rect(&id_owned)).map_err(|e| {
+        anyhow::anyhow!("{last_err}; GDI compatibility capture also failed: {e:#}")
+    })
 }
 
 /// Capture a single frame of a window, or of a screen ("screen:<id>"), for `--grab` and the
@@ -220,19 +326,10 @@ pub fn grab_once(title: &str) -> anyhow::Result<Arc<FrameData>> {
         control.stop();
         return frame;
     }
-    let win = find(title).ok_or_else(|| anyhow::anyhow!("window \"{title}\" not found"))?;
     let shared = Arc::new(Shared::default());
-    let settings = Settings::new(
-        win,
-        CursorCaptureSettings::WithoutCursor,
-        DrawBorderSettings::Default,
-        SecondaryWindowSettings::Default,
-        MinimumUpdateIntervalSettings::Default,
-        DirtyRegionSettings::Default,
-        ColorFormat::Rgba8,
-        shared.clone(),
-    );
-    let control = Handler::start_free_threaded(settings).map_err(|e| anyhow::anyhow!("capture failed: {e}"))?;
+    // Reuse start_window, including its compatibility path, for screenshots
+    // and the crop picker. Before this change, grab_once bypassed the fallback.
+    let (control, _hwnd) = start_window(title, shared.clone())?;
     let start = Instant::now();
     let frame = loop {
         if let Some(f) = shared.latest() {
@@ -243,7 +340,7 @@ pub fn grab_once(title: &str) -> anyhow::Result<Arc<FrameData>> {
         }
         std::thread::sleep(Duration::from_millis(50));
     };
-    let _ = control.stop();
+    control.stop();
     frame
 }
 

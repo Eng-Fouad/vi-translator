@@ -132,7 +132,7 @@ pub fn position_loop(app: AppHandle, cfg: Arc<Mutex<Config>>, shared: Arc<Shared
         let client = if c.overlays_enabled { capture::overlay_rect(&shared, true) } else { None };
         // (a screen as the source: the overlays don't show up in screen captures, so the app never
         // reads its own Arabic back)
-        let hide_from_capture = shared.reading_screen.load(Ordering::Relaxed);
+        let hide_from_capture = shared.reading_screen.load(Ordering::Relaxed) || shared.compat_capture.load(Ordering::Relaxed);
         if hide_from_capture != hidden_from_capture {
             hidden_from_capture = hide_from_capture;
             for (label, win) in app.webview_windows() {
