@@ -132,6 +132,31 @@ the overlay state with its version in `X-State`, 204 when nothing changed for a 
 `/tv/forget`, and `POST /vit-tv/offer` (a Samsung TV offering its code, with `X-VIT`). Requests
 must be addressed to an IP (DNS rebinding).
 
+`localViewerUrl(): String?` — `http://127.0.0.1:<port>/tv?t=<key>` for the phone's own preview: a
+WebView on it draws the translations over the picture exactly as the TVs do. The key is made once
+per run, never saved, and isn't among the connected TVs. None while the server isn't running.
+
+### The live page (other devices on the home network)
+
+The desktop's "Live translations on other devices" page (`ui/live.html`, with its interface
+languages), served by the same server while the settings' `lan_page` is on (`updateConfig`):
+`/` and `/live.json` (the recent lines), and — when the settings allow it — `POST /control`
+(`lan_control`: "Allow changes from that page": overlays, live translations, the language, the
+profile's areas, the game's page switches) and `POST /snapshot` (`snap_lan`: a snapshot of the last
+frame given to `processFrame`). A change from the page is saved and told as the `"lan-control"` and
+`"config"` events; a snapshot from it as `"snapshot"` (its JSON). `lanInfo()`: `{"enabled",
+"running", "url", "qr" (SVG), "error"}`.
+
+### Snapshots, game pages, memory, fonts
+
+| call | what |
+|---|---|
+| `takeSnapshot(rgba, width, height): String` | the desktop's Snapshot button for this picture: the snapshot service (`snap_service`, else `engine`; also `azure-image` / `gemini-image`, which translate the picture itself), the reviewed translations first, a game page's private text covered. JSON: `id`, `w`, `h`, `image` (JPEG data URL), `translated_image`, `blocks` (`rect` fractions, `en`, `segs`, `lines`, `align`, `fg`, `bg` …), `service`, `lang`, `rtl`, `ms`. One at a time. The app saves or shares it itself (the desktop's `save_snapshot_render` only writes the window's drawing to its Pictures folder). |
+| `pageOptions(game): String` | the game's pages and the switches its script declares: `{"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}` |
+| `screenJson(): String` | the game page on show now, `{"layout", "reason"}` (as `onScreen` and the desktop's `get_screen`), for a view opened after it appeared |
+| `memoryClear()` | forget what the translation memory learned (the downloaded reviewed translations stay) |
+| `fontList(): List<String>` | the font families bundled with the pages (Lalezar, Changa, Cairo, Tajawal, Noto Sans Arabic …): what an area's `font_family` can be |
+
 ## The Rust API (`core`)
 
 For the desktop and any Rust host:
@@ -146,7 +171,9 @@ For the desktop and any Rust host:
 - `live::Live`: what the overlays show now (shared with the host's own pages), `live::overlay_state`.
 - `sync::run(sink, cfg, memory, paths)`: the downloads.
 - `tv` (find, pair, `Tvs`), `tv_server::{TvServer, route}` (the desktop serves the TV routes on
-  its own home-network page server with `route`), `net` (HTTP helpers, `lan_ip`).
+  its own home-network page server with `route`), `lan_page::LivePage` (the live page's routes;
+  `info`), `net` (HTTP helpers, `lan_ip`).
+- `snapshot::{now, make}`: snapshots (`Tools` takes the host's OCR as a function).
 - `config`, `langs`, `memory`, `translate`, `pagescript`, `screens`, `speaker`, `phrasebook`,
   `game_icons`: as they were in the desktop app.
 

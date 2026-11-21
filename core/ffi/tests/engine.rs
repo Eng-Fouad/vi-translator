@@ -94,7 +94,27 @@ fn a_line_read_reaches_the_app_and_the_tv_page() {
     assert!(matches!(r, Err(PairError::NoAnswer)), "an address alone: {r:?}");
     assert!(heard.events.lock().unwrap().iter().any(|(n, j)| n == "tv-paired" && j.contains("no_answer")));
     assert!(engine.list_tvs().is_empty());
+    // the phone's own preview of the TV page
+    let url = engine.local_viewer_url().unwrap();
+    let target = url.trim_start_matches(&format!("http://127.0.0.1:{port}")).to_string();
+    assert!(get(port, &target).starts_with("HTTP/1.1 200"), "{url}");
+    // the live page: off until the settings turn it on
+    assert!(get(port, "/live.json").starts_with("HTTP/1.1 404"));
+    engine.update_config(r#"{"lan_page": true}"#.into()).unwrap();
+    assert!(get(port, "/live.json").starts_with("HTTP/1.1 200"));
+    let info: serde_json::Value = serde_json::from_str(&engine.lan_info()).unwrap();
+    assert_eq!(info["enabled"], true);
+    assert!(engine.font_list().iter().any(|f| f == "Cairo"));
+    let pages: serde_json::Value = serde_json::from_str(&engine.page_options("gta6".into())).unwrap();
+    assert!(pages["pages"].is_array());
+    assert!(serde_json::from_str::<serde_json::Value>(&engine.screen_json()).unwrap().get("layout").is_some());
+    // a snapshot of a dark frame: the stand-in recognizer's line, to a translator without its key
+    let r = engine.take_snapshot(vec![0u8; (w * h * 4) as usize], w, h);
+    assert!(r.is_ok() || r.as_ref().err().is_some_and(|e| e.to_string().contains("DeepL")), "{r:?}");
+    assert!(engine.take_snapshot(vec![0u8; 4], w, h).is_err());
+    engine.memory_clear();
     engine.stop_tv_server();
+    assert!(engine.local_viewer_url().is_none());
 
     // settings
     engine.update_config(r#"{"target_lang": "fr"}"#.into()).unwrap();

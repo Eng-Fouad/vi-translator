@@ -332,6 +332,11 @@ RustBuffer uniffi_vi_translator_ffi_fn_method_engine_config_json(uint64_t ptr, R
 RustBuffer uniffi_vi_translator_ffi_fn_method_engine_find_tvs(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_FONT_LIST
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_FONT_LIST
+RustBuffer uniffi_vi_translator_ffi_fn_method_engine_font_list(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_GAME
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_GAME
 RustBuffer uniffi_vi_translator_ffi_fn_method_engine_game(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -347,9 +352,24 @@ RustBuffer uniffi_vi_translator_ffi_fn_method_engine_games(uint64_t ptr, RustCal
 RustBuffer uniffi_vi_translator_ffi_fn_method_engine_home_address(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_LAN_INFO
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_LAN_INFO
+RustBuffer uniffi_vi_translator_ffi_fn_method_engine_lan_info(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_LIST_TVS
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_LIST_TVS
 RustBuffer uniffi_vi_translator_ffi_fn_method_engine_list_tvs(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_LOCAL_VIEWER_URL
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_LOCAL_VIEWER_URL
+RustBuffer uniffi_vi_translator_ffi_fn_method_engine_local_viewer_url(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_MEMORY_CLEAR
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_MEMORY_CLEAR
+void uniffi_vi_translator_ffi_fn_method_engine_memory_clear(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_MEMORY_STATS_JSON
@@ -365,6 +385,11 @@ uint64_t uniffi_vi_translator_ffi_fn_method_engine_no_picture(uint64_t ptr, Rust
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_OVERLAY_STATE_JSON
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_OVERLAY_STATE_JSON
 RustBuffer uniffi_vi_translator_ffi_fn_method_engine_overlay_state_json(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_PAGE_OPTIONS
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_PAGE_OPTIONS
+RustBuffer uniffi_vi_translator_ffi_fn_method_engine_page_options(uint64_t ptr, RustBuffer game, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_PAIR_TV
@@ -407,6 +432,11 @@ RustBuffer uniffi_vi_translator_ffi_fn_method_engine_recent_lines(uint64_t ptr, 
 int8_t uniffi_vi_translator_ffi_fn_method_engine_remove_tv(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_SCREEN_JSON
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_SCREEN_JSON
+RustBuffer uniffi_vi_translator_ffi_fn_method_engine_screen_json(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_SET_TARGET_LANG
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_SET_TARGET_LANG
 void uniffi_vi_translator_ffi_fn_method_engine_set_target_lang(uint64_t ptr, RustBuffer code, RustCallStatus *_Nonnull out_status
@@ -425,6 +455,11 @@ uint16_t uniffi_vi_translator_ffi_fn_method_engine_start_tv_server(uint64_t ptr,
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_STOP_TV_SERVER
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_STOP_TV_SERVER
 void uniffi_vi_translator_ffi_fn_method_engine_stop_tv_server(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_TAKE_SNAPSHOT
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_TAKE_SNAPSHOT
+RustBuffer uniffi_vi_translator_ffi_fn_method_engine_take_snapshot(uint64_t ptr, RustBuffer rgba, uint32_t width, uint32_t height, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_FN_METHOD_ENGINE_UPDATE_CONFIG
@@ -788,6 +823,12 @@ uint16_t uniffi_vi_translator_ffi_checksum_method_engine_find_tvs(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_FONT_LIST
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_FONT_LIST
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_font_list(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_GAME
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_GAME
 uint16_t uniffi_vi_translator_ffi_checksum_method_engine_game(void
@@ -806,9 +847,27 @@ uint16_t uniffi_vi_translator_ffi_checksum_method_engine_home_address(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_LAN_INFO
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_LAN_INFO
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_lan_info(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_LIST_TVS
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_LIST_TVS
 uint16_t uniffi_vi_translator_ffi_checksum_method_engine_list_tvs(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_LOCAL_VIEWER_URL
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_LOCAL_VIEWER_URL
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_local_viewer_url(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_MEMORY_CLEAR
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_MEMORY_CLEAR
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_memory_clear(void
     
 );
 #endif
@@ -827,6 +886,12 @@ uint16_t uniffi_vi_translator_ffi_checksum_method_engine_no_picture(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_OVERLAY_STATE_JSON
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_OVERLAY_STATE_JSON
 uint16_t uniffi_vi_translator_ffi_checksum_method_engine_overlay_state_json(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_PAGE_OPTIONS
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_PAGE_OPTIONS
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_page_options(void
     
 );
 #endif
@@ -878,6 +943,12 @@ uint16_t uniffi_vi_translator_ffi_checksum_method_engine_remove_tv(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_SCREEN_JSON
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_SCREEN_JSON
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_screen_json(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_SET_TARGET_LANG
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_SET_TARGET_LANG
 uint16_t uniffi_vi_translator_ffi_checksum_method_engine_set_target_lang(void
@@ -899,6 +970,12 @@ uint16_t uniffi_vi_translator_ffi_checksum_method_engine_start_tv_server(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_STOP_TV_SERVER
 #define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_STOP_TV_SERVER
 uint16_t uniffi_vi_translator_ffi_checksum_method_engine_stop_tv_server(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_TAKE_SNAPSHOT
+#define UNIFFI_FFIDEF_UNIFFI_VI_TRANSLATOR_FFI_CHECKSUM_METHOD_ENGINE_TAKE_SNAPSHOT
+uint16_t uniffi_vi_translator_ffi_checksum_method_engine_take_snapshot(void
     
 );
 #endif

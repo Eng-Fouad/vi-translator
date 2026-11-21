@@ -22,10 +22,9 @@ use anyhow::{Result, bail};
 use base64::Engine as _;
 use serde::Serialize;
 
-use crate::capture::FrameData;
+use crate::frame::FrameData;
 use crate::config::Config;
 use crate::ocr::{self, Crop, Ocr, Word};
-use crate::ocr_engine::PlatformOcr;
 use crate::translate::{Segments, Translator};
 
 /// One snapshot at a time (the app's button, the home-network page's).
@@ -44,6 +43,25 @@ impl Drop for Busy {
     fn drop(&mut self) {
         BUSY.store(false, Ordering::Release);
     }
+}
+
+/// The translator snapshots use (its local model stays loaded between snapshots).
+static SNAP_TR: std::sync::Mutex<Option<Translator>> = std::sync::Mutex::new(None);
+
+/// A snapshot of `frame` as the app's Snapshot button makes it: one at a time, translated with the
+/// snapshot service (the reviewed translations of the memory first), `private` covered.
+pub fn now(frame: &FrameData, private: &[[f64; 4]], c: &Config, memory: &std::sync::Mutex<crate::memory::Memory>, paths: &crate::Paths, ocr: &dyn Fn() -> Result<Ocr>, id: String) -> Result<Snapshot> {
+    let Some(_busy) = Busy::take() else { bail!("a snapshot is already being translated") };
+    let mut slot = SNAP_TR.lock().unwrap();
+    let tr = slot.get_or_insert_with(|| Translator::new(paths.model_dir()));
+    let lang = c.target_lang.clone();
+    // (the reviewed translations only: the memory's own lines come from whatever service was in use, and
+    // the snapshot has its own; looked at line by line, not held while a translator is asked)
+    let lookup = |en: &str| -> Option<Segments> {
+        let m = memory.lock().unwrap();
+        m.get(en, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(segs, _)| crate::translate::polite(&lang, segs))
+    };
+    make(frame, private, Tools { cfg: c, tr, memory: &lookup, ocr }, id)
 }
 
 /// A block of text on the picture and its translation.
@@ -82,12 +100,14 @@ pub struct Snapshot {
     pub ms: u64,
 }
 
-/// What a snapshot is made with: the settings, the translator kept for snapshots, and a lookup in the
-/// translation memory (English -> translation).
+/// What a snapshot is made with: the settings, the translator kept for snapshots, a lookup in the
+/// translation memory (English -> translation), and the host's OCR (made when the snapshot reads
+/// the picture: not for the services that translate the picture themselves).
 pub struct Tools<'a> {
     pub cfg: &'a Config,
     pub tr: &'a mut Translator,
     pub memory: &'a dyn Fn(&str) -> Option<Segments>,
+    pub ocr: &'a dyn Fn() -> Result<Ocr>,
 }
 
 /// The service a snapshot uses: its own setting, or the live translations' service.
@@ -120,8 +140,7 @@ pub fn make(frame: &FrameData, private: &[[f64; 4]], tools: Tools, id: String) -
     }
 
     // every word on the picture (the private ones left out), grouped into blocks
-    Ocr::init_thread();
-    let ocr = Ocr::new()?;
+    let ocr = (tools.ocr)()?;
     let crop = Crop { w: frame.w, h: frame.h, rgba: frame.rgba.clone() };
     let words: Vec<Word> = ocr
         .read_screen(&crop)?

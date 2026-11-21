@@ -639,6 +639,11 @@ public protocol EngineProtocol: AnyObject, Sendable {
     func findTvs()  -> [FoundTv]
     
     /**
+     * The fonts bundled with the pages (what an area's `font_family` can be).
+     */
+    func fontList()  -> [String]
+    
+    /**
      * The game the profile in use is for ("gta6" …).
      */
     func game()  -> String
@@ -654,9 +659,27 @@ public protocol EngineProtocol: AnyObject, Sendable {
     func homeAddress()  -> String?
     
     /**
+     * The live page on the home network (served by the TV page server while the settings'
+     * `lan_page` is on): {"enabled", "running", "url", "qr" (SVG), "error"}.
+     */
+    func lanInfo()  -> String
+    
+    /**
      * The connected TVs.
      */
     func listTvs()  -> [TvInfo]
+    
+    /**
+     * The TV page for this phone's own preview, exactly as the TVs draw it:
+     * http://127.0.0.1:<port>/tv?t=<key> (a key for this run only, not a connected TV). None while
+     * the TV page server isn't running.
+     */
+    func localViewerUrl()  -> String?
+    
+    /**
+     * Forget everything the translation memory learned (the downloaded reviewed translations stay).
+     */
+    func memoryClear() 
     
     /**
      * The translation memory: {"entries", "reviewed", "hits", "misses", …}.
@@ -672,6 +695,12 @@ public protocol EngineProtocol: AnyObject, Sendable {
      * What the overlays show now (the JSON the TV page draws: areas, style, shown lines, the game page).
      */
     func overlayStateJson()  -> String
+    
+    /**
+     * The game pages a game's script has, and the switches it declares (Game pages):
+     * {"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}.
+     */
+    func pageOptions(game: String)  -> String
     
     /**
      * Connect the TV at `address` (from `find_tvs`, or an IP address alone: the TV app's port is
@@ -719,6 +748,11 @@ public protocol EngineProtocol: AnyObject, Sendable {
     func removeTv(id: String)  -> Bool
     
     /**
+     * The game page on show now, for a view opened after it appeared: {"layout", "reason"}.
+     */
+    func screenJson()  -> String
+    
+    /**
      * The language the game is translated into ("ar", "fr" …: see `languages`).
      */
     func setTargetLang(code: String) throws 
@@ -736,6 +770,15 @@ public protocol EngineProtocol: AnyObject, Sendable {
     func startTvServer(port: UInt16) throws  -> UInt16
     
     func stopTvServer() 
+    
+    /**
+     * Translate the whole picture now, as the desktop's Snapshot button does (RGBA, rows `width * 4`
+     * bytes): the snapshot service in the settings (`snap_service`, else `engine`), the reviewed
+     * translations first, a game page's private text covered. The snapshot as JSON: {"id", "w", "h",
+     * "image" (JPEG data URL), "translated_image" (a service that translates the picture itself),
+     * "blocks" [{"rect", "en", "segs", "lines", "align", "fg", "bg", …}], "service", "lang", "rtl", "ms"}.
+     */
+    func takeSnapshot(rgba: Data, width: UInt32, height: UInt32) throws  -> String
     
     /**
      * Change some settings: `patch` is a JSON object of the settings to change (as in
@@ -841,6 +884,18 @@ open func findTvs() -> [FoundTv]  {
 }
     
     /**
+     * The fonts bundled with the pages (what an area's `font_family` can be).
+     */
+open func fontList() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_font_list(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * The game the profile in use is for ("gta6" …).
      */
 open func game() -> String  {
@@ -877,6 +932,19 @@ open func homeAddress() -> String?  {
 }
     
     /**
+     * The live page on the home network (served by the TV page server while the settings'
+     * `lan_page` is on): {"enabled", "running", "url", "qr" (SVG), "error"}.
+     */
+open func lanInfo() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_lan_info(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * The connected TVs.
      */
 open func listTvs() -> [TvInfo]  {
@@ -886,6 +954,31 @@ open func listTvs() -> [TvInfo]  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * The TV page for this phone's own preview, exactly as the TVs draw it:
+     * http://127.0.0.1:<port>/tv?t=<key> (a key for this run only, not a connected TV). None while
+     * the TV page server isn't running.
+     */
+open func localViewerUrl() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_local_viewer_url(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Forget everything the translation memory learned (the downloaded reviewed translations stay).
+     */
+open func memoryClear()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_memory_clear(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
 }
     
     /**
@@ -920,6 +1013,20 @@ open func overlayStateJson() -> String  {
         uniffiCallStatus in
     uniffi_vi_translator_ffi_fn_method_engine_overlay_state_json(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The game pages a game's script has, and the switches it declares (Game pages):
+     * {"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}.
+     */
+open func pageOptions(game: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_page_options(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(game),uniffiCallStatus
     )
 })
 }
@@ -1038,6 +1145,18 @@ open func removeTv(id: String) -> Bool  {
 }
     
     /**
+     * The game page on show now, for a view opened after it appeared: {"layout", "reason"}.
+     */
+open func screenJson() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_screen_json(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * The language the game is translated into ("ar", "fr" …: see `languages`).
      */
 open func setTargetLang(code: String)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
@@ -1081,6 +1200,25 @@ open func stopTvServer()  {try! rustCall() {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
+}
+    
+    /**
+     * Translate the whole picture now, as the desktop's Snapshot button does (RGBA, rows `width * 4`
+     * bytes): the snapshot service in the settings (`snap_service`, else `engine`), the reviewed
+     * translations first, a game page's private text covered. The snapshot as JSON: {"id", "w", "h",
+     * "image" (JPEG data URL), "translated_image" (a service that translates the picture itself),
+     * "blocks" [{"rect", "en", "segs", "lines", "align", "fg", "bg", …}], "service", "lang", "rtl", "ms"}.
+     */
+open func takeSnapshot(rgba: Data, width: UInt32, height: UInt32)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vi_translator_ffi_fn_method_engine_take_snapshot(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(rgba),
+        FfiConverterUInt32.lower(width),
+        FfiConverterUInt32.lower(height),uniffiCallStatus
+    )
+})
 }
     
     /**
@@ -2738,6 +2876,31 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeAreaWords: FfiConverterRustBuffer {
     typealias SwiftType = [AreaWords]
 
@@ -3007,6 +3170,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vi_translator_ffi_checksum_method_engine_find_tvs() != 55642) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_font_list() != 23712) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vi_translator_ffi_checksum_method_engine_game() != 38357) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3016,7 +3182,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vi_translator_ffi_checksum_method_engine_home_address() != 7524) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_lan_info() != 22003) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vi_translator_ffi_checksum_method_engine_list_tvs() != 61040) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_local_viewer_url() != 24568) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_memory_clear() != 11906) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vi_translator_ffi_checksum_method_engine_memory_stats_json() != 37603) {
@@ -3026,6 +3201,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vi_translator_ffi_checksum_method_engine_overlay_state_json() != 14261) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_page_options() != 43496) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vi_translator_ffi_checksum_method_engine_pair_tv() != 48132) {
@@ -3052,6 +3230,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vi_translator_ffi_checksum_method_engine_remove_tv() != 14340) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_screen_json() != 59828) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vi_translator_ffi_checksum_method_engine_set_target_lang() != 11847) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3062,6 +3243,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vi_translator_ffi_checksum_method_engine_stop_tv_server() != 17985) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vi_translator_ffi_checksum_method_engine_take_snapshot() != 51815) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vi_translator_ffi_checksum_method_engine_update_config() != 49896) {

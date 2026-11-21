@@ -17,7 +17,7 @@ use crate::capture::Shared;
 use crate::config::Config;
 
 // (the HTTP pieces are the core's, shared with its TV page server)
-pub(crate) use vi_translator_core::net::{Slot, build_id, read_request, respond};
+pub(crate) use vi_translator_core::net::{Slot, read_request, respond};
 #[cfg(test)]
 use vi_translator_core::net::{MAX_CONNECTIONS, Request};
 // (what the overlays show: also the core's, for the TV page)

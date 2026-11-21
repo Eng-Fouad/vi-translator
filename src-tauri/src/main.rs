@@ -18,13 +18,12 @@ mod overlay;
 mod picture_find;
 mod preview_shot;
 mod lan;
-mod snapshot;
 mod updater;
 mod vcam;
 
 // The reading and translating are the core's (shared with the phone apps); its modules read as this
 // crate's own (`crate::config`, `crate::ocr` …).
-use vi_translator_core::{config, engine, langs, memory, ocr, pagescript, screens, speaker, sync, translate, tv};
+use vi_translator_core::{config, engine, langs, memory, ocr, pagescript, screens, snapshot, speaker, sync, translate, tv};
 
 
 use std::path::PathBuf;
@@ -313,10 +312,7 @@ fn get_config(webview: tauri::Webview, state: tauri::State<AppState>) -> Config 
 /// The game pages a game's script has, and the switches it declares (for Game pages).
 #[tauri::command]
 fn page_options(game: String) -> serde_json::Value {
-    match pagescript::Pages::for_game(&game, &data_dir()) {
-        Some(p) => serde_json::json!({ "pages": p.list.iter().map(|i| serde_json::json!({ "id": i.id, "option": i.option })).collect::<Vec<_>>(), "options": p.options }),
-        None => serde_json::json!({ "pages": [], "options": [] }),
-    }
+    pagescript::page_options(&game, &data_dir())
 }
 
 #[tauri::command]
@@ -511,28 +507,19 @@ fn snapshots_dir() -> PathBuf {
     pictures_dir().map(|p| p.join(FOLDER).join("snapshots")).unwrap_or_else(|| data_dir().join("snapshots"))
 }
 
-/// The translator snapshots use (its local model stays loaded between snapshots).
-static SNAP_TR: Mutex<Option<Translator>> = Mutex::new(None);
-
-/// A snapshot of the picture on screen now: translated with the snapshot service; with "Keep every
-/// snapshot", its picture is saved (and Azure's translated picture; the app saves its own drawing of
-/// the others, see `save_snapshot_render`).
+/// A snapshot of the picture on screen now: translated with the snapshot service (the core's
+/// `snapshot::now`); with "Keep every snapshot", its picture is saved (and Azure's translated
+/// picture; the app saves its own drawing of the others, see `save_snapshot_render`).
 fn snapshot_now(cfg: &Mutex<Config>, shared: &Shared, memory: &Mutex<memory::Memory>) -> anyhow::Result<snapshot::Snapshot> {
-    let Some(_busy) = snapshot::Busy::take() else { anyhow::bail!("a snapshot is already being translated") };
     let Some(frame) = shared.latest() else { anyhow::bail!("no picture yet: pick a source first") };
     let private = shared.screen_private.lock().unwrap().clone();
     let c = cfg.lock().unwrap().clone();
-    let mut slot = SNAP_TR.lock().unwrap();
-    let tr = slot.get_or_insert_with(|| Translator::new(model_dir()));
-    let lang = c.target_lang.clone();
-    // (the reviewed translations only: the memory's own lines come from whatever service was in use, and
-    // the snapshot has its own; looked at line by line, not held while a translator is asked)
-    let lookup = |en: &str| -> Option<translate::Segments> {
-        let m = memory.lock().unwrap();
-        m.get(en, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(segs, _)| translate::polite(&lang, segs))
-    };
     let id = debug_frames::timestamp();
-    let snap = snapshot::make(&frame, &private, snapshot::Tools { cfg: &c, tr, memory: &lookup }, id.clone())?;
+    let ocr = || {
+        Ocr::init_thread();
+        Ocr::new()
+    };
+    let snap = snapshot::now(&frame, &private, &c, memory, &paths(), &ocr, id.clone())?;
     if c.snap_save {
         let dir = snapshots_dir();
         std::fs::create_dir_all(&dir)?;
@@ -660,7 +647,11 @@ struct TauriSink(AppHandle);
 
 impl vi_translator_core::Sink for TauriSink {
     fn emit(&self, event: &str, payload: serde_json::Value) {
-        let _ = self.0.emit(event, payload);
+        // (what the home-network page changed, and its snapshots: for the main window only)
+        let _ = match event {
+            "lan-control" | "snapshot" => self.0.emit_to("main", event, payload),
+            _ => self.0.emit(event, payload),
+        };
     }
 }
 
@@ -1300,7 +1291,11 @@ fn main() {
             let lang = c.target_lang.clone();
             let lookup = |en: &str| mem.get(en, &[], &[]).filter(|(_, src)| src == "reviewed").map(|(segs, _)| translate::polite(&lang, segs));
             let mut tr = Translator::new(model_dir());
-            let snap = snapshot::make(&frame, &[], snapshot::Tools { cfg: &c, tr: &mut tr, memory: &lookup }, "test".into())?;
+            let ocr = || {
+                Ocr::init_thread();
+                Ocr::new()
+            };
+            let snap = snapshot::make(&frame, &[], snapshot::Tools { cfg: &c, tr: &mut tr, memory: &lookup, ocr: &ocr }, "test".into())?;
             println!("{} block(s), {} ms, service {}", snap.blocks.len(), snap.ms, snap.service);
             for b in &snap.blocks {
                 let t: String = b.segs.iter().map(|s| s.0.as_str()).collect();
@@ -1372,8 +1367,8 @@ fn main() {
                 std::thread::spawn(move || obs_page::run(h, c, s));
             }
             {
-                let (h, c, s) = (app.handle().clone(), cfg.clone(), shared.clone());
-                std::thread::spawn(move || lan::run(h, c, s));
+                let (h, c, s, m, k) = (app.handle().clone(), cfg.clone(), shared.clone(), memory.clone(), sink.clone());
+                std::thread::spawn(move || lan::run(h, c, s, m, k));
             }
             {
                 let (h, c, u) = (app.handle().clone(), cfg.clone(), update.clone());

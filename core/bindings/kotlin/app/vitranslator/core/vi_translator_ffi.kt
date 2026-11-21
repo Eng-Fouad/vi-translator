@@ -751,19 +751,29 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_find_tvs(
     ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_font_list(
+    ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_game(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_games(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_home_address(
     ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_lan_info(
+    ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_list_tvs(
+    ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_local_viewer_url(
+    ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_memory_clear(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_memory_stats_json(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_no_picture(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_overlay_state_json(
+    ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_page_options(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_pair_tv(
     ): Int
@@ -781,6 +791,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_remove_tv(
     ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_screen_json(
+    ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_set_target_lang(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_start_sync(
@@ -788,6 +800,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_vi_translator_ffi_checksum_method_engine_start_tv_server(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_stop_tv_server(
+    ): Int
+    external fun uniffi_vi_translator_ffi_checksum_method_engine_take_snapshot(
     ): Int
     external fun uniffi_vi_translator_ffi_checksum_method_engine_update_config(
     ): Int
@@ -837,19 +851,29 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_find_tvs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_vi_translator_ffi_fn_method_engine_font_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_game(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_games(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_home_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_vi_translator_ffi_fn_method_engine_lan_info(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_list_tvs(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_vi_translator_ffi_fn_method_engine_local_viewer_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_vi_translator_ffi_fn_method_engine_memory_clear(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_vi_translator_ffi_fn_method_engine_memory_stats_json(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_no_picture(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_vi_translator_ffi_fn_method_engine_overlay_state_json(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_vi_translator_ffi_fn_method_engine_page_options(`ptr`: Long,`game`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_pair_tv(`ptr`: Long,`address`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,`deviceName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -867,6 +891,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_remove_tv(`ptr`: Long,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_vi_translator_ffi_fn_method_engine_screen_json(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_set_target_lang(`ptr`: Long,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_vi_translator_ffi_fn_method_engine_start_sync(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -875,6 +901,8 @@ internal object UniffiLib {
     ): Int
     external fun uniffi_vi_translator_ffi_fn_method_engine_stop_tv_server(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_vi_translator_ffi_fn_method_engine_take_snapshot(`ptr`: Long,`rgba`: RustBuffer.ByValue,`width`: Int,`height`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_vi_translator_ffi_fn_method_engine_update_config(`ptr`: Long,`patch`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_vi_translator_ffi_fn_clone_enginelistener(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1036,6 +1064,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_find_tvs() and 0xFFFF) != 55642) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_font_list() and 0xFFFF) != 23712) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_game() and 0xFFFF) != 38357) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1045,7 +1076,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_home_address() and 0xFFFF) != 7524) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_lan_info() and 0xFFFF) != 22003) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_list_tvs() and 0xFFFF) != 61040) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_local_viewer_url() and 0xFFFF) != 24568) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_memory_clear() and 0xFFFF) != 11906) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_memory_stats_json() and 0xFFFF) != 37603) {
@@ -1055,6 +1095,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_overlay_state_json() and 0xFFFF) != 14261) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_page_options() and 0xFFFF) != 43496) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_pair_tv() and 0xFFFF) != 48132) {
@@ -1081,6 +1124,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_remove_tv() and 0xFFFF) != 14340) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_screen_json() and 0xFFFF) != 59828) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_set_target_lang() and 0xFFFF) != 11847) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1091,6 +1137,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_stop_tv_server() and 0xFFFF) != 17985) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_take_snapshot() and 0xFFFF) != 51815) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_vi_translator_ffi_checksum_method_engine_update_config() and 0xFFFF) != 49896) {
@@ -1612,6 +1661,11 @@ public interface EngineInterface {
     fun `findTvs`(): List<FoundTv>
     
     /**
+     * The fonts bundled with the pages (what an area's `font_family` can be).
+     */
+    fun `fontList`(): List<kotlin.String>
+    
+    /**
      * The game the profile in use is for ("gta6" …).
      */
     fun `game`(): kotlin.String
@@ -1627,9 +1681,27 @@ public interface EngineInterface {
     fun `homeAddress`(): kotlin.String?
     
     /**
+     * The live page on the home network (served by the TV page server while the settings'
+     * `lan_page` is on): {"enabled", "running", "url", "qr" (SVG), "error"}.
+     */
+    fun `lanInfo`(): kotlin.String
+    
+    /**
      * The connected TVs.
      */
     fun `listTvs`(): List<TvInfo>
+    
+    /**
+     * The TV page for this phone's own preview, exactly as the TVs draw it:
+     * http://127.0.0.1:<port>/tv?t=<key> (a key for this run only, not a connected TV). None while
+     * the TV page server isn't running.
+     */
+    fun `localViewerUrl`(): kotlin.String?
+    
+    /**
+     * Forget everything the translation memory learned (the downloaded reviewed translations stay).
+     */
+    fun `memoryClear`()
     
     /**
      * The translation memory: {"entries", "reviewed", "hits", "misses", …}.
@@ -1645,6 +1717,12 @@ public interface EngineInterface {
      * What the overlays show now (the JSON the TV page draws: areas, style, shown lines, the game page).
      */
     fun `overlayStateJson`(): kotlin.String
+    
+    /**
+     * The game pages a game's script has, and the switches it declares (Game pages):
+     * {"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}.
+     */
+    fun `pageOptions`(`game`: kotlin.String): kotlin.String
     
     /**
      * Connect the TV at `address` (from `find_tvs`, or an IP address alone: the TV app's port is
@@ -1692,6 +1770,11 @@ public interface EngineInterface {
     fun `removeTv`(`id`: kotlin.String): kotlin.Boolean
     
     /**
+     * The game page on show now, for a view opened after it appeared: {"layout", "reason"}.
+     */
+    fun `screenJson`(): kotlin.String
+    
+    /**
      * The language the game is translated into ("ar", "fr" …: see `languages`).
      */
     fun `setTargetLang`(`code`: kotlin.String)
@@ -1709,6 +1792,15 @@ public interface EngineInterface {
     fun `startTvServer`(`port`: kotlin.UShort): kotlin.UShort
     
     fun `stopTvServer`()
+    
+    /**
+     * Translate the whole picture now, as the desktop's Snapshot button does (RGBA, rows `width * 4`
+     * bytes): the snapshot service in the settings (`snap_service`, else `engine`), the reviewed
+     * translations first, a game page's private text covered. The snapshot as JSON: {"id", "w", "h",
+     * "image" (JPEG data URL), "translated_image" (a service that translates the picture itself),
+     * "blocks" [{"rect", "en", "segs", "lines", "align", "fg", "bg", …}], "service", "lang", "rtl", "ms"}.
+     */
+    fun `takeSnapshot`(`rgba`: kotlin.ByteArray, `width`: kotlin.UInt, `height`: kotlin.UInt): kotlin.String
     
     /**
      * Change some settings: `patch` is a JSON object of the settings to change (as in
@@ -1873,6 +1965,22 @@ open class Engine: Disposable, AutoCloseable, EngineInterface
 
     
     /**
+     * The fonts bundled with the pages (what an area's `font_family` can be).
+     */override fun `fontList`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_font_list(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * The game the profile in use is for ("gta6" …).
      */override fun `game`(): kotlin.String {
             return FfiConverterString.lift(
@@ -1921,6 +2029,23 @@ open class Engine: Disposable, AutoCloseable, EngineInterface
 
     
     /**
+     * The live page on the home network (served by the TV page server while the settings'
+     * `lan_page` is on): {"enabled", "running", "url", "qr" (SVG), "error"}.
+     */override fun `lanInfo`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_lan_info(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * The connected TVs.
      */override fun `listTvs`(): List<TvInfo> {
             return FfiConverterSequenceTypeTvInfo.lift(
@@ -1933,6 +2058,39 @@ open class Engine: Disposable, AutoCloseable, EngineInterface
     }
     )
     }
+    
+
+    
+    /**
+     * The TV page for this phone's own preview, exactly as the TVs draw it:
+     * http://127.0.0.1:<port>/tv?t=<key> (a key for this run only, not a connected TV). None while
+     * the TV page server isn't running.
+     */override fun `localViewerUrl`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_local_viewer_url(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Forget everything the translation memory learned (the downloaded reviewed translations stay).
+     */override fun `memoryClear`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_memory_clear(
+        it,
+        _status)
+}
+    }
+    
     
 
     
@@ -1978,6 +2136,24 @@ open class Engine: Disposable, AutoCloseable, EngineInterface
     UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_overlay_state_json(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The game pages a game's script has, and the switches it declares (Game pages):
+     * {"pages": [{"id", "option"}], "options": [{"id", "name", "about", "on"}]}.
+     */override fun `pageOptions`(`game`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_page_options(
+        it,
+        
+        FfiConverterString.lower(`game`),_status)
 }
     }
     )
@@ -2135,6 +2311,22 @@ open class Engine: Disposable, AutoCloseable, EngineInterface
 
     
     /**
+     * The game page on show now, for a view opened after it appeared: {"layout", "reason"}.
+     */override fun `screenJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_screen_json(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * The language the game is translated into ("ar", "fr" …: see `languages`).
      */
     @Throws(CoreException::class)override fun `setTargetLang`(`code`: kotlin.String)
@@ -2195,6 +2387,30 @@ open class Engine: Disposable, AutoCloseable, EngineInterface
 }
     }
     
+    
+
+    
+    /**
+     * Translate the whole picture now, as the desktop's Snapshot button does (RGBA, rows `width * 4`
+     * bytes): the snapshot service in the settings (`snap_service`, else `engine`), the reviewed
+     * translations first, a game page's private text covered. The snapshot as JSON: {"id", "w", "h",
+     * "image" (JPEG data URL), "translated_image" (a service that translates the picture itself),
+     * "blocks" [{"rect", "en", "segs", "lines", "align", "fg", "bg", …}], "service", "lang", "rtl", "ms"}.
+     */
+    @Throws(CoreException::class)override fun `takeSnapshot`(`rgba`: kotlin.ByteArray, `width`: kotlin.UInt, `height`: kotlin.UInt): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(CoreException) { _status ->
+    UniffiLib.uniffi_vi_translator_ffi_fn_method_engine_take_snapshot(
+        it,
+        
+        FfiConverterByteArray.lower(`rgba`),
+        FfiConverterUInt.lower(`width`),
+        FfiConverterUInt.lower(`height`),_status)
+}
+    }
+    )
+    }
     
 
     
@@ -3863,6 +4079,34 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
         } else {
             buf.put(1)
             FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
+    override fun read(buf: ByteBuffer): List<kotlin.String> {
+        val len = buf.getInt()
+        return List<kotlin.String>(len) {
+            FfiConverterString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.String>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterString.write(it, buf)
         }
     }
 }

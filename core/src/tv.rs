@@ -78,6 +78,8 @@ pub struct Tvs {
     pending: Mutex<Vec<Pending>>,
     /// wrong codes in a row, by TV (it's told to show a new code after `TRIES`)
     wrong: Mutex<Vec<(String, u32)>>,
+    /// a key for this device's own viewer of the TV page (`local_key`): never saved or listed
+    local: Mutex<String>,
 }
 
 /// An offer this old is from a TV that stopped showing its code.
@@ -111,7 +113,22 @@ impl Tvs {
 
     /// Is this a key of a connected TV?
     pub fn allowed(&self, token: &str) -> bool {
-        !token.is_empty() && self.list.lock().unwrap().iter().any(|t| same(t.token.as_bytes(), token.as_bytes()))
+        if token.is_empty() {
+            return false;
+        }
+        let local = self.local.lock().unwrap();
+        (!local.is_empty() && same(local.as_bytes(), token.as_bytes())) || self.list.lock().unwrap().iter().any(|t| same(t.token.as_bytes(), token.as_bytes()))
+    }
+
+    /// A key for this device's own viewer of the TV page (a phone showing the translations over its
+    /// picture as the TVs do): `/tv?t=<key>` from 127.0.0.1. Made once per run, never saved, not
+    /// among the connected TVs; `/tv/forget` with it does nothing.
+    pub fn local_key(&self) -> String {
+        let mut k = self.local.lock().unwrap();
+        if k.is_empty() {
+            *k = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        }
+        k.clone()
     }
 
     pub fn list(&self) -> Vec<TvInfo> {
