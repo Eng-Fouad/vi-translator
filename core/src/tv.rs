@@ -118,7 +118,7 @@ impl Tvs {
         self.list.lock().unwrap().iter().map(|t| TvInfo { id: t.id.clone(), name: t.name.clone() }).collect()
     }
 
-    fn add(&self, tv: PairedTv) {
+    pub(crate) fn add(&self, tv: PairedTv) {
         let mut l = self.list.lock().unwrap();
         l.retain(|t| t.id != tv.id);
         l.push(tv);
@@ -163,7 +163,7 @@ struct Hello {
 }
 
 fn client(total: Duration) -> Option<reqwest::blocking::Client> {
-    reqwest::blocking::Client::builder()
+    crate::net::http_client()
         .connect_timeout(Duration::from_millis(400))
         .timeout(total)
         .no_proxy()
@@ -185,7 +185,7 @@ fn hello(c: &reqwest::blocking::Client, ip: Ipv4Addr) -> Option<(String, Hello)>
 /// The TVs waiting to be connected on this PC's network (its /24): every address at once, a
 /// couple of seconds in all.
 pub fn find(tvs: &Tvs) -> Vec<FoundTv> {
-    let Some(mine) = crate::lan::lan_ip().and_then(|ip| ip.parse::<Ipv4Addr>().ok()) else { return Vec::new() };
+    let Some(mine) = crate::net::lan_ip().and_then(|ip| ip.parse::<Ipv4Addr>().ok()) else { return Vec::new() };
     let Some(c) = client(Duration::from_millis(1500)) else { return Vec::new() };
     let [a, b, n, me] = mine.octets();
     let found = Mutex::new(Vec::new());

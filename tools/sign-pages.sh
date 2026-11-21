@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sign a game-pages script for delivery in a layout update, and print the "pages" block to put into
-# that game's layout JSON (see src-tauri/src/pagescript.rs).
+# that game's layout JSON (see core/src/pagescript.rs).
 #
 #   tools/sign-pages.sh [--test [install-id ...] --] <script.js> [path/to/update-signing.pem] > pages-block.json
 #

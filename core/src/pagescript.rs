@@ -78,7 +78,7 @@ use anyhow::{Context as _, Result, anyhow};
 use rquickjs::{Context, Function, Runtime};
 use serde::Deserialize;
 
-use crate::capture::FrameData;
+use crate::frame::FrameData;
 use crate::ocr::{self, Crop, Ocr};
 use crate::screens::ScreenLayout;
 
@@ -300,7 +300,7 @@ fn downloaded(data_dir: &Path, game: &str) -> Option<String> {
 /// its first line is `// pages-version: N` (so nothing else signed with the same key — the text an
 /// update's signature signs — can pass for one).
 pub fn signed(script: &str, sig: &str) -> bool {
-    version_of(script) > 0 && crate::updater::verify(script.as_bytes(), sig.trim(), crate::updater::PUBLIC_KEY).is_ok()
+    version_of(script) > 0 && crate::sign::verify(script.as_bytes(), sig.trim(), crate::sign::PUBLIC_KEY).is_ok()
 }
 
 impl Pages {

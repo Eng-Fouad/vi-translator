@@ -85,15 +85,16 @@ jobs:
           rustup default stable
           rustup target add ${{ matrix.target }}
 
+      # (the version is the workspace's, in the top Cargo.toml: the app's and its core's)
       - name: Version from the tag
         run: |
-          perl -0pi -e 's/^version = ".*?"/version = "$ENV{VERSION}"/m' src-tauri/Cargo.toml
+          perl -0pi -e 's/^version = ".*?"/version = "$ENV{VERSION}"/m' Cargo.toml
           perl -0pi -e 's/"version": "[^"]*"/"version": "$ENV{VERSION}"/' src-tauri/tauri.conf.json
-          grep -m1 '^version' src-tauri/Cargo.toml
+          grep -m1 '^version' Cargo.toml
 
+      # (the app and its core: the workspace's default members)
       - name: Test
         if: matrix.test
-        working-directory: src-tauri
         run: cargo test --target ${{ matrix.target }}
 
       - name: Build
@@ -104,7 +105,7 @@ jobs:
         run: |
           EXT=""; [ "${{ matrix.os }}" = windows ] && EXT=".exe"
           mkdir -p out
-          cp "src-tauri/target/${{ matrix.target }}/release/vi-translator$EXT" "out/vi-translator-${{ matrix.os }}-${{ matrix.arch }}$EXT"
+          cp "target/${{ matrix.target }}/release/vi-translator$EXT" "out/vi-translator-${{ matrix.os }}-${{ matrix.arch }}$EXT"
           ls -l out
 
       - uses: actions/upload-artifact@v4

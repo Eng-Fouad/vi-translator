@@ -1,0 +1,31 @@
+[package]
+name = "vi-translator-ffi"
+version.workspace = true
+edition = "2024"
+license = "MIT"
+description = "VI Translator's core for the phone apps: UniFFI bindings (Kotlin, Swift)"
+
+[lib]
+# libvi_translator_ffi.so (Android, through cargo-ndk), .a (iOS XCFramework), and the Rust library
+# for the bindings generator and tests
+crate-type = ["cdylib", "staticlib", "lib"]
+name = "vi_translator_ffi"
+
+[[bin]]
+# `cargo run -p vi-translator-ffi --bin uniffi-bindgen -- generate --library <lib> --language kotlin --out-dir <dir>`
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+default = []
+bindgen = ["uniffi/cli"]
+# the offline translator (ONNX Runtime): left out of the phone builds by default
+offline = ["vi-translator-core/offline"]
+
+[dependencies]
+anyhow = "1.0.104"
+uuid = { version = "1", features = ["v4"] }
+vi-translator-core = { path = ".." }
+serde_json = "1.0.154"
+uniffi = "0.32.2"

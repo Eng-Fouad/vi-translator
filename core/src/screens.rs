@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::capture::FrameData;
+use crate::frame::FrameData;
 use crate::ocr;
 
 /// Rectangle as fractions (0..1) of the frame.

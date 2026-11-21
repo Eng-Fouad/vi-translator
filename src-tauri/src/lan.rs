@@ -7,7 +7,7 @@
 //! never settings beyond the overlays' own places and style, the picture or the OBS page (those
 //! stay on the 127.0.0.1-only server in obs_page.rs).
 
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -17,42 +17,11 @@ use tauri::AppHandle;
 use crate::capture::Shared;
 use crate::config::Config;
 use crate::obs_page::{read_request, respond, serve_asset, Slot};
+use vi_translator_core::tv_server;
 
-/// How many recent lines the page can fetch.
-const KEEP: usize = 200;
-
-/// Remember a line that was just shown, for the page.
-/// `en_segments` and `segments`: the English and the translation with the game's button icons
-/// (data URLs), for the page to draw them; `en` and "text" have 🎮 in their place.
-pub fn push(shared: &Shared, area: &str, en: &str, en_segments: &[(String, Option<String>)], segments: &[(String, Option<String>)], at_ms: u64) {
-    // "Live translations" switched off: the list pauses (and switching it back on doesn't dump what came
-    // in meanwhile). Independent of the overlays: with this on, the list keeps filling with them off.
-    if shared.live_off.load(std::sync::atomic::Ordering::Relaxed) {
-        return;
-    }
-    let text: String = segments
-        .iter()
-        .map(|(t, c)| if c.as_deref().is_some_and(|c| c.starts_with("icon:")) { "🎮" } else { t.as_str() })
-        .collect();
-    if text.trim().is_empty() {
-        return;
-    }
-    let id = shared.live_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-    let mut log = shared.live_log.lock().unwrap();
-    // the same line sent again with the game's colours (same area and start): the first goes
-    log.retain(|l| !(l["area"] == area && l["at"] == at_ms));
-    log.push_back(serde_json::json!({ "id": id, "at": at_ms, "area": area, "en": en, "text": text.trim(), "en_segs": en_segments, "segs": segments }));
-    while log.len() > KEEP {
-        log.pop_front();
-    }
-}
-
-/// This PC's address on the home network (the one used to reach the internet; no packet is sent).
-pub fn lan_ip() -> Option<String> {
-    let s = UdpSocket::bind("0.0.0.0:0").ok()?;
-    s.connect("8.8.8.8:80").ok()?;
-    Some(s.local_addr().ok()?.ip().to_string())
-}
+/// This PC's address on the home network.
+pub use vi_translator_core::net::lan_ip;
+use vi_translator_core::net::host_is_address;
 
 #[derive(Serialize)]
 pub struct LanInfo {
@@ -134,6 +103,9 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
     if !host_is_address(&req.host) {
         return respond(s, "403 Forbidden", "text/plain", b"not allowed");
     }
+    // the TV app's page (/tv, /tv.json, /tv/forget) and a Samsung TV offering its code: the core's
+    // (the same as a phone serves), with the page's files from inside the executable
+    let Some(s) = tv_server::route(&req, s, cfg, shared, &|s, file| serve_asset(app, s, file)) else { return };
     let (path, query) = (req.path.as_str(), req.query.as_str());
     match path {
         "/" | "/live" => serve_asset(app, s, "live.html"),
@@ -150,31 +122,6 @@ fn handle(app: &AppHandle, cfg: &Mutex<Config>, shared: &Shared, s: TcpStream) {
             // ("ui": the app's own interface language, which the page takes for its buttons and notices)
             let body = serde_json::json!({ "run": crate::obs_page::build_id(), "lang": shared.live_lang.lock().unwrap().clone(), "lines": lines, "live": live, "snap": snap, "control": control, "ui": ui, "perf": crate::perf_status() });
             respond(s, "200 OK", "application/json; charset=utf-8", body.to_string().as_bytes());
-        }
-        // the TV app's page: the overlays over the whole picture, as on the OBS page, for a TV
-        // connected in the main window only (its key in t=)
-        "/tv" | "/tv.json" | "/tv/forget" if !shared.tvs.allowed(param(query, "t")) => {
-            respond(s, "403 Forbidden", "text/plain", b"not connected")
-        }
-        "/tv" => serve_asset(app, s, "tv.html"),
-        "/tv.json" => tv_state(cfg, shared, s, param(query, "h")),
-        // the TV disconnected itself: its key is forgotten
-        "/tv/forget" => {
-            shared.tvs.remove_token(param(query, "t"));
-            respond(s, "200 OK", "text/plain", b"ok")
-        }
-        // a Samsung TV showing a code offers it here (it can't be called: see tv.rs); only the
-        // TV app sends X-VIT (a web page can't, and gets nothing)
-        "/vit-tv/offer" if req.method == "POST" && req.vit => {
-            let (status, body) = shared.tvs.offer(&req.body);
-            let status = match status {
-                200 => "200 OK",
-                400 => "400 Bad Request",
-                403 => "403 Forbidden",
-                429 => "429 Too Many Requests",
-                _ => "404 Not Found",
-            };
-            respond(s, status, "application/json", body.as_bytes())
         }
         "/common.js" => serve_asset(app, s, "common.js"),
         "/snapshot.js" => serve_asset(app, s, "snapshot.js"),
@@ -282,50 +229,6 @@ fn page_options(game: &str) -> Vec<crate::pagescript::OptionInfo> {
     list
 }
 
-/// A query parameter's value ("" when it isn't there).
-fn param<'a>(query: &'a str, name: &str) -> &'a str {
-    query.split('&').find_map(|kv| kv.split_once('=').filter(|(k, _)| *k == name).map(|(_, v)| v)).unwrap_or("")
-}
-
-/// What the overlays show now, for the TV page, with its version in `X-State`: when the page
-/// already has this version (`seen`), the answer waits up to a second for a change (a new line is
-/// on the TV at once, and nothing is sent while nothing changes), then is 204 if there was none.
-fn tv_state(cfg: &Mutex<Config>, shared: &Shared, mut s: TcpStream, seen: &str) {
-    use std::hash::{Hash, Hasher};
-    use std::io::Write;
-    let start = std::time::Instant::now();
-    loop {
-        let body = crate::obs_page::overlay_state(cfg, shared).to_string();
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        body.hash(&mut h);
-        let version = format!("{:016x}", h.finish());
-        if version != seen {
-            let head = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nX-State: {version}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
-                body.len()
-            );
-            let _ = s.set_nodelay(true);
-            let _ = s.write_all(head.as_bytes()).and_then(|_| s.write_all(body.as_bytes()));
-            return;
-        }
-        if start.elapsed() >= Duration::from_secs(1) {
-            let _ = s.write_all(b"HTTP/1.1 204 No Content\r\nCache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-}
-
-/// A Host header that is an IP address or "localhost" (with or without a port).
-fn host_is_address(host: &str) -> bool {
-    let name = if let Some(rest) = host.strip_prefix('[') {
-        rest.split_once(']').map(|(ip, _)| ip).unwrap_or("")
-    } else {
-        host.rsplit_once(':').map(|(h, _)| h).unwrap_or(host)
-    };
-    name.eq_ignore_ascii_case("localhost") || name.parse::<std::net::IpAddr>().is_ok()
-}
-
 #[cfg(test)]
 mod host_tests {
     // Every answer written by hand ends its header lines in CRLF: a line break inside the literal
@@ -342,55 +245,11 @@ mod host_tests {
             }
         }
     }
-
-    #[test]
-    fn the_phone_page_answers_addresses_only() {
-        for ok in ["192.168.1.20:8791", "192.168.1.20", "127.0.0.1:8791", "localhost:8791", "[::1]:8791", "[fe80::1]:8791"] {
-            assert!(super::host_is_address(ok), "{ok}");
-        }
-        for bad in ["evil.example:8791", "evil.example", "", "192.168.1.20.evil.example:8791", "[evil]:8791"] {
-            assert!(!super::host_is_address(bad), "{bad}");
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn keeps_the_last_lines_with_icons_as_a_game_pad() {
-        let shared = Shared::default();
-        for i in 0..(KEEP + 5) {
-            push(&shared, "subtitles", &format!("Line {i}"), &[], &[(format!("سطر {i}"), None)], 1000 + i as u64);
-        }
-        let en_icon = [("Press ".into(), None), (String::new(), Some("icon:data:x".into()))];
-        push(&shared, "help", "Press 🎮", &en_icon, &[("اضغط ".into(), None), (String::new(), Some("icon:data:x".into()))], 9);
-        push(&shared, "help", "nothing", &[], &[(" ".into(), None)], 10); // blank: not kept
-        let log = shared.live_log.lock().unwrap();
-        assert_eq!(log.len(), KEEP);
-        assert_eq!(log.back().unwrap()["text"], "اضغط 🎮");
-        // the icons themselves too, for the page to draw them in both lines
-        assert_eq!(log.back().unwrap()["segs"][1][1], "icon:data:x");
-        assert_eq!(log.back().unwrap()["en_segs"][1][1], "icon:data:x");
-        let ids: Vec<u64> = log.iter().map(|l| l["id"].as_u64().unwrap()).collect();
-        assert!(ids.windows(2).all(|w| w[0] < w[1]), "ids increase");
-        assert_eq!(log.front().unwrap()["en"], "Line 6");
-    }
-
-    #[test]
-    fn the_tv_state_has_the_overlays_only() {
-        let c = Mutex::new(Config { deepl_key: "secret-deepl-key".into(), claude_key: "secret-claude-key".into(), openai_key: "secret-openai-key".into(), ..Config::default() });
-        let shared = Shared::default();
-        *shared.status.lock().unwrap() = "status-for-troubleshooting".into();
-        let v = crate::obs_page::overlay_state(&c, &shared);
-        let text = v.to_string();
-        assert!(!text.contains("secret-") && !text.contains("status-for-troubleshooting"), "{text}");
-        for key in ["areas", "style", "shown", "screen", "overlays", "lang"] {
-            assert!(v.get(key).is_some(), "{key}");
-        }
-        assert!(v.get("status").is_none() && v.get("frame").is_none() && v.get("preview").is_none());
-    }
 
     #[test]
     fn qr_code_for_the_address() {

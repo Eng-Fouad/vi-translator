@@ -1,0 +1,117 @@
+# The core for the phone apps (core/ffi): the iOS libraries as an XCFramework with its Swift
+# bindings, and the Android libraries with their Kotlin bindings, as build artifacts. Nothing is
+# published or released.
+name: Phone core
+
+on:
+  push:
+    paths:
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ui/tv.html"
+      - "ui/common.js"
+      - "ui/fonts.css"
+      - "ui/fonts/**"
+      - ".github/workflows/core-mobile.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/core-mobile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      # the same iOS version for Rust and the C parts (aws-lc, QuickJS): without it Rust links for
+      # iOS 10 while the C code is built for the SDK's own version, and the link fails
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      - name: Test the core
+        run: cargo test -p vi-translator-core -p vi-translator-ffi
+
+      - name: Build the iOS libraries
+        run: |
+          # (QuickJS's bindings are made at build time on iOS: the SDK's headers for them)
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios="--sysroot=$(xcrun --sdk iphoneos --show-sdk-path)"
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="--sysroot=$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          cargo build -p vi-translator-ffi --release --target aarch64-apple-ios
+          cargo build -p vi-translator-ffi --release --target aarch64-apple-ios-sim
+
+      - name: Swift bindings
+        run: |
+          cargo build -p vi-translator-ffi --release
+          cargo run -p vi-translator-ffi --release --features bindgen --bin uniffi-bindgen -- \
+            generate --library target/release/libvi_translator_ffi.dylib --language swift --out-dir out/swift
+
+      - name: XCFramework
+        run: |
+          mkdir -p out/include
+          cp out/swift/vi_translator_ffiFFI.h out/include/
+          cp out/swift/vi_translator_ffiFFI.modulemap out/include/module.modulemap
+          xcodebuild -create-xcframework \
+            -library target/aarch64-apple-ios/release/libvi_translator_ffi.a -headers out/include \
+            -library target/aarch64-apple-ios-sim/release/libvi_translator_ffi.a -headers out/include \
+            -output out/ViTranslatorCore.xcframework
+          cp out/swift/ViTranslatorCore.swift out/
+          ls -la out out/ViTranslatorCore.xcframework
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vi-translator-core-ios
+          path: |
+            out/ViTranslatorCore.xcframework
+            out/ViTranslatorCore.swift
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+          cargo install cargo-ndk --locked
+
+      # NDK 28.2, as tested: NDK 30's headers refuse the target name without an API level that
+      # the QuickJS bindings are generated with
+      - name: NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Build the Android libraries
+        run: |
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o out/jniLibs build -p vi-translator-ffi --release
+
+      - name: Kotlin bindings
+        run: |
+          cargo build -p vi-translator-ffi --release
+          cargo run -p vi-translator-ffi --release --features bindgen --bin uniffi-bindgen -- \
+            generate --library target/release/libvi_translator_ffi.so --language kotlin --out-dir out/kotlin --no-format
+          find out -type f | xargs ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vi-translator-core-android
+          path: out
+          if-no-files-found: error
